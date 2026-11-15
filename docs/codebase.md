@@ -2007,15 +2007,12 @@ version:
   `citry-events/2`, except that a security fix may refuse input. Every
   1.x release still accepts valid `citry-events/1` requests (see
   [Contract versions](#contract-versions)).
-- The module `citry._lsp_support`, which re-exports everything that
-  `citry-lsp` imports from `citry`. Its names and signatures stay the
-  same for all of 1.x.
 
 These are not covered, so any minor or patch release may change them:
 
 - Names that start with `_`, except the ones the docs tell users to set,
   such as `_guard` on an `Events` class and `_public` on a `State`
-  class, and except `citry._lsp_support` above.
+  class.
 - `citry_core._rust`, and submodules that no `__all__` above exports.
   Import names from `citry`, not from its submodules:
   `from citry import Slot` is covered, and
@@ -2165,10 +2162,11 @@ State tokens (the tokens that carry a component's State, or point to it
 on the server), Events requests, and HTML fragments that the server
 sends after the page has loaded. So a change to a Citry format should
 leave an open page working, or at worst make the browser ask the visitor
-to reload. The bullets below name the formats that do not meet this. The
-rules cover a deploy between any two 1.x releases. A deploy
-from 0.x to 1.0.0 is a fresh start, so 1.0.0 does not need to read 0.x
-data.
+to reload. The one case that still fails is a page from a newer release
+that calls a server still running an older release (see the
+`citry-events/1` bullet below). The rules cover a deploy between any two
+1.x releases. A deploy from 0.x to 1.0.0 is a fresh start, so 1.0.0 does
+not need to read 0.x data.
 
 A **public format** is one that the docs or a spec describe, or that
 code other than Citry's own server and browser code reads, such as a
@@ -2235,25 +2233,23 @@ it as public and ask the maintainer in the pull request.
   every entry that an older release wrote is not found. Processes of two
   releases that share a cache replace each other's entries until the
   deploy ends. The integer versions rarely need to change.
-- A signed State token does not meet it. A token with an unknown version
-  answers `invalid_state` (403), and Citry's browser client offers a
-  reload only for `stale_state` (409). The token prefix (`cev1`, `ces1`)
-  is a second version marker with the same answer. The Events spec lists
-  an unknown token version under `invalid_state`. The code of a release
-  that is out cannot change that answer, so the token version stays at 1
-  for all of 1.x unless 1.0.0 itself answers `stale_state` for an
-  unknown version.
-- The `prepared` object of a `vue-prepared/1` render is in the same
-  position. The browser runtime of the release that wrote it owns its
-  contents, and a page that an older release rendered can fail to apply
-  one from a newer server, with an error and no reload prompt. The
-  Events spec says so in its "Versioning" section. The Vue fragment
-  messages (`citry-vue-fragment/1`) have the same problem: the browser
-  code throws on a top-level field it does not know or another protocol
-  string. Other messages
-  between the server and Citry's browser code need the same check,
-  because an open page keeps running the browser code of the release
-  that built it.
+- A signed State token meets this condition. A signed token starts
+  `cev1.`, and a token that points to State on the server starts
+  `ces1.`. The server answers a token with another version or prefix
+  with `stale_state` (409), and Citry's browser client offers a reload
+  for that code. The visitor accepts the prompt and the page then has a
+  fresh token. Until then the call fails with `stale_state`. So a
+  release may raise the token version.
+- The `prepared` object of a `vue-prepared/1` render (the data that
+  Citry's browser code applies to the page, which refuses one written
+  for a different helper contract) and the Vue fragment messages
+  (`citry-vue-fragment/1`) meet this condition too. When Citry's browser
+  code in a page that an older 1.x release rendered gets a render or a
+  fragment it cannot read, it offers the visitor a reload. Before you
+  change any other message between the server and Citry's browser code,
+  check what the browser code of the oldest 1.x release does with a
+  version it does not know, because an open page keeps running the
+  browser code of the release that built it.
 - The data between `citry` and its pinned `citry-core` never meets
   another release, because the two install together. Its readers may
   reject what they do not know: the request types of the Vue compiler
