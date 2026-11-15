@@ -970,7 +970,7 @@ a fresh token. It treats `invalid_state` (403) like any other error.
 The server checks the token of a call that needs State in this order, and
 answers the first problem it finds:
 
-1. The token names a token version the server does not know:
+1. The token's version is one the server does not know:
    `stale_state`. The server uses no other value from such a token. A
    token whose version the server cannot read at all belongs to step 2.
 2. The call sends no token, or the server cannot read it as one of its own
@@ -991,8 +991,8 @@ all. A component without State ignores a token.
 Step 1 exists because a later release can change the token format.
 During a deploy, a page that the new release rendered can send its token
 to a process still running the old release. That process answers
-`stale_state`, so the browser asks the visitor to reload instead of
-showing a plain error.
+`stale_state`, so Citry's browser client asks the visitor to reload
+instead of showing a plain error.
 
 A server cannot tell a token with a changed signature from an honest token
 signed with a secret it has since removed, because both are readable

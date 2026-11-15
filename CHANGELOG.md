@@ -6,11 +6,11 @@
 
 - **State sent to the page now expires after 24 hours by default:**
   Citry sends each component's State to the page as a signed string, the
-  State token. A token whose `State` sets no `_max_age` used to work
-  until you changed the signing secret. Now it stops working 24 hours
-  after Citry issues it, as server-stored State already did. Citry
-  issues a new token when it renders the component and after a call that
-  changes State, so the pages affected are those whose State has not
+  State token. The token of a component whose `State` sets no
+  `_max_age` used to work until you changed the signing secret. Now it
+  stops working 24 hours after Citry issues it, as server-stored State
+  already did. Citry issues a new token when it renders the component
+  and after a call that changes State, so the pages affected are those whose State has not
   changed for more than 24 hours. A call with an expired token does not
   run its handler: it gets a `stale_state` error, and Citry's browser
   code asks once per page whether to reload. Tokens issued before the

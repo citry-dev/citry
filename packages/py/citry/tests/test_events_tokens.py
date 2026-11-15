@@ -958,6 +958,25 @@ class TestDefaultLifetime:
             verify_state_token(GOLDEN_NO_EXPIRY, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         assert exc_info.value.status == 409
 
+    def test_a_server_entry_past_its_expiry_is_stale_even_if_the_cache_keeps_it(self, monkeypatch):
+        # A backend that ignores the time-to-live must not keep State alive
+        # past its lifetime: verify checks the entry's own expiry too.
+        _pin_now(monkeypatch, FIXED_NOW)
+        cache = RecordingCache()
+        token = mint_state_token(
+            CounterState(count=1),
+            class_id=CLASS_ID,
+            secret=None,
+            max_age=None,
+            max_bytes=8192,
+            storage="server",
+            cache=cache,
+        )
+        _pin_now(monkeypatch, FIXED_NOW + self.DAY)
+        with pytest.raises(StaleStateError) as exc_info:
+            verify_state_token(token, cls=FakeCounter, storage="server", secrets=[], cache=cache)
+        assert exc_info.value.status == 409
+
 
 class TestUnknownTokenVersion:
     """

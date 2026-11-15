@@ -114,9 +114,9 @@ class StateMeta:
             runs (signed storage only when the call gets a new token), and
             signed storage also checks it each time it makes a token. With
             server storage, ``None`` turns the check off.
-        max_age: How long a State token stays valid after Citry issues it.
-            ``None`` means the default: signed tokens and server-stored
-            entries both expire after 24 hours.
+        max_age: How long a State token stays valid after Citry issues it,
+            at least one second. ``None`` means the default: signed tokens
+            and server-stored entries both expire after 24 hours.
 
     """
 

@@ -71,8 +71,9 @@ stays useful. A call with an expired token does not run its handler: it
 gets a `stale_state` error, and Citry's browser code offers to reload
 the page, which brings a fresh token.
 
-For a longer lifetime, set `State._max_age` to a `timedelta`. No setting
-turns expiry off. Changing `_max_age` later does not change the tokens
+To change the lifetime, set `State._max_age` to a `timedelta` of at least
+one second. Token times are whole seconds, so a token can stop working up
+to one second early. No setting turns expiry off. Changing `_max_age` later does not change the tokens
 Citry has already issued.
 
 ```python

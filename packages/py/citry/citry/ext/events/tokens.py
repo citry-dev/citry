@@ -17,6 +17,8 @@ way (it only stores and echoes the string):
   token is ``cev1.<base64url(payload)>.<base64url(hmac_sha256)>``, where the
   payload is the canonical JSON
   ``{"v": 1, "c": class_id, "s": {state}, "t": mint_epoch, "x": expiry|null}``.
+  Mint always writes an integer ``x``; verify reads ``null`` (written by a
+  release before 1.0.0) as ``t`` plus 24 hours.
   The HMAC key is HMAC-SHA256 of the secret, keyed with the fixed label
   ``citry.events.state-token``. A signature that other code makes with the
   raw secret does not verify as a token.
@@ -883,7 +885,7 @@ def _valid_payload_shape(payload: object) -> bool:
 
 
 def _check_expiry(payload: dict[str, Any]) -> None:
-    """Reject a signed token past its expiry field as stale."""
+    """Reject a token past its expiry field as stale."""
     expiry = payload.get("x")
     if expiry is None:
         # Releases before 1.0.0 wrote no expiry when `_max_age` was unset.
@@ -938,7 +940,11 @@ def _load_server_payload(key: str, cache: CitryCache | None) -> dict[str, Any]:
     _refuse_unknown_payload_version(payload)
     if not _valid_payload_shape(payload):
         raise InvalidStateError(_MALFORMED_MSG)
-    return cast("dict[str, Any]", payload)
+    server_payload = cast("dict[str, Any]", payload)
+    # The cache's time-to-live usually removes the entry first, but a backend
+    # that ignores it must not keep State alive past the lifetime either.
+    _check_expiry(server_payload)
+    return server_payload
 
 
 # ----- Applying two-way binding updates -----
