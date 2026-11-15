@@ -2172,8 +2172,8 @@ versions running together for a while, and a deploy can skip releases
 State tokens (the tokens that carry a component's State, or point to it
 on the server), Events requests, and HTML fragments that the server
 sends after the page has loaded. So a change to a Citry format should
-leave an open page working, or at worst make the browser ask the visitor
-to reload. The one case that still fails is a page from a newer release
+leave an open page working, or at worst make the next event call fail
+with `stale_state`. The one case that still fails is a page from a newer release
 that calls a server still running an older release (see the
 `citry-events/1` bullet below). The rules cover a deploy between any two
 1.x releases. A deploy from 0.x to 1.0.0 is a fresh start, so 1.0.0 does

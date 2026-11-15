@@ -137,7 +137,8 @@ export function installFragmentManager(
           bubbles: true,
           cancelable: true,
         });
-        // The configuration the fragment carries says whether a development server wrote it.
+        // The configuration the fragment carries says whether a development server wrote it. The
+        // runtime uses this only when the page started no app of its own, whose mode it prefers.
         const development =
           (raw as { vue?: { prepared?: { development?: unknown } } } | null)?.vue?.prepared?.development === true;
         if (target.dispatchEvent(notice)) reportOutOfDate(development);

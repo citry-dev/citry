@@ -173,3 +173,34 @@ def test_the_check_script_is_read_from_disk_once(monkeypatch: pytest.MonkeyPatch
     assert reads == ["utf8"]
     assert _SCRIPT_MARKER in first
     assert _SCRIPT_MARKER in second
+
+
+# A Vue fragment's data block, which the browser reads when the HTML is inserted.
+_FRAGMENT = re.compile(r'<script type="application/json" data-citry-vue-fragment>(.*?)</script>', re.DOTALL)
+
+
+@pytest.mark.parametrize("mode", ["development", "production"])
+def test_fragment_carries_the_development_flag_of_its_server(mode: str) -> None:
+    # On a page with no Citry app of its own, the browser reads the flag
+    # from the fragment to choose between its question and a console warning.
+    engine = Citry(autodiscover=False, mode=mode)
+    engine.set_mounted_prefix("/citry")
+
+    class Widget(Component):
+        citry = engine
+        template = """
+<button v-text="label"></button>
+"""
+        js = """
+$component({});
+"""
+
+        def js_data(self, kwargs: Any, slots: Any) -> dict[str, str]:
+            return {"label": "ready"}
+
+    html = Widget().render().serialize(deps_strategy="fragment")
+
+    match = _FRAGMENT.search(html)
+    assert match is not None, html[:500]
+    prepared = json.loads(match.group(1))["vue"]["prepared"]
+    assert prepared.get("development") is (True if mode == "development" else None)

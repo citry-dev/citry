@@ -23,13 +23,15 @@ component's [State](/events/state/) to the page) expire after 24 hours.
    [after 24 hours](#state-tokens-expire) or sits in a whole-page cache
    for longer than that. Keep
    every `_max_age` at one second or more.
-5. Run your tests on 1.0.0.
-6. [Deploy](#deploy-the-upgrade) with fresh whole-page caches.
-7. Check whether your code uses an
+5. [Add a listener for out-of-date pages](#out-of-date-listener), so
+   visitors see a message when a call fails with `stale_state`.
+6. Run your tests on 1.0.0.
+7. [Deploy](#deploy-the-upgrade) with fresh whole-page caches.
+8. Check whether your code uses an
    [experimental feature](#check-experimental), and read the
    [other changes](#other-changes).
 
-Skip step 4 if no component uses server events.
+Skip steps 4 and 5 if no component uses server events.
 
 ## Upgrade to 0.9.x first { #upgrade-to-0-9-first }
 
@@ -103,11 +105,6 @@ not changed for 24 hours:
 Fix: set a longer `_max_age` in the `State` class inside the component.
 No setting turns expiry off.
 
-A page can also get `stale_state` for other reasons, such as a deploy,
-so add a listener that tells visitors the page is out of date, as
-[Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)
-shows.
-
 ```python
 from datetime import timedelta
 
@@ -147,6 +144,17 @@ server-stored State. See
   Python imports the component.
 - In 0.9.x, a shorter value made every token expire as soon as Citry
   issued it.
+
+## Tell visitors about out-of-date pages { #out-of-date-listener }
+
+In 1.0.0, Citry shows a production visitor nothing when an event call
+fails with `stale_state`. That covers an expired token, but also State
+the server dropped, a changed secret, and a deploy. Calls from that
+component keep failing until the visitor reloads the page. So in every
+app that uses server events, add a listener that tells visitors the
+page is out of date, as
+[Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)
+shows.
 
 ## Deploy the upgrade { #deploy-the-upgrade }
 

@@ -714,7 +714,7 @@ def verify_state_token(
         raise InvalidStateError(_MALFORMED_MSG)
     # A token whose prefix names another token version is refused before
     # anything after the prefix is decoded. It only picks stale over
-    # malformed, so a page from another release is offered a reload.
+    # malformed, so a page from another release is reported as out of date.
     _refuse_unknown_version_prefix(token)
     # The component's storage picks the check, so a server-storage component
     # only ever loads State from the cache, which the client cannot write.

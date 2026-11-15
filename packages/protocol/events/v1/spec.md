@@ -967,8 +967,9 @@ difference matters to the browser: Citry's browser client treats a
 `stale_state` (409) answer as an out-of-date page, which a reload fixes
 because the reloaded page carries a fresh token. It fires
 `citry:events:stale` with reason `version`, so the app can tell the
-visitor. On a page rendered in development mode it also asks its own
-reload question; on any other page it writes a console warning. It
+visitor. Unless a listener cancels the event, it also reports the page
+once: on a page rendered in development mode it asks its own reload
+question, and on any other page it writes a console warning. It
 treats `invalid_state` (403) like any other error.
 
 The server checks the token of a call that needs State in this order, and

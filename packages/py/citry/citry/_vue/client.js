@@ -215,6 +215,10 @@
   // Report an out-of-date page at most once: a deploy tends to make every following call stale at once,
   // and repeating it would nag. One page may run several apps, so the flag lives outside them.
   let outOfDateReported = false;
+  // The mode of the first app the page itself started (through startDocument), or undefined on a page
+  // that only receives fragments. A fragment's own flag is used only on such a page, so a fragment block
+  // injected into a production page cannot make the page ask its question.
+  let pageDevelopment;
   function reportOutOfDate(development) {
     if (outOfDateReported) return;
     outOfDateReported = true;
@@ -5787,6 +5791,7 @@
     const configuration = JSON.parse(blocks[0].textContent);
     if (configuration?.manifest?.appId !== appId)
       throw new Error(`[Citry] the configuration block for app ${appId} describes a different app`);
+    pageDevelopment ??= configuration.development === true;
     // Report a failed start as an uncaught error on the page (window.onerror and the
     // console see it), without leaving an unhandled promise rejection.
     startPrepared(configuration).catch(error => queueMicrotask(() => { throw error; }));
@@ -5804,6 +5809,7 @@
     startPrepared,
     documentNonce,
     carriesPageNonce,
-    reportOutOfDate,
+    // The page's own mode wins over the one a fragment claims; see pageDevelopment.
+    (fragmentDevelopment) => reportOutOfDate(pageDevelopment ?? fragmentDevelopment),
   );
 })(window);

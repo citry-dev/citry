@@ -30,6 +30,8 @@ async function startWith({
   manifest = MANIFEST,
   cancelStale = false,
   blockConnected = false,
+  pageNonce = PAGE_NONCE,
+  documentApp,
 }) {
   const events = [];
   const record = (target, event) => {
@@ -61,7 +63,7 @@ async function startWith({
     }
   }
   // The runtime's own tag carries the page nonce, as a server-rendered page writes it.
-  const runtimeScript = new HTMLScriptElement(PAGE_NONCE);
+  const runtimeScript = new HTMLScriptElement(pageNonce);
   const block = new HTMLScriptElement(blockNonce);
   block.textContent = manifest;
   // A block still in the page is where the fragment's event starts.
@@ -70,6 +72,13 @@ async function startWith({
     block.dispatchEvent = (event) => record("block", event);
   }
   block.attributes = { type: "application/json", "data-citry-vue-fragment": "", ...blockAttributes };
+  // The configuration block of an app the page itself renders, in the mode given by `documentApp`.
+  let documentBlock = null;
+  if (documentApp !== undefined) {
+    documentBlock = new HTMLScriptElement(pageNonce);
+    documentBlock.attributes = { type: "application/json", "data-citry-vue-document": "page" };
+    documentBlock.textContent = JSON.stringify({ manifest: { appId: "page" }, development: documentApp.development });
+  }
   const document = new Document();
   Object.assign(document, {
     readyState: "complete",
@@ -77,7 +86,10 @@ async function startWith({
     body: { contains: () => false },
     createElement: () => ({}),
     querySelector: () => null,
-    querySelectorAll: (selector) => (selector === FRAGMENT_SELECTOR ? [block] : []),
+    querySelectorAll: (selector) => {
+      if (selector === FRAGMENT_SELECTOR) return [block];
+      return selector === DOCUMENT_SELECTOR && documentBlock ? [documentBlock] : [];
+    },
     addEventListener() {},
     removeEventListener() {},
     // Records what the page hears; a listener that cancels `citry:fragments:stale` returns false.
@@ -112,7 +124,16 @@ async function startWith({
         return [];
       }
     },
-    queueMicrotask,
+    // startDocument reports a failed start by throwing from a microtask; the stub page cannot
+    // start a real app, so that error is recorded instead of ending the test process.
+    queueMicrotask: (callback) =>
+      queueMicrotask(() => {
+        try {
+          callback();
+        } catch (error) {
+          errors.push(String(error));
+        }
+      }),
     setTimeout,
     clearTimeout,
     structuredClone,
@@ -128,11 +149,14 @@ async function startWith({
   context.window = context;
   context.self = context;
   vm.runInNewContext(source, context);
+  // The page's own app starts before the fragment's failure is reported, as on a real page.
+  if (documentApp !== undefined) context.__citryRuntime.startDocument("page");
   // The manager reports a refused block from a rejected promise, one turn later.
   await new Promise((resolve) => setTimeout(resolve, 0));
   return { errors, prompts, warnings, events };
 }
 
+const DOCUMENT_SELECTOR = 'script[type="application/json"][data-citry-vue-document]';
 const NONCE_REFUSAL = /does not carry the page's CSP nonce/;
 const HOST_REFUSAL = /host must resolve once/;
 
@@ -267,4 +291,30 @@ test("a fragment refused for its nonce reports nothing, whatever it carries", as
     [],
   );
   assert.match(errors[0], NONCE_REFUSAL);
+});
+
+test("a fragment block injected into a production page without a nonce cannot make it ask", async () => {
+  // Without a nonce every fragment block starts, so injected markup can claim a development
+  // server. The page's own app says it runs in production, and that decides.
+  const { prompts, warnings, events } = await startWith({
+    blockNonce: "",
+    pageNonce: "",
+    clobberCurrentScript: false,
+    manifest: JSON.stringify(otherProtocol(true)),
+    documentApp: { development: false },
+  });
+  assert.equal(events.filter((event) => event.type === FRAGMENT_STALE.type).length, 1);
+  assert.deepEqual(prompts, []);
+  assert.equal(warnings.length, 1, warnings.join("\n"));
+});
+
+test("a development page asks even for a fragment from a production server", async () => {
+  const { prompts, warnings } = await startWith({
+    blockNonce: PAGE_NONCE,
+    clobberCurrentScript: false,
+    manifest: JSON.stringify(otherProtocol(false)),
+    documentApp: { development: true },
+  });
+  assert.deepEqual(prompts, [QUESTION]);
+  assert.deepEqual(warnings, []);
 });

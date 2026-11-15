@@ -675,30 +675,30 @@ with its expired token.
 
 What Citry does by itself:
 
-- The call rejects with an error whose `code` is `stale_state`. Its
+- A call made with `$sendEvent` or `Citry.events.send` rejects with an
+  error whose `code` is `stale_state`. Its
   `status` is 409 when the server answered and 0 when the browser found
   the problem itself.
 - Citry fires `citry:events:stale` with reason `version`, then
   `citry:events:error`, on every failed call.
-- Unless a listener calls `preventDefault()`, Citry also tells you once
-  per page. When the app that rendered the page (or, for a fragment,
-  the fragment) runs with `Citry(mode="development")`, the browser
-  shows the confirm dialog "This page is out of date. Reload to
+- Unless a listener calls `preventDefault()`, Citry also reports it
+  once per page. When the page runs with `Citry(mode="development")`,
+  the browser shows the confirm dialog "This page is out of date. Reload to
   continue?", so you notice the case while you develop. Otherwise Citry
   writes a console warning that starts with "[Citry] This page is out
   of date". When several apps on one page run in different modes, the
-  first failure decides which one you get.
+  first failure decides which one you get. For a fragment, the page's
+  own mode decides; only on a page with no Citry app of its own does
+  the mode of the server that wrote the fragment decide.
 
 A [Vue fragment](/advanced/html-fragments/), HTML your server returns
 for the browser to insert into an open page, can also come from another
 Citry release. That happens during a deploy, when the server process
 that answers already runs the new release. When the page cannot read
 the fragment, Citry does not mount its Vue components: the fragment's
-HTML stays in the page, but its buttons and bindings do nothing. For a
-fragment inserted into the page, Citry writes
-`[Citry] discarded Vue fragment` to the console; a call to
-`Citry.fragments.load` rejects instead. No event call is involved, so Citry
-fires `citry:fragments:stale` instead of `citry:events:stale`:
+HTML stays in the page, but its buttons and bindings do nothing, and
+Citry writes `[Citry] discarded Vue fragment` to the console. No event
+call is involved, so Citry fires `citry:fragments:stale` instead of `citry:events:stale`:
 
 - It fires on the `<script>` tag that holds the fragment's data while
   that tag is in the page, and on `document` otherwise. It bubbles, so a

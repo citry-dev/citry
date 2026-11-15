@@ -45,7 +45,8 @@ Development mode changes four things:
   [Production and deployment](/i18n/production/).
 - When an event call or a Vue fragment fails because the page is out of
   date, the browser asks "This page is out of date. Reload to
-  continue?". In production Citry writes a console warning instead. See
+  continue?", unless a listener cancels the event. In production Citry
+  writes a console warning instead. See
   [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages).
 
 The checks cost time on every render and add a script to some pages, so

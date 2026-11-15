@@ -305,6 +305,10 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(
       await first;
       return {same: first === second, mounts: globalThis.__fragmentMounts};
     }""") == {"same": True, "mounts": 1}
+    # This server runs in production, so a refused fragment must never open
+    # the browser's reload question.
+    dialogs: list[str] = []
+    page.on("dialog", lambda dialog: (dialogs.append(dialog.message), dialog.dismiss()))
     assert page.evaluate("""async () => {
       const tag = document.querySelector('script[data-citry-vue-fragment]');
       const manifest = JSON.parse(tag.textContent);
@@ -317,6 +321,7 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(
       catch (error) { return {code: error.code, heard}; }
       return null;
     }""") == {"code": "stale_state", "heard": ["version"]}
+    assert dialogs == []
     assert page.evaluate("""async () => {
       const source = JSON.parse(document.querySelector('script[data-citry-vue-fragment]').textContent);
       const manifest = structuredClone(source);

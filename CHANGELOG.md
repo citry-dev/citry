@@ -27,19 +27,24 @@
 
 - **Citry no longer asks visitors to reload an out-of-date page in
   production:** when a call fails with `stale_state`, most often because
-  the page's State token expired, every visitor whose call failed got a
-  confirm dialog asking whether to reload. Now only a page that
+  the page's State token expired, a visitor whose call failed got a
+  confirm dialog asking whether to reload, once per page. Now only a page that
   `Citry(mode="development")` rendered asks. In production Citry asks
   nothing, never reloads by itself, and writes one console warning per
   page, so calls from that component keep failing until the visitor
-  reloads the page. Show your own
-  message from a listener, as
+  reloads the page. Show your own message from a listener, as
   [Handle out-of-date pages](https://citry.dev/reference/browser-apis/#out-of-date-pages)
   shows:
 
     ```js
     document.addEventListener("citry:events:stale", (event) => {
-      if (event.detail.reason === "version") showReloadBanner();
+      if (event.detail.reason !== "version") return;
+      event.preventDefault();
+      showReloadBanner();
+    });
+    document.addEventListener("citry:fragments:stale", (event) => {
+      event.preventDefault();
+      showReloadBanner();
     });
     ```
 
