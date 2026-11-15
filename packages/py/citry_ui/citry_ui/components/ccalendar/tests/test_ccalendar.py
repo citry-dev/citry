@@ -237,7 +237,7 @@ def test_invalid_server_inputs_fail_deterministically(kwargs, error, match) -> N
         ("role", "cannot override owned attribute"),
         ("tabindex", "cannot override owned attribute"),
         ("data-empty", "cannot override owned attribute"),
-        ("data-citry-hostile", "reserved runtime attribute"),
+        ("data-citry-hostile", "are reserved for the browser"),
         (":aria-disabled", "Vue directive"),
         ("v-bind:role", "Vue directive"),
         ("v-model", "Vue directive"),

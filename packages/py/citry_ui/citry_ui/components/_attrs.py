@@ -108,6 +108,96 @@ def reject_vue_directive_attrs(
             raise ValueError(msg)
 
 
+# Citry UI's browser code finds its elements by `data-citry-*` names, such as
+# `data-citry-dialog-close`, some of which it builds at run time from a part or
+# action name. Core Citry's browser code and render cache read `data-cev*` and
+# `data-cid*` names. The whole `data-citry-` prefix is reserved, rather than a
+# list of today's names, so a name a later release starts reading is already
+# covered.
+_RESERVED_ATTR_PREFIXES = ("data-citry-", "data-cev", "data-cid")
+# Only these names can carry a value Citry UI wrote; see `CitryUiOwnedValue`.
+_OWNED_VALUE_PREFIX = "data-citry-"
+_ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
+
+
+class CitryUiOwnedValue(str):
+    """
+    The value of a `data-citry-*` attribute that Citry UI itself wrote into slot data.
+
+    A Citry UI component hands some of its own marker attributes to the caller,
+    such as `activator_attrs` with `data-citry-dialog-trigger`, so the caller
+    can spread them onto a `<c-CButton>`. The receiving component's check
+    accepts a reserved name only when its value is one of these. Data read from
+    a request or from storage is a plain `str`, so it cannot make one.
+    """
+
+    __slots__ = ()
+
+
+def citry_ui_owned_value(value: str = "") -> CitryUiOwnedValue:
+    """Return `value` marked as written by Citry UI, for a `data-citry-*` name a component hands out."""
+    return CitryUiOwnedValue(value)
+
+
+def reject_citry_ui_reserved_attr(
+    name: object,
+    value: object,
+    *,
+    where: str,
+    extra_prefixes: tuple[str, ...] = (),
+) -> None:
+    """
+    Raise `ValueError` when an attribute map from Python sets a name Citry UI's browser code reads.
+
+    Every Citry UI `attrs=` and `*_attrs=` input calls this for each name. The
+    reserved names are every `data-citry-*` name, and the `data-cev*` and
+    `data-cid*` names core Citry reads. A component may pass `extra_prefixes`
+    for names only it reads.
+
+    Args:
+        name: The attribute name to check. A non-string name is left to the caller's own type check.
+        value: The value set for it. A `data-citry-*` name passes only with a `CitryUiOwnedValue`, or with
+            `None` or `False`, which write no attribute.
+        where: The component and input, such as `"CButton attrs"`, for the message.
+        extra_prefixes: More reserved prefixes, in lowercase.
+
+    Raises:
+        ValueError: When `name` starts with a reserved prefix, in any ASCII letter case.
+
+    """
+    if not isinstance(name, str):
+        return
+    # Browsers compare attribute names after lowercasing ASCII letters only,
+    # so `DATA-CITRY-X` is the same attribute and a non-ASCII lookalike is not.
+    folded = name.translate(_ASCII_LOWER)
+    if not folded.startswith(_RESERVED_ATTR_PREFIXES + extra_prefixes):
+        return
+    # A `None` or `False` value renders no attribute at all, so it is harmless.
+    if value is None or value is False:
+        return
+    # The one way through: a value a Citry UI component wrote into slot data.
+    if folded.startswith(_OWNED_VALUE_PREFIX) and isinstance(value, CitryUiOwnedValue):
+        return
+    prefixes = ", ".join(repr(prefix) for prefix in _RESERVED_ATTR_PREFIXES + extra_prefixes)
+    msg = (
+        f"{where} cannot set {name!r}. Attribute names that start with {prefixes} are reserved for the browser "
+        "code of Citry and Citry UI, which would act on the element as if Citry had written it. Pass the attrs a "
+        "Citry UI slot hands you (such as activator_attrs) as they are, or choose another name."
+    )
+    raise ValueError(msg)
+
+
+def reject_citry_ui_reserved_attrs(
+    attrs: Mapping[object, object] | None,
+    where: str,
+    *,
+    extra_prefixes: tuple[str, ...] = (),
+) -> None:
+    """Run `reject_citry_ui_reserved_attr` on every name in an attribute map."""
+    for name, value in (attrs or {}).items():
+        reject_citry_ui_reserved_attr(name, value, where=where, extra_prefixes=extra_prefixes)
+
+
 def html_attr_binding_target(name: str) -> str | None:
     """Return the attribute a `:name`, `.name`, or `v-bind:name` binding sets, or None for any other name."""
     normalized = name.casefold()
@@ -153,6 +243,8 @@ def merge_root_attrs(
 __all__ = [
     "CClassValue",
     "CStyleValue",
+    "CitryUiOwnedValue",
+    "citry_ui_owned_value",
     "get_html_attr",
     "get_html_form_owner",
     "html_attr_binding_target",
@@ -160,5 +252,7 @@ __all__ = [
     "is_vue_directive_attribute",
     "merge_root_attrs",
     "pop_html_attr",
+    "reject_citry_ui_reserved_attr",
+    "reject_citry_ui_reserved_attrs",
     "reject_vue_directive_attrs",
 ]

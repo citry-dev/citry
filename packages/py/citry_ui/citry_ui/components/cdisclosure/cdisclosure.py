@@ -17,6 +17,7 @@ from citry_ui.components._attrs import (
     html_attr_binding_target,
     is_vue_directive_attribute,
     merge_root_attrs,
+    reject_citry_ui_reserved_attr,
 )
 from citry_ui.components._context import FORM_CONTEXT_KEY
 from citry_ui.components._heading import CHeadingLevel, resolve_heading_level
@@ -59,7 +60,6 @@ _INDICATOR_POSITIONS = ("start", "end")
 _DISCLOSURE_CONTEXT_KEY = "citry_ui_disclosure"
 _ACCORDION_ITEM_CONTEXT_KEY = "citry_ui_accordion_item"
 _ACCORDION_PANEL_CONTEXT_KEY = "citry_ui_accordion_panel"
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_OWNED_ATTRS = frozenset(
     {
         "id",
@@ -335,14 +335,12 @@ def _is_vue_listener(normalized: str) -> bool:
 def _validate_attrs(input_name: str, attrs: dict[str, object], owned: frozenset[str]) -> None:
     owner = f"CDisclosure {input_name}"
     reject_owned_attrs(attrs, owned, owner)
-    for key in attrs:
+    for key, attr_value in attrs.items():
         if not isinstance(key, str):
             msg = f"{owner} requires string keys, got {key!r}."
             raise TypeError(msg)
         normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
-            msg = f"{owner} cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
+        reject_citry_ui_reserved_attr(key, attr_value, where=owner)
         # A Vue directive could rebind an owned attribute, change the part's
         # structure, or add a listener, so Python data cannot carry it.
         if is_vue_directive_attribute(normalized):

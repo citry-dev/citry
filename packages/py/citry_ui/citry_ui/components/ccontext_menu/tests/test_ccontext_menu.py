@@ -249,7 +249,7 @@ def test_invalid_structural_inputs_fail_synchronously(inputs: str, error: str) -
     ("input_name", "attrs", "error"),
     [
         ("attrs", {"id": "hostile"}, "owned attribute"),
-        ("attrs", {"data-citry-hostile": "x"}, "owned attribute"),
+        ("attrs", {"data-citry-hostile": "x"}, "are reserved for the browser"),
         ("attrs", {"aria-description": "Hostile"}, "owned attribute"),
         ("attrs", {":aria-description": "description"}, "Vue directive"),
         ("attrs", {"@contextmenu": "x"}, "Vue directive"),

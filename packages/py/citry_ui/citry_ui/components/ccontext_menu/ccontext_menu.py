@@ -8,7 +8,14 @@ from typing import ClassVar, Literal, TypedDict, cast
 
 from citry import LibraryComponent, Slot, SlotInput, const_value
 from citry_ui.components._anchored_layer import ANCHORED_LAYER_RUNTIME_DEPENDENCY
-from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    citry_ui_owned_value,
+    is_vue_directive_attribute,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+)
 from citry_ui.components._validation import validate_boolean
 from citry_ui.components.cmenu.cmenu import (
     _CMENU_SHARED_ASSETS,
@@ -47,7 +54,6 @@ class CContextMenuOpenChangeDetail(TypedDict):
 
 
 _SIZES = ("sm", "md", "lg")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 # Citry template directive names would let a copied attribute re-enter the
 # template as a props or attribute spread.
 _OWNERSHIP_DIRECTIVES = frozenset({"c-bind"})
@@ -137,7 +143,7 @@ def _copy_attrs(
     attrs = dict(value)
     allowed = _ROOT_ATTRS if input_name == "attrs" else None
     seen: set[str] = set()
-    for key in attrs:
+    for key, attr_value in attrs.items():
         if not isinstance(key, str):
             msg = f"CContextMenu {input_name} requires string keys, got {key!r}."
             raise TypeError(msg)
@@ -146,9 +152,18 @@ def _copy_attrs(
             msg = f"CContextMenu {input_name} cannot contain duplicate case variants of {key!r}."
             raise ValueError(msg)
         seen.add(normalized)
+        # The target may carry the documented native-menu escape, which only
+        # stops ContextMenu from opening; every other reserved name is refused.
         native_marker = input_name == "target_attrs" and normalized == "data-citry-context-menu-native"
+        if not native_marker:
+            reject_citry_ui_reserved_attr(key, attr_value, where=f"CContextMenu {input_name}")
+        elif attr_value is not None and attr_value is not False:
+            # ContextMenu hands the target attrs on through slot data, usually
+            # to a `<c-CButton>`, whose own check accepts this name only as a
+            # value Citry UI wrote. Replacing a value keeps the key set intact.
+            attrs[key] = citry_ui_owned_value(attr_value if isinstance(attr_value, str) else "")
         root_aria = input_name == "attrs" and normalized.startswith("aria-")
-        if (root_aria or normalized.startswith(_RUNTIME_PREFIXES) or normalized in reserved) and not native_marker:
+        if (root_aria or normalized in reserved) and not native_marker:
             msg = f"CContextMenu {input_name} cannot override owned attribute {key!r}."
             raise ValueError(msg)
         # A Vue directive could rebind an owned attribute, replace the menu's
@@ -300,7 +315,7 @@ class CContextMenu(LibraryComponent):
         target_attrs.update(
             {
                 "id": target_id,
-                "data-citry-context-menu-target": "",
+                "data-citry-context-menu-target": citry_ui_owned_value(),
             }
         )
         point_attrs = {

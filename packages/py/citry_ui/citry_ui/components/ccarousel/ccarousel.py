@@ -7,7 +7,13 @@ from dataclasses import dataclass, field
 from typing import Any, ClassVar, Literal, TypedDict, overload
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._scroll_geometry import SCROLL_GEOMETRY_RUNTIME_DEPENDENCY
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
@@ -39,7 +45,6 @@ _CONTEXT_KEY = "citry_ui_carousel"
 _ORIENTATIONS = ("horizontal", "vertical")
 _VARIANTS = ("plain", "surface")
 _SIZES = ("sm", "md", "lg")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_OWNED = frozenset(
     {
         "aria-hidden",
@@ -143,9 +148,8 @@ def _attrs(component: str, value: Mapping[str, object] | None, owned: frozenset[
     # A Vue directive could rebind an owned attribute, add listeners, or
     # change the slide structure, so none may arrive through Python data.
     reject_vue_directive_attrs(copied, component)
-    for key in copied:
-        if key.casefold().startswith(_RUNTIME_PREFIXES):
-            raise ValueError(f"{component} attrs cannot contain Citry runtime attribute {key!r}.")
+    for key, attr_value in copied.items():
+        reject_citry_ui_reserved_attr(key, attr_value, where=f"{component} attrs")
     return copied
 
 

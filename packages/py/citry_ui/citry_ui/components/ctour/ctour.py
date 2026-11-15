@@ -7,7 +7,14 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict, cast
 
 from citry import CitryRender, LibraryComponent, Slot, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    citry_ui_owned_value,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_html_id
 
@@ -51,7 +58,6 @@ _SCROLL = ("auto", "smooth", "none")
 _MISSING_TARGET = ("skip", "close")
 _SIZES = ("sm", "md", "lg")
 _TOUR_CONTEXT = "citry_ui_tour"
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_OWNED = frozenset(
     {
         "aria-hidden",
@@ -210,10 +216,8 @@ def _attrs(
     # A Vue directive could rebind an owned attribute, spread over the root,
     # or change its structure, so none may arrive through Python data.
     reject_vue_directive_attrs(copied, owner)
-    for key in copied:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
-            raise ValueError(f"{owner} attrs cannot contain Citry runtime attribute {key!r}.")
+    for key, attr_value in copied.items():
+        reject_citry_ui_reserved_attr(key, attr_value, where=f"{owner} attrs")
     return merge_root_attrs(copied, class_, style)
 
 
@@ -333,7 +337,7 @@ class CTour(LibraryComponent):
                 "aria-haspopup": "dialog",
                 "aria-controls": f"{root_id}-dialog",
                 "aria-expanded": "true" if kwargs.open else "false",
-                "data-citry-tour-trigger": "",
+                "data-citry-tour-trigger": citry_ui_owned_value(),
             },
             "attrs": _attrs("CTour", kwargs.attrs, _ROOT_OWNED, kwargs.class_, kwargs.style),
             "registry": registry,

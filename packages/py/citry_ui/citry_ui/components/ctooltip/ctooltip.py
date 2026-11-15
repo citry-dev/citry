@@ -10,7 +10,14 @@ from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_DEPENDENCY,
 )
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    citry_ui_owned_value,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CTooltipPlacement = Literal[
@@ -59,7 +66,6 @@ _PLACEMENTS = (
     "bottom",
     "bottom-end",
 )
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _SURFACE_OWNED_ATTRS = frozenset(
     {
         "aria-hidden",
@@ -153,11 +159,8 @@ def _validate_attrs(attrs: dict[str, object]) -> None:
     # A Vue directive could rebind an owned attribute, add a listener, or
     # change the structure, so none may arrive through Python data.
     reject_vue_directive_attrs(attrs, "CTooltip")
-    for key in attrs:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
-            msg = f"CTooltip attrs cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
+    for key, attr_value in attrs.items():
+        reject_citry_ui_reserved_attr(key, attr_value, where="CTooltip attrs")
 
 
 class CTooltip(LibraryComponent):
@@ -230,7 +233,7 @@ class CTooltip(LibraryComponent):
             "placement": placement,
             "activator_attrs": {
                 "aria-describedby": tooltip_id,
-                "data-citry-tooltip-trigger": "",
+                "data-citry-tooltip-trigger": citry_ui_owned_value(),
                 "style": {"anchor-name": anchor_name},
             },
             "attrs": merge_root_attrs(attrs, kwargs.class_, surface_style),

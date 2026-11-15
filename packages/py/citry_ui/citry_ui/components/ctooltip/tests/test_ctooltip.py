@@ -152,7 +152,7 @@ def test_tooltip_public_schema_is_nested_slotted_and_runtime_introspectable():
         ({"attrs": {"V-IF": "visible"}}, ValueError, "attrs cannot contain the Vue directive 'V-IF'"),
         ({"attrs": {"@mouseenter": "show"}}, ValueError, "attrs cannot contain the Vue directive '@mouseenter'"),
         ({"attrs": {"#default": ""}}, ValueError, "attrs cannot contain the Vue directive '#default'"),
-        ({"attrs": {"data-citry-root": ""}}, ValueError, "runtime attribute"),
+        ({"attrs": {"data-citry-root": ""}}, ValueError, "are reserved for the browser"),
     ],
 )
 def test_tooltip_rejects_invalid_or_ambiguous_inputs(kwargs, exception, message):

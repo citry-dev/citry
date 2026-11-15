@@ -140,7 +140,7 @@ def test_invalid_composition_fails(source: str, match: str) -> None:
     ("root", "item", "match"),
     [
         ("c-attrs=\"{'role': 'grid'}\"", "", "cannot override owned attribute 'role'"),
-        ("c-attrs=\"{'data-citry-root': 'x'}\"", "", "CSortable attrs cannot contain Citry runtime attribute"),
+        ("c-attrs=\"{'data-citry-root': 'x'}\"", "", "are reserved for the browser"),
         ("c-attrs=\"{':role': 'kind'}\"", "", "CSortable attrs cannot contain the Vue directive ':role'"),
         ("c-attrs=\"{'v-if': 'shown'}\"", "", "CSortable attrs cannot contain the Vue directive 'v-if'"),
         ("c-attrs=\"{'V-FOR': 'row'}\"", "", "CSortable attrs cannot contain the Vue directive 'V-FOR'"),

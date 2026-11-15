@@ -10,7 +10,13 @@ from typing import Any, Literal, TypedDict
 
 from citry import CitryRender, LibraryComponent, SlotInput, const_value
 from citry.util.html import LongReferenceSafeParser
-from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    is_vue_directive_attribute,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+)
 from citry_ui.components._context import FORM_CONTEXT_KEY
 from citry_ui.components._direct_output import feed_typed_direct_output
 from citry_ui.components._heading import CHeadingLevel, resolve_heading_level
@@ -38,7 +44,6 @@ _INDICATOR_POSITIONS = ("start", "end")
 _ACCORDION_CONTEXT_KEY = "citry_ui_accordion"
 _ACCORDION_ITEM_CONTEXT_KEY = "citry_ui_accordion_item"
 _ACCORDION_PANEL_CONTEXT_KEY = "citry_ui_accordion_panel"
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_OWNED_ATTRS = frozenset(
     {
         "aria-hidden",
@@ -293,11 +298,8 @@ def _validate_attrs(
     owned: frozenset[str],
 ) -> None:
     reject_owned_attrs(attrs, owned, component_name)
-    for key in attrs:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
-            msg = f"{component_name} cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
+    for key, attr_value in attrs.items():
+        reject_citry_ui_reserved_attr(key, attr_value, where=component_name)
         # A Vue directive could rebind an owned attribute, add listeners, or
         # change the part's structure, so none may arrive through Python data.
         if is_vue_directive_attribute(key):

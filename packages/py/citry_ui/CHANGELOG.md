@@ -10,6 +10,14 @@
   `Markup("java&#115;cript:alert(1)")`, as they do for the same URL
   written as a plain string. Before, Citry decoded the references when it
   wrote the attribute, so the page got a `javascript:` link.
+- Every component's `attrs` and `*_attrs` now raise `ValueError` for a
+  key that starts with `data-citry-`, `data-cev` or `data-cid`. Before,
+  `CButton`, `CCombobox`, `CDialog`, `CDrawer`, `CField`, `CForm`,
+  `CSidebar`, `CTable` and `CTabs` refused only the names they set
+  themselves, so a key from request data such as
+  `data-citry-dialog-close` could make Citry UI's browser code act on
+  the element. Slot attrs such as `activator_attrs` still work on a
+  `<c-CButton>`, as they are or with your own keys added.
 
 ## [0.5.0] - 2026-11-14
 

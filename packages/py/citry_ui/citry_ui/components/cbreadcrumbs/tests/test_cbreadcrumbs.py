@@ -110,7 +110,7 @@ def test_breadcrumbs_validate_records_and_exact_strings():
     [
         ("attrs", "role", "cannot override owned attribute"),
         ("attrs", "aria-label", "cannot override owned attribute"),
-        ("attrs", "data-citry-morph", "reserved Citry runtime attribute"),
+        ("attrs", "data-citry-morph", "are reserved for the browser"),
         ("attrs", ":data-size", "Vue directive"),
         ("attrs", "v-if", "Vue directive"),
         ("attrs", "V-IF", "Vue directive"),

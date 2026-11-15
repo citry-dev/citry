@@ -16,6 +16,7 @@ from citry_ui.components._attrs import (
     get_html_form_owner,
     merge_root_attrs,
     pop_html_attr,
+    reject_citry_ui_reserved_attr,
     reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
@@ -97,7 +98,6 @@ _SOURCE_MONTHS = (
     "November",
     "December",
 )
-_RUNTIME_PREFIXES = ("data-citry-", "data-cdate-range", "data-cid")
 _ROOT_OWNED = frozenset(
     {
         "aria-disabled",
@@ -133,11 +133,10 @@ def _attrs(value: Mapping[str, object] | None) -> dict[str, object]:
     # A Vue directive could rebind an owned attribute, change the root's
     # structure, or attach a listener, so none may arrive through Python data.
     reject_vue_directive_attrs(copied, "CDateRange")
-    for key in copied:
+    for key, attr_value in copied.items():
         if not isinstance(key, str):
             raise TypeError(f"CDateRange attrs require string keys, got {key!r}.")
-        if key.casefold().startswith(_RUNTIME_PREFIXES):
-            raise ValueError(f"CDateRange attrs cannot contain reserved runtime attribute {key!r}.")
+        reject_citry_ui_reserved_attr(key, attr_value, where="CDateRange attrs", extra_prefixes=("data-cdate-range",))
     return copied
 
 

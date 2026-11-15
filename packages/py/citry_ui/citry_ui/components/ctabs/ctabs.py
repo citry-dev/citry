@@ -7,7 +7,13 @@ from hashlib import sha256
 from typing import Any, Literal, cast
 
 from citry import CitryRender, LibraryComponent, Slot, SlotInput
-from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    is_vue_directive_attribute,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+)
 from citry_ui.components._reveal import REVEAL_RUNTIME_DEPENDENCY
 
 CTabsActivation = Literal["automatic", "manual"]
@@ -89,10 +95,11 @@ def _reject_owned_attrs(
     owned: set[str],
     location: str,
 ) -> None:
-    for key in attrs or {}:
+    for key, attr_value in (attrs or {}).items():
         if key.lower() in owned:
             msg = f"{location} attrs cannot override owned attribute {key!r}."
             raise ValueError(msg)
+        reject_citry_ui_reserved_attr(key, attr_value, where=f"{location} attrs")
         # A Vue directive could rebind an owned attribute or add a listener, so
         # none may arrive through Python data.
         if is_vue_directive_attribute(key):

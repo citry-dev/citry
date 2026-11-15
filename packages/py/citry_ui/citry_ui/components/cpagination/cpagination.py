@@ -7,7 +7,13 @@ from dataclasses import dataclass
 from typing import Any, Literal, TypedDict
 
 from citry import LibraryComponent, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._url import check_link_url
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
@@ -17,7 +23,6 @@ CPaginationSize = Literal["sm", "md", "lg"]
 
 _VARIANTS = ("soft", "outline", "plain")
 _SIZES = ("sm", "md", "lg")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _OWNED = frozenset(
     {
         "aria-hidden",
@@ -97,9 +102,8 @@ def _attrs(attrs: Mapping[str, object] | None) -> dict[str, object]:
     # A Vue directive could rebind an owned attribute, replace the page
     # listeners, or change the root's structure, so none may arrive through Python data.
     reject_vue_directive_attrs(copied, "CPagination")
-    for key in copied:
-        if key.casefold().startswith(_RUNTIME_PREFIXES):
-            raise ValueError(f"CPagination attrs cannot contain Citry runtime attribute {key!r}.")
+    for key, attr_value in copied.items():
+        reject_citry_ui_reserved_attr(key, attr_value, where="CPagination attrs")
     return copied
 
 

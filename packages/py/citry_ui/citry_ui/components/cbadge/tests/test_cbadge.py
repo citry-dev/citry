@@ -120,9 +120,9 @@ def test_invalid_inputs_fail_deterministically(input_name, bad_value, error, mat
         ("contenteditable", "cannot override owned attribute"),
         ("aria-hidden", "cannot override owned attribute"),
         ("data-citry-ui-part", "cannot override owned attribute"),
-        ("data-citry-morph", "reserved Citry runtime attribute"),
-        ("data-cev-action", "reserved Citry runtime attribute"),
-        ("data-cid", "reserved Citry runtime attribute"),
+        ("data-citry-morph", "are reserved for the browser"),
+        ("data-cev-action", "are reserved for the browser"),
+        ("data-cid", "are reserved for the browser"),
     ],
 )
 def test_badge_rejects_owned_and_runtime_attributes(attribute, message):

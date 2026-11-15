@@ -148,7 +148,8 @@ logical placement, forced colors, and reduced motion remain component-owned.
 
 `class_`, `style`, and allowed `attrs` merge onto the native Dialog. They may
 not replace modality, relationships, visibility, parts, or structure. `attrs`
-also rejects Vue directive syntax: names starting with `v-`, `:`, `.`, `^`, `@`,
+also rejects Citry runtime attributes (names starting with `data-citry-`, `data-cev`, or
+`data-cid`) and Vue directive syntax: names starting with `v-`, `:`, `.`, `^`, `@`,
 or `#`. Write Vue bindings and listeners on the component tag in your template
 instead, for example `<c-CDrawer :open="open">`.
 

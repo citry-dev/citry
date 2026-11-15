@@ -9,7 +9,13 @@ from typing import Any, ClassVar, Literal, TypedDict, cast
 
 from citry import LibraryComponent, SlotInput, const_value
 from citry.util.html import LongReferenceSafeParser
-from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    is_vue_directive_attribute,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+)
 from citry_ui.components._validation import (
     first_attribute_occurrences,
     reject_owned_attrs,
@@ -25,7 +31,6 @@ CListboxValue = str | None | Sequence[str]
 _CONTEXT = "citry_ui_listbox"
 _VARIANTS = ("plain", "soft", "outline")
 _SIZES = ("sm", "md", "lg")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_OWNED = frozenset(
     {
         "aria-hidden",
@@ -237,14 +242,12 @@ def _attrs(
         raise TypeError(msg)
     copied = dict(attrs or {})
     reject_owned_attrs(copied, owned, f"{owner} {input_name}")
-    for key in copied:
+    for key, attr_value in copied.items():
         if not isinstance(key, str):
             msg = f"{owner} {input_name} requires string keys, got {key!r}."
             raise TypeError(msg)
         normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
-            msg = f"{owner} {input_name} cannot contain Citry runtime attribute {key!r}."
-            raise ValueError(msg)
+        reject_citry_ui_reserved_attr(key, attr_value, where=f"{owner} {input_name}")
         # A Vue directive could rebind an owned selection or relationship
         # attribute, change the structure, or attach a listener, so none may
         # arrive through Python data.

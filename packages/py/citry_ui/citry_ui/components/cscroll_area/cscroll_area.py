@@ -15,6 +15,7 @@ from citry_ui.components._attrs import (
     CStyleValue,
     is_executable_event_attribute,
     merge_root_attrs,
+    reject_citry_ui_reserved_attr,
     reject_vue_directive_attrs,
 )
 from citry_ui.components._scroll_geometry import SCROLL_GEOMETRY_RUNTIME_DEPENDENCY
@@ -41,7 +42,6 @@ _SCROLLBAR_GUTTERS = ("auto", "stable", "stable-both-edges")
 _OVERSCROLL_VALUES = ("auto", "contain", "none")
 _ASCII_WHITESPACE = "\t\n\f\r "
 _IDREF_SPLIT = re.compile(r"[\t\n\f\r ]+")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ALLOWED_ARIA = frozenset({"aria-describedby", "aria-details", "aria-keyshortcuts"})
 _ALLOWED_PLAIN = frozenset({"class", "style", "lang", "dir", "title", "translate", "spellcheck"})
 _CITRY_DIRECTIVES = frozenset({"c-bind"})
@@ -107,11 +107,12 @@ def _copy_attrs(value: Mapping[str, object] | None) -> dict[str, object]:
     # Any other Vue directive could rebind the viewport's owned attributes or
     # change its structure, so none may arrive through Python data.
     reject_vue_directive_attrs(copied, "CScrollArea")
-    for key in copied:
+    for key, attr_value in copied.items():
+        reject_citry_ui_reserved_attr(key, attr_value, where="CScrollArea attrs")
         name = key.casefold()
         if name in _ALLOWED_PLAIN or name in _ALLOWED_ARIA:
             continue
-        if name.startswith("data-") and not name.startswith(_RUNTIME_PREFIXES):
+        if name.startswith("data-"):
             continue
         if name in _CITRY_DIRECTIVES:
             raise ValueError(f"CScrollArea attrs cannot use ownership directive {key!r}.")
