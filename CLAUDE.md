@@ -987,6 +987,48 @@ doc or comment, reframe in terms of what is there now.
 (`RATIONALE.md` post-mortems are the narrow exception, and even there prefer
 abstract framing of the failure mode.)
 
+## Check every change against the versioning rules
+
+Users pin `citry>=1.0.0,<2` and expect their code to keep working on every
+1.x release. So when you write a change to code under `crates/` or
+`packages/`, and when you review one, check it against the rules in
+[`docs/codebase.md`](docs/codebase.md#breaking-changes) and the Versioning
+and support page (`docs_site/content/about/versioning.md`), and say the
+result in the pull request. Until `citry` 1.0.0 is released, the
+"Keep contract versions at 1" bullet above still decides contract versions.
+
+- **Does it break anything the 1.x promise covers?** The lists in
+  [Breaking changes](docs/codebase.md#breaking-changes) say what is
+  covered. Adding a name or an optional argument is not a break. A break
+  cannot ship in 1.x as written: keep the old behavior and deprecate it
+  ([Deprecating a feature](docs/codebase.md#deprecating-a-feature)), or
+  hold the change for the next major release. A security fix may refuse
+  input Citry used to accept, and its changelog entry says so. For any
+  other break, ask the maintainer before opening the pull request.
+- **Does one release write data that another release reads?** For example
+  an Events request, a State token, a cache entry, or the JSON of
+  `citry check`. Follow [Contract versions](docs/codebase.md#contract-versions).
+  A public format (one the docs describe, or that tools outside Citry
+  read) does not change incompatibly in 1.x: the change gets a new number,
+  such as `citry-events/2`, and ships beside the old one until a major
+  release drops it. An internal format (one only Citry's own code reads
+  back) may get a new version number only when the 1.x releases already
+  out treat an unknown version as missing. If you cannot tell which kind
+  it is, treat it as public.
+- **Which version does the package need next?** A fix needs a patch
+  release, a new feature or a deprecation needs a minor release, and a
+  removal needs a major release. When the change needs a bigger release
+  than the one being prepared, say so in the pull request rather than
+  shipping it under the smaller number.
+
+Experimental features and the "not covered" list in Breaking changes may
+change in a minor release. The rules cover `citry` and every other package
+at 1.0.0 or later; `citry-ui` stays at 0.x, and a `citry-core` change counts
+only when it changes a covered `citry` behavior.
+
+The independent reviewer (Mechanism 6) runs the same check and reports what
+it found, or that the change touches nothing the rules cover.
+
 ## Changelog entries
 
 Each published package owns its `CHANGELOG.md`. The root one belongs only to
