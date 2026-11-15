@@ -49,7 +49,7 @@ CACHED_CARD_RENDERS: list[str] = []
 CACHE_SETTINGS = {"namespace": "rolling-deploy", "generation": "same-on-both-releases", "ttl": 600}
 
 
-def build_app(store: Path, *, cache_generation: str | None = None) -> tuple[Citry, dict[str, type[Component]]]:
+def build_app(store: Path, *, cache_generation: str | None = None) -> tuple[Citry, dict[str, Any]]:
     """Build the application: one engine and the components the check uses."""
     cache_settings = dict(CACHE_SETTINGS)
     # `serve` builds a second engine with another generation to render the
@@ -63,19 +63,25 @@ def build_app(store: Path, *, cache_generation: str | None = None) -> tuple[Citr
         extensions_defaults={"cache": cache_settings},
     )
     engine.set_mounted_prefix(PREFIX)
+    # Each State renders the component defined after it, so it finds the
+    # class through this table, filled in once every class exists.
+    components: dict[str, Any] = {}
 
     class SignedState:
         count: int = 0
 
         def render(self) -> Any:
-            return SignedCounter(count=self.count)
+            return components["SignedCounter"](count=self.count)
 
     class SignedCounter(Component):
         citry = engine
         State = SignedState
 
-        def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:  # noqa: ARG002 - citry passes both
-            return kwargs
+        class Kwargs:
+            count: int = 0
+
+        def template_data(self, kwargs: Kwargs, slots: Any) -> dict[str, Any]:  # noqa: ARG002 - citry passes both
+            return {"count": kwargs.count}
 
         class Events:
             def bump(self, state: SignedState) -> Any:
@@ -93,14 +99,17 @@ def build_app(store: Path, *, cache_generation: str | None = None) -> tuple[Citr
         count: int = 0
 
         def render(self) -> Any:
-            return StoredCounter(count=self.count)
+            return components["StoredCounter"](count=self.count)
 
     class StoredCounter(Component):
         citry = engine
         State = StoredState
 
-        def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:  # noqa: ARG002 - citry passes both
-            return kwargs
+        class Kwargs:
+            count: int = 0
+
+        def template_data(self, kwargs: Kwargs, slots: Any) -> dict[str, Any]:  # noqa: ARG002 - citry passes both
+            return {"count": kwargs.count}
 
         class Events:
             def bump(self, state: StoredState) -> Any:
@@ -131,7 +140,8 @@ def build_app(store: Path, *, cache_generation: str | None = None) -> tuple[Citr
             <article class="card">{{ name }}</article>
         """
 
-    return engine, {"SignedCounter": SignedCounter, "StoredCounter": StoredCounter, "CachedCard": CachedCard}
+    components.update(SignedCounter=SignedCounter, StoredCounter=StoredCounter, CachedCard=CachedCard)
+    return engine, components
 
 
 def render(store: Path, out: Path) -> None:
