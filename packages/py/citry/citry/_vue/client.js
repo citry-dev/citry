@@ -218,8 +218,24 @@
   function promptReload() {
     if (reloadPrompted) return;
     reloadPrompted = true;
-    if (global.confirm("This page and the server are running different versions of the app. Reload to get back in sync?"))
+    if (global.confirm("This page is out of date. Reload to continue?"))
       global.location.reload();
+  }
+  // A render or fragment written by another release of the app (a newer server during a deploy) can
+  // use a format this runtime cannot read. It fails with the code the server gives a State token it
+  // no longer accepts, so the page offers the same reload and a page that handles `stale_state`
+  // handles this case too. Status 0 marks a failure found in the browser, as it does for `timeout`.
+  function pageOutOfDateError(message) {
+    const error = new Error(message);
+    error.status = 0;
+    error.code = "stale_state";
+    return error;
+  }
+  // The helper contract names the render helpers a definition was compiled against. Another value
+  // means another release compiled it, which is a page to reload rather than a broken render.
+  function assertSameHelperContract(value) {
+    if (typeof value === "string" && value !== HELPER_CONTRACT)
+      throw pageOutOfDateError("[Citry] the server sent a render from a different version of the app; reload the page");
   }
   const registeredTypeOptions = new Map();
   const browserPluginFactories = new Map();
@@ -1119,6 +1135,8 @@
 
   function normalizeDefinitionAsset(asset) {
     plain(asset, "prepared definition asset");
+    // Checked before the field list, which a release with other helpers may also have changed.
+    assertSameHelperContract(asset.helperContract);
     const keys = ["directiveSignature", "dynamicElements", "helperContract", "id", "localCallRuns",
       "localCalls", "opaqueHtmlSites", "replacementSites", "runtimeEventSites", "sha256", "target", "url"];
     if (Object.keys(asset).sort().join(",") !== [...keys].sort().join(",") ||
@@ -1459,6 +1477,7 @@
 
   function registerDefinition(appId, definitionId, definition, expected = null) {
     plain(definition, "render definition");
+    assertSameHelperContract(definition.helperContract);
     if (typeof definitionId !== "string" || typeof definition.render !== "function" || definition.target !== ORDINARY_TARGET || definition.helperContract !== HELPER_CONTRACT) throw new TypeError("invalid render definition");
     const normalized = Object.freeze({render: definition.render, target: definition.target, helperContract: definition.helperContract, dynamicElements:normalizeDynamicElements(definition.dynamicElements || []),directiveSignature: normalizeDirectiveSignature(definition.directiveSignature),replacementSites:normalizeReplacementSites(definition.replacementSites),localCalls:normalizeLocalCalls(definition.localCalls),localCallRuns:normalizeLocalCallRuns(definition.localCallRuns),opaqueHtmlSites:normalizeOpaqueHtmlSites(definition.opaqueHtmlSites),runtimeEventSites:normalizeRuntimeEventSites(definition.runtimeEventSites || [])});
     validateRuntimeEventSiteDeclarations(normalized.directiveSignature, normalized.runtimeEventSites);
@@ -5770,5 +5789,6 @@
     startPrepared,
     documentNonce,
     carriesPageNonce,
+    promptReload,
   );
 })(window);

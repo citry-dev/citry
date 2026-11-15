@@ -88,8 +88,9 @@ export interface VueEventsHost {
     detail?: JsonObject,
   ): boolean | undefined;
   /**
-   * Offers the user a reload after a call failed because the page and the server run different app
-   * versions. The bridge calls it only when no `stale` listener cancelled the version notification.
+   * Offers the user a reload after a call failed because the page is out of date: the server no
+   * longer accepts its State, or it sent a render this runtime cannot read. The bridge calls it only
+   * when no `stale` listener cancelled the version notification.
    */
   promptReload?(): void;
   takePendingState?(source: VueEventSource, handler: string): JsonObject | undefined;
@@ -483,6 +484,23 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     }
   };
 
+  // Reports a failed call or action to the page. The code `stale_state` means the page is out of
+  // date: the server no longer accepts its State (a deploy, a changed secret, an expired token), or
+  // the browser runtime got a render from another release that it cannot read. That is reported
+  // as a `stale` notification first, and a listener may cancel it to replace the reload prompt;
+  // the `error` notification follows either way.
+  const reportFailure = (source: VueEventSource, handler: string, error: unknown): void => {
+    const reported = activityError(error);
+    if (reported.code === "stale_state") {
+      // An expected outcome, like a server's error answer, so a declarative call that reports it
+      // does not also raise it as a page error. The runtime's own error needs marking here; the
+      // server's answer is marked where it arrives.
+      if (error !== null && typeof error === "object") reportableFailures.add(error);
+      if (lifecycle("stale", source, handler, { reason: "version" })) options.host.promptReload?.();
+    }
+    lifecycle("error", source, handler, { error: reported as JsonObject });
+  };
+
   const ownerState = (source: VueEventSource) => {
     const existing = owners.get(source.stableId);
     if (existing?.generation === source.generation) return existing;
@@ -741,9 +759,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
               lifecycle("stale", source, job.input.handler, { reason: error.reason });
               return;
             }
-            if (!(error instanceof VueEventCancellation)) {
-              lifecycle("error", source, job.input.handler, { error: activityError(error) as JsonObject });
-            }
+            if (!(error instanceof VueEventCancellation)) reportFailure(source, job.input.handler, error);
             console.error("[Citry] applying a Vue event action marked wait: false failed:", error);
           })
           .finally(() => {
@@ -1009,17 +1025,8 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
         if (error instanceof VueEventStale) {
           lifecycle("stale", job.input.source, job.input.handler, { reason: error.reason });
         } else if (!(error instanceof VueEventCancellation)) {
-          // The server answers `stale_state` when the page's State token no longer verifies, which is
-          // what a deploy does to an open page. Reported before `error`, and a listener may cancel it
-          // to replace the reload prompt; the call still rejects with the server's error either way.
-          if (
-            activityError(error).code === "stale_state" &&
-            lifecycle("stale", job.input.source, job.input.handler, { reason: "version" })
-          )
-            options.host.promptReload?.();
-          lifecycle("error", job.input.source, job.input.handler, {
-            error: activityError(error) as JsonObject,
-          });
+          // The call still rejects with the original error after the page hears about it.
+          reportFailure(job.input.source, job.input.handler, error);
         }
         lifecycle("after", job.input.source, job.input.handler, { ok: false });
       }
@@ -1217,7 +1224,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       if (error instanceof VueEventStale) {
         lifecycle("stale", source, job.input.handler, { reason: error.reason });
       } else if (!(error instanceof VueEventCancellation)) {
-        lifecycle("error", source, job.input.handler, { error: activityError(error) as JsonObject });
+        reportFailure(source, job.input.handler, error);
       }
       lifecycle("after", source, job.input.handler, { ok: false });
       throw error;

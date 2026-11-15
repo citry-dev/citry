@@ -23,7 +23,7 @@ from citry.ext.events.renderers import dispatcher_for
 
 pytest.importorskip("playwright.sync_api")
 
-_RELOAD_PROMPT = "This page and the server are running different versions of the app. Reload to get back in sync?"
+_RELOAD_PROMPT = "This page is out of date. Reload to continue?"
 
 
 def _collect_page_errors(page: Any) -> list[str]:
@@ -288,6 +288,70 @@ def test_stale_state_after_a_deploy_asks_once_to_reload(page: Any, open_citry_pa
     assert dialogs == [_RELOAD_PROMPT]
     assert page.locator("#skew").text_content() == "0"
     # A declarative call reports its failure; nothing escapes as a page error.
+    assert errors == []
+
+
+def _answer_as_a_release_with_other_render_helpers(page: Any) -> list[int]:
+    # A newer release compiles its Vue definitions against its own render
+    # helpers, and the definitions it sends name that helper contract. Giving
+    # the real server's answer another contract value is what an open page
+    # sees when its call reaches a server already running that release.
+    rewritten: list[int] = []
+
+    def rewrite(value: Any) -> Any:
+        if isinstance(value, dict):
+            if isinstance(value.get("helperContract"), str):
+                rewritten.append(1)
+                value = {**value, "helperContract": "0" * 64}
+            return {key: rewrite(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [rewrite(item) for item in value]
+        return value
+
+    def reroute(route: Any) -> None:
+        response = route.fetch()
+        route.fulfill(response=response, json=rewrite(response.json()))
+
+    page.route("**/ext/events/call", reroute)
+    return rewritten
+
+
+@pytest.mark.e2e
+def test_a_render_from_a_release_with_other_render_helpers_asks_once_to_reload(
+    page: Any, open_citry_page: Any, serve_live: Any
+) -> None:
+    engine = Citry(secret="vue-helper-skew-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+    skew = _stale_token_page(engine)
+    dispatcher_for(engine)
+    errors = _collect_page_errors(page)
+    dialogs: list[str] = []
+    page.on("dialog", lambda dialog: (dialogs.append(dialog.message), dialog.dismiss()))
+    page.add_init_script(
+        """
+        window.__skewEvents = [];
+        for (const name of ['stale', 'error'])
+          document.addEventListener(`citry:events:${name}`, event => window.__skewEvents.push({
+            name, reason: event.detail.reason ?? null, code: event.detail.error?.code ?? null}));
+        """
+    )
+    open_citry_page(serve_live(engine, skew(count=0).render().serialize(), "") + "/")
+    rewritten = _answer_as_a_release_with_other_render_helpers(page)
+
+    page.locator("#skew").click()
+    page.wait_for_function("window.__skewEvents.length === 2")
+    page.locator("#skew").click()
+    page.wait_for_function("window.__skewEvents.length === 4")
+
+    # The answer did carry a definition, so the page refused it for its helpers.
+    assert rewritten
+    stale = {"name": "stale", "reason": "version", "code": None}
+    error = {"name": "error", "reason": None, "code": "stale_state"}
+    assert page.evaluate("window.__skewEvents") == [stale, error, stale, error]
+    # The page offers the same reload as for a State token the server no
+    # longer accepts, once per page, and keeps what it showed.
+    assert dialogs == [_RELOAD_PROMPT]
+    assert page.locator("#skew").text_content() == "0"
     assert errors == []
 
 

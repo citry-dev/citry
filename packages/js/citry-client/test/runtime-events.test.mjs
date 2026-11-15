@@ -665,3 +665,21 @@ test("the fallback action check uses the protocol's target and swap rules", asyn
   }
   assert.equal(fixture.document.dispatched.length, 0);
 });
+
+test("a render definition compiled against other helpers fails as an out-of-date page", () => {
+  // A newer release during a deploy compiles its definitions against its own helpers. The page
+  // must read that as `stale_state`, which offers a reload, not as a broken definition.
+  const fixture = runtime();
+  const definition = fixture.definition();
+  definition.helperContract = "0".repeat(64);
+  assert.throws(
+    () => fixture.stable.registerDefinition("app", "def", definition),
+    (error) => error.code === "stale_state" && error.status === 0 && /different version of the app/.test(error.message),
+  );
+  // A definition with no helper contract is malformed, not from another release.
+  delete definition.helperContract;
+  assert.throws(
+    () => fixture.stable.registerDefinition("app", "def", definition),
+    (error) => error.code === undefined && /invalid render definition/.test(error.message),
+  );
+});

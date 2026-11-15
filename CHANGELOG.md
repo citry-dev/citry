@@ -63,6 +63,13 @@
   the other release gets `stale_state` (409) during a deploy, and Citry's
   browser code offers a reload. Before, it got `invalid_state` (403) and
   an error.
+- During a deploy, a page from the older release now offers a reload when
+  its event call gets a render, or the page gets a Vue fragment, that its
+  browser code cannot read because a newer Citry release wrote it. The
+  call fails with `stale_state`, as for an expired State token. Before,
+  it failed with an error and no reload was offered.
+- The reload question now reads "This page is out of date. Reload to
+  continue?", which also fits a page whose State token expired.
 
 ## v0.9.0
 

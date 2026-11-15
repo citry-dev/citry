@@ -309,9 +309,10 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(
         page.evaluate("""async () => {
       const tag = document.querySelector('script[data-citry-vue-fragment]');
       const manifest = JSON.parse(tag.textContent);
+      // A top-level field this runtime does not know marks a fragment from another release.
       manifest.calls = [];
       try { await Citry.fragments.load(manifest); }
-      catch (error) { return String(error).includes('legacy dependency state'); }
+      catch (error) { return error.code === 'stale_state'; }
       return false;
     }""")
         is True

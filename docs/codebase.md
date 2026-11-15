@@ -2413,6 +2413,10 @@ Prepare a release as follows:
    the expensive part and happens before release intent. Independent package
    builds run in parallel; the candidate retains their exact artifact IDs and
    GitHub archive digests for 30 days.
+   Citry's qualification also runs `scripts/rolling_deploy/check.py`, which
+   sends the requests of pages the previous release rendered to the
+   candidate, as a rolling deploy does; a failed check stops the release
+   only when both releases are 1.x.
    Qualification requires each worker to be dispatched from the planned commit
    on `main`. If `main` advances before dispatch, prepare a new candidate on
    current `main`.

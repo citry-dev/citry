@@ -1247,10 +1247,10 @@ document does not define. Its contents belong to the browser runtime of the
 release that wrote it, and Citry's browser code refuses one whose helper
 contract differs from its own. So during an upgrade, a page rendered by the
 old release can fail to apply a `vue-prepared/1` render from a server
-already running the new release. The call fails with an error, no reload
-prompt appears, and the page keeps failing such calls until the visitor
-reloads it. An `html-fragment/1`
-render has no such limit.
+already running the new release. The call then fails in the browser with a
+`stale_state` error whose `status` is 0, and the page offers the visitor
+the same reload as for a `stale_state` answer from the server. An
+`html-fragment/1` render has no such limit.
 
 The format inside `stateToken` is not defined here either, and a 1.x
 release may change it. A server answers a token from a token version it

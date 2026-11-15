@@ -23,7 +23,7 @@ const MANIFEST = JSON.stringify({
 
 // Loads the runtime into a stub page and returns what the fragment manager logged for one
 // fragment data block that is already in the page when the runtime starts.
-async function startWith({ blockNonce, clobberCurrentScript, blockAttributes = {} }) {
+async function startWith({ blockNonce, clobberCurrentScript, blockAttributes = {}, manifest = MANIFEST }) {
   class Document {
     get currentScript() {
       return runtimeScript;
@@ -46,7 +46,7 @@ async function startWith({ blockNonce, clobberCurrentScript, blockAttributes = {
   // The runtime's own tag carries the page nonce, as a server-rendered page writes it.
   const runtimeScript = new HTMLScriptElement(PAGE_NONCE);
   const block = new HTMLScriptElement(blockNonce);
-  block.textContent = MANIFEST;
+  block.textContent = manifest;
   block.attributes = { type: "application/json", "data-citry-vue-fragment": "", ...blockAttributes };
   const document = new Document();
   Object.assign(document, {
@@ -65,11 +65,11 @@ async function startWith({ blockNonce, clobberCurrentScript, blockAttributes = {
   if (clobberCurrentScript)
     Object.defineProperty(document, "currentScript", { value: { nonce: "", getAttribute: () => null } });
   const errors = [];
+  const prompts = [];
   const context = {
     Document,
     HTMLScriptElement,
     document,
-    location: { assign() {} },
     history: { state: null, pushState() {}, replaceState() {} },
     console: { error: (...args) => errors.push(args.map(String).join(" ")), warn() {}, log() {} },
     MutationObserver: class {
@@ -84,6 +84,12 @@ async function startWith({ blockNonce, clobberCurrentScript, blockAttributes = {
     clearTimeout,
     structuredClone,
     btoa,
+    // The visitor declines, so the test sees the question without a reload.
+    confirm: (message) => {
+      prompts.push(message);
+      return false;
+    },
+    location: { assign() {}, reload() {} },
   };
   context.globalThis = context;
   context.window = context;
@@ -91,32 +97,32 @@ async function startWith({ blockNonce, clobberCurrentScript, blockAttributes = {
   vm.runInNewContext(source, context);
   // The manager reports a refused block from a rejected promise, one turn later.
   await new Promise((resolve) => setTimeout(resolve, 0));
-  return errors;
+  return { errors, prompts };
 }
 
 const NONCE_REFUSAL = /does not carry the page's CSP nonce/;
 const HOST_REFUSAL = /host must resolve once/;
 
 test("a fragment block without the page nonce is refused", async () => {
-  const errors = await startWith({ blockNonce: "", clobberCurrentScript: false });
+  const { errors } = await startWith({ blockNonce: "", clobberCurrentScript: false });
   assert.equal(errors.length, 1, errors.join("\n"));
   assert.match(errors[0], NONCE_REFUSAL);
 });
 
 test("a fragment block with a different nonce is refused", async () => {
-  const errors = await startWith({ blockNonce: "other-nonce", clobberCurrentScript: false });
+  const { errors } = await startWith({ blockNonce: "other-nonce", clobberCurrentScript: false });
   assert.equal(errors.length, 1, errors.join("\n"));
   assert.match(errors[0], NONCE_REFUSAL);
 });
 
 test("a fragment block with the page nonce passes the nonce check", async () => {
-  const errors = await startWith({ blockNonce: PAGE_NONCE, clobberCurrentScript: false });
+  const { errors } = await startWith({ blockNonce: PAGE_NONCE, clobberCurrentScript: false });
   assert.equal(errors.length, 1, errors.join("\n"));
   assert.match(errors[0], HOST_REFUSAL);
 });
 
 test("a named element that hides document.currentScript does not switch the nonce check off", async () => {
-  const errors = await startWith({ blockNonce: "", clobberCurrentScript: true });
+  const { errors } = await startWith({ blockNonce: "", clobberCurrentScript: true });
   assert.equal(errors.length, 1, errors.join("\n"));
   assert.match(errors[0], NONCE_REFUSAL);
 });
@@ -124,11 +130,41 @@ test("a named element that hides document.currentScript does not switch the nonc
 test("a fragment block that took in the next tag's attributes is refused, nonce included", async () => {
   // An injected tag left open takes the genuine tag after it as attributes, here
   // `<script type=application/json data-citry-vue-fragment a=` before `<script nonce=...>`.
-  const errors = await startWith({
+  const { errors } = await startWith({
     blockNonce: PAGE_NONCE,
     clobberCurrentScript: false,
     blockAttributes: { a: "<script", nonce: "" },
   });
   assert.equal(errors.length, 1, errors.join("\n"));
+  assert.match(errors[0], NONCE_REFUSAL);
+});
+
+// A newer server during a deploy can write a fragment this runtime does not know: another
+// protocol string, or a top-level field beside `vue`. The page then offers its reload prompt.
+for (const [name, manifest] of [
+  ["another protocol", { vue: { ...JSON.parse(MANIFEST).vue, protocol: "citry-vue-fragment/2" } }],
+  ["an unknown top-level field", { ...JSON.parse(MANIFEST), styles: [] }],
+]) {
+  test(`a fragment with ${name} offers a reload`, async () => {
+    const { errors, prompts } = await startWith({
+      blockNonce: PAGE_NONCE,
+      clobberCurrentScript: false,
+      manifest: JSON.stringify(manifest),
+    });
+    assert.deepEqual(prompts, ["This page is out of date. Reload to continue?"]);
+    assert.equal(errors.length, 1, errors.join("\n"));
+    assert.match(errors[0], /different version of the app/);
+  });
+}
+
+test("a fragment refused for its nonce does not offer a reload, whatever it carries", async () => {
+  // Injected markup has no nonce under a nonce-based CSP, so it cannot raise the prompt.
+  const manifest = { vue: { ...JSON.parse(MANIFEST).vue, protocol: "citry-vue-fragment/2" } };
+  const { errors, prompts } = await startWith({
+    blockNonce: "",
+    clobberCurrentScript: false,
+    manifest: JSON.stringify(manifest),
+  });
+  assert.deepEqual(prompts, []);
   assert.match(errors[0], NONCE_REFUSAL);
 });
