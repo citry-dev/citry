@@ -845,6 +845,10 @@ def format_attrs(attrs: Mapping[str, Any]) -> Markup:
       HTML to the text a browser would read, so a ``"`` in it cannot end
       the attribute.
 
+    Each name is checked to be well formed, but names that ``c-bind``
+    refuses, such as ``onclick`` or ``srcdoc``, are not refused here.
+    Choose the names in your own code; never use keys from request data.
+
     Example::
 
         format_attrs({

@@ -417,6 +417,9 @@ Then follow these steps:
 6. **Say in the docs when an input is author-only.** When a value is trusted
    because only the template author writes it, the page that documents the
    API must say so, so app authors know not to pass request data into it.
+   [`docs/design/trust_boundaries.md`](docs/design/trust_boundaries.md)
+   lists who may supply each input that reaches the page; update the
+   input's row in the same change.
 7. **Record a pass that leaves no hole open.** After the change merges,
    write a short record in [`docs/security/reviews/`](docs/security/reviews/README.md)
    using the template in its README. A hole in a released version follows

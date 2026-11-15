@@ -737,6 +737,8 @@ class Component(metaclass=ComponentMeta):
     absolute paths are used as-is. A subclass that inherits this declaration
     therefore keeps the declaring class's file location. A plain mixin can
     declare the path while the component still supplies the owning engine.
+    Choose the path in your own code, never from request data, because
+    Citry compiles the file it names as a template.
     """
 
     messages: ClassVar[str | None] = None

@@ -34,6 +34,7 @@ each entry to one paragraph and link to longer docs rather than copying them.
 | Vue rendering, native slots, component identity, server revisions, and cutover status | [`docs/design/vue.md`](../design/vue.md) |
 | Browser CSP, nonces, and JavaScript-free delivery | [`docs/design/vue.md`](../design/vue.md), [`security_csp.md`](../design/security_csp.md) for the existing delivery contract |
 | CSRF ownership, Events token wiring, and native forms | [`docs/design/security_csrf.md`](../design/security_csrf.md) |
+| Who may supply each input that reaches the page (template author, app code, or request data), and which function checks it | [`docs/design/trust_boundaries.md`](../design/trust_boundaries.md) |
 | Static authored component dependencies and reverse references | [`docs/design/component_graph.md`](../design/component_graph.md) |
 | Internationalization: locale context, messages, formatting, direction, tooling, and Citry UI | [`docs/design/i18n.md`](../design/i18n.md) |
 

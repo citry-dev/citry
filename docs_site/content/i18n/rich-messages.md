@@ -67,6 +67,15 @@ Citry renders the fill once for each place it appears. If the two places
 need different content or behavior, declare two `Slot` variables
 instead.
 
+## Check a URL from a message
+
+Translators write messages. When you put a `tr()` result into a URL
+attribute yourself, such as `c-href="tr('help-url')"`, Citry escapes it
+but does not check the URL's scheme, so check it as you would a URL from
+request data; see
+[Check URL attributes](/security/#check-url-attributes). Better, keep
+the URL fixed in the template and translate only the link text.
+
 ## Text stays escaped
 
 Citry escapes all text that comes from the message:

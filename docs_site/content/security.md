@@ -213,6 +213,10 @@ Citry escapes a value for the place it lands, but it does not check the
 scheme of a URL you give to a plain HTML attribute. Check the scheme before
 you pass a URL from the request to an attribute, and allow only `http:`,
 `https:`, `mailto:`, `sms:`, `tel:` and relative URLs.
+The same holds for the `content` of a `<meta http-equiv="refresh">` tag,
+and for the `to`, `from`, `by`, and `values` of an SVG `<set>` or
+`<animate>` element whose `attributeName` is a link attribute such as
+`href`.
 
 The Citry UI components that take a link or form action accept the same
 list. The ones that take an image URL accept `http:`, `https:`, `blob:`,
@@ -1090,6 +1094,12 @@ shows as `***`.
 Citry detects only the values you wrap. A secret kept in a plain string
 is sent like any other text. See [Secrets](/advanced/secrets/) for a
 full example.
+
+## Protect the render cache { #protect-the-render-cache }
+
+Citry replays HTML from the [render cache](/performance/caching/) as it
+was stored. Anyone who can write to the cache store can put HTML into
+your pages, so protect it like your database.
 
 ## Keep debug logs off { #keep-debug-logs-off-in-production }
 
