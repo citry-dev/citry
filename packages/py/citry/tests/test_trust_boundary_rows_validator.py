@@ -16,17 +16,32 @@ class CitrySettings:
     sandbox_expressions: bool = True
     security_csp: str = "off"
 """
-_DOC = "Rows for `on_serialize()`, `Extension.urls`, `Redirect(url=)` and `security_csp`.\n"
+# A hook fired by name; the docstring example must not count as a hook.
+_DISPATCHER = '''
+def dispatch(manager, ctx):
+    """Call `manager.emit("on_my_event", ctx)` to fire your own hook."""
+    return manager.emit("on_event", ctx, result="first")
+'''
+_DISPATCHER_MODULE = trust_boundary_rows.PACKAGE_DIR / "ext/events/dispatcher.py"
+_DOC = "Rows for `on_serialize()`, `Extension.urls`, `on_event`, `Redirect(url=)` and `security_csp`.\n"
 
 
-def _repository(tmp_path: Path, *, doc: str = _DOC, extension: str = _EXTENSION) -> Path:
+def _repository(
+    tmp_path: Path,
+    *,
+    doc: str = _DOC,
+    extension: str = _EXTENSION,
+    settings: str = _SETTINGS,
+    dispatcher: str = _DISPATCHER,
+) -> Path:
     # Lay out every file the validator reads, all consistent, so each test
     # changes exactly one of them.
     files = {
         trust_boundary_rows.DOC: doc,
         trust_boundary_rows.EXTENSION_MODULE: extension,
         trust_boundary_rows.ACTIONS_MODULE: _ACTIONS,
-        trust_boundary_rows.SETTINGS_MODULE: _SETTINGS,
+        trust_boundary_rows.SETTINGS_MODULE: settings,
+        _DISPATCHER_MODULE: dispatcher,
     }
     for relative, text in files.items():
         path = tmp_path / relative
@@ -68,3 +83,31 @@ def test_a_source_that_changed_shape_is_reported(tmp_path: Path) -> None:
     assert problems == [
         f"found no extension hook names in {trust_boundary_rows.EXTENSION_MODULE}; update trust_boundary_rows.py"
     ]
+
+
+def test_a_hook_fired_by_name_without_a_row_is_reported(tmp_path: Path) -> None:
+    root = _repository(tmp_path, doc=_DOC.replace("`on_event`", "on_event"))
+
+    problems = trust_boundary_rows.check(root)
+
+    assert len(problems) == 1
+    assert "extension hook `on_event` (fired by name" in problems[0]
+
+
+def test_a_new_security_setting_without_a_row_is_reported(tmp_path: Path) -> None:
+    root = _repository(tmp_path, settings=_SETTINGS + '    security_new: str = "off"\n')
+
+    problems = trust_boundary_rows.check(root)
+
+    assert len(problems) == 1
+    assert "security setting `security_new`" in problems[0]
+
+
+def test_a_package_with_no_named_hooks_is_reported(tmp_path: Path) -> None:
+    # Renaming `emit` would otherwise leave every named hook unchecked.
+    root = _repository(tmp_path, dispatcher="def dispatch(manager, ctx):\n    return manager.fire('on_event', ctx)\n")
+
+    problems = trust_boundary_rows.check(root)
+
+    assert len(problems) == 1
+    assert problems[0].startswith("found no hooks fired by name")

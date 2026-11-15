@@ -143,10 +143,10 @@ class RouteResponse:
             two `Set-Cookie` lines): the ASGI and WSGI adapters send every
             pair, while the Django adapter raises `ValueError` on a repeated
             name, because Django's response object holds one value per header
-            name. The adapters do not check header names or values for line
-            breaks or other control characters, so check any value that
-            comes from request data before you put it in a header or in
-            `content_type`.
+            name. Citry does not check header names or values for line breaks
+            or other control characters, and not every server refuses them,
+            so check any value that comes from request data before you put
+            it in a header or in `content_type`.
 
     """
 

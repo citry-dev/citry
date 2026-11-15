@@ -102,6 +102,10 @@ for every directive and modifier.
     - `:srcdoc` loads the value as a page with its own scripts;
     - `:href`, `:src`, `:action`, and `:formaction` can run a
       `javascript:` URL or open a `data:` document;
+    - `:style` applies the value as CSS, so a `url()` in it loads a
+      resource;
+    - `<component :is>` creates an element of that name, such as
+      `script`, when the name is not a registered component;
     - a lowercase `:onclick` turns a string into an inline handler. Use
       `@click` to listen to an event.
 

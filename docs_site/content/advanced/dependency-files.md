@@ -52,7 +52,7 @@ Citry's browser code adds the script tags itself, and it refuses a `data:`
 script URL. A relative URL such as `/static/chart.js` works. A `data:`
 script URL stops the page's Vue app, or the fragment, from starting, and
 the browser console shows an error. On a page without Vue, Citry writes
-the URL into the `<script>` tag as it is.
+the URL into the `<script>` tag without checking its scheme.
 
 The browser runs whatever file the URL names, so write library URLs in
 your own code. Never build one from request data.
