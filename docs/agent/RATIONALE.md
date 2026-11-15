@@ -141,6 +141,13 @@ settings:
   set `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in
   [`.claude/settings.json`](../../.claude/settings.json). The variable also
   overrides any `autoCompactWindow` a saved agent sets.
+  In our use, 400,000 tokens proved too small for the session that
+  coordinates several agents: it compacted every few hours and lost working
+  details, such as how many agents the disk could hold. We raised the
+  window to 750,000 tokens in November 2026, for that session and for every
+  subagent. The 13 to 21% estimate above was made at 400,000 tokens and has
+  not been measured again at 750,000. One agent per pull request should
+  keep implementer agents well below the new window (not measured).
 - **Subagent caches expired while agents waited.** A subagent's prompt cache
   lasts five minutes. About 1,260 times an agent waited longer (on a build,
   CI, or another agent) and wrote its whole context to the cache again. A

@@ -75,6 +75,20 @@ carries the rules, or the work is done without them.
   what is next, open decisions) in a short progress file named in its brief.
   The measurements behind this rule are in
   [`docs/agent/RATIONALE.md`](docs/agent/RATIONALE.md#token-cost-of-long-running-agents).
+- **Check free disk space before starting agents in parallel.** Every
+  worktree, virtual environment (venv), build, and test run writes to the
+  same disk as Claude Code's temporary directory, and when it fills, every
+  agent stops at once. Before starting a batch of agents, run `df -h /` and
+  start no more than the disk budget in
+  [`docs/codebase.md`](docs/codebase.md#saving-disk-space) allows. Tell
+  every agent in its brief to stop and report when free space drops below
+  1 GB.
+- **Remove your own worktrees when their work is done.** Delete a
+  worktree's `target/` once its pull request is open, and remove the
+  worktree, its local branch, and any venv the agent left in the scratchpad
+  when the pull request merges or closes. The steps are in
+  [`docs/codebase.md`](docs/codebase.md#saving-disk-space). Remove only
+  worktrees you or your agents created.
 - **Find code with the `LSP` tool and read only the lines you need.** When
   the `LSP` tool is available, use
   it to find definitions and references rather than grepping and then reading

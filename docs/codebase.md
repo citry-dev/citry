@@ -263,9 +263,9 @@ up Claude Code the same way for everyone who works here. The measurements
 behind these settings are in
 [`docs/agent/RATIONALE.md`](agent/RATIONALE.md#token-cost-of-long-running-agents).
 
-- **`CLAUDE_CODE_AUTO_COMPACT_WINDOW` is 400000.** Claude Code compacts a
+- **`CLAUDE_CODE_AUTO_COMPACT_WINDOW` is 750000.** Claude Code compacts a
   conversation (replaces its history with a summary) once its context reaches
-  400,000 tokens, in the main session and in every subagent. On a model with
+  750,000 tokens, in the main session and in every subagent. On a model with
   a 1M-token context window it otherwise waits until about 967,000 tokens,
   and every turn re-sends, and pays for, the whole context.
 - **The settings enable two code intelligence plugins**, `rust-analyzer-lsp`
@@ -620,6 +620,24 @@ working in a worktree follow these rules to keep that from happening:
   `maturin develop`, the built extension sits in
   `packages/py/citry_core/citry_core/`, so tests still run once `target/` is
   gone. Check that a `_rust.*.so` file is there before you delete it.
+- Count the disk each parallel agent will need before you start a batch.
+  Measured on this repository: a fresh worktree takes about 0.8 GB, a
+  private venv about 0.3 GB, and a worktree after a Rust build with the two
+  variables above about 1.2 to 2.1 GB. So budget 2.5 GB for each coding
+  agent (a built worktree plus its venv, rounded up), and count each agent
+  already running at 2.5 GB even while its worktree is still small. Keep
+  5 GB free on top. Start at most `(free GB - 5) / 2.5` new coding agents,
+  rounded down, and none when that is zero or less. Also keep to six coding
+  agents at once, because each one runs tests and builds that compete for
+  the same CPU and memory. A read-only research agent needs no worktree and
+  almost no disk.
+- Remove a worktree when its pull request merges or closes: check that
+  `git -C <path> status` shows no uncommitted change, run
+  `git worktree remove <path>`, delete its local branch (`git branch -D`,
+  since a squash merge leaves the branch looking unmerged), and delete the
+  venvs and build output the agent left in its scratchpad folder. Do it as
+  part of finishing the task, not in a cleanup pass weeks later, and remove
+  only worktrees you or your agents created.
 - Give each pytest run its own temporary folder. Set
   `PYTEST_ADDOPTS=--basetemp=/tmp/<your-folder>/pytest` so `scripts/check.py`
   picks it up too. Use a folder no other run uses, because pytest empties it
