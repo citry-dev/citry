@@ -1,7 +1,11 @@
 # Citry product and beta charter
 
-**Status (2026-07-23): independently reviewed provisional research charter.
-Its decisions remain open until Stage 10.**
+**Status (2026-11-15): closed. The decisions for Citry's stable release are
+in issue
+[#624](https://github.com/citry-dev/citry/issues/624),
+which replaces the provisional decisions below. This charter is kept as
+research history, and some of its facts are out of date, for example the
+supported Python versions.**
 
 This charter defines what "Citry v1 beta" should mean before the repository is
 triaged against it. It is a product and support contract, not a readiness

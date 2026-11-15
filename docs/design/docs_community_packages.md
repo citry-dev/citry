@@ -64,8 +64,8 @@ and usage evidence.
 ## Catalog contract
 
 `docs_site/data/community_packages.yml` is the only public-listing authority.
-Its schema version remains `1` while Citry is below `1.0.0`, following the
-repository rule for pre-1.0 contracts.
+Its schema version is `1`. Only the docs site reads this file, so the
+version changes in the same pull request as the code that reads it.
 
 ```yaml
 schema_version: 1

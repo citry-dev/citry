@@ -632,14 +632,17 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
 - **Version numbers use full major.minor.patch format.** Write `1.3.0`, not
   `1.3`, in changelogs, commit messages, and anywhere a version is
   referenced.
-- **Pre-1.0 contracts stay at version 1.** While the owning published package
-  is below `1.0.0`, keep product protocol, schema, manifest, cache-payload,
-  render-cache, and runtime compatibility version constants at `1`. Apply
-  breaking corrections to version 1 in place and update every producer,
-  consumer, fixture, test, and current doc together. Increment these contract
-  versions only after the owning package reaches `1.0.0`, unless the user
-  explicitly directs otherwise. Generic tests for version-mismatch machinery
-  may still use several arbitrary values; this rule governs product contracts.
+- **Keep contract versions at 1 before a package's 1.0.0.** A contract version
+  is the number Citry writes into stored or exchanged data (protocol, schema,
+  manifest, cache payload, render cache, runtime compatibility) so the code
+  reading it can tell which format it got. Until `citry` 1.0.0 is released,
+  and in any package still below 1.0.0 (`citry-ui` after that release), keep
+  every contract version at `1`. When a format must change incompatibly, edit
+  version 1 itself and update every producer, consumer, fixture, test, and
+  current doc together, unless the user explicitly directs otherwise. From
+  `citry` 1.0.0, follow
+  [Contract versions](docs/codebase.md#contract-versions) for `citry`. Tests
+  of the version-check code itself may use made-up version numbers.
 - **Follow the shared-worktree testing practice.** The authoritative workflow
   is [`docs/codebase.md`](docs/codebase.md#testing-practices-in-a-shared-worktree):
   run focused checks while implementing, then the fast repository profile once
