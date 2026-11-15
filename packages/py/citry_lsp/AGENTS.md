@@ -80,7 +80,40 @@ release, usually the release pull request, and these change together:
 - the expected `citry>=` entry in `scripts/verify_citry_lsp_distribution.py`.
 
 `test_runtime_compatibility_matches_the_declared_dependency_floor` fails when
-the constant and the installed requirement disagree. When citry-lsp starts
-using a Citry field or argument that only a newer Citry has, raise the floor
-before citry-lsp is released: with the older floor, an install that keeps
-the older Citry fails at run time.
+the constant and the installed requirement disagree.
+
+The floor moves to 1.0.0 in the citry 1.0.0 release pull request, because
+`citry._lsp_support` first ships in 1.0.0. After that it stays at 1.0.0 for
+all of 1.x, since every citry-lsp 1.x must work with every citry 1.x. The
+same pull request releases citry-lsp 1.0.0 (citry-lsp keeps the same major
+version as citry, which `scripts/lsp_citry_pairs.py` relies on) and records
+`packages/py/citry/tests/lsp_support_names.json` again from scratch, so it
+lists what citry 1.0.0 exports.
+
+## Importing from Citry
+
+Import Citry's internals, and its experimental template analysis names,
+from `citry._lsp_support` only. Import from `citry` itself only the covered
+public names listed in `tests/test_citry_imports.py`, which fails on any
+other Citry import in the package or its tests. citry's own
+`test_lsp_support_module.py` keeps each name in `citry._lsp_support`
+working the same way for all of 1.x.
+
+When citry-lsp needs a Citry internal that `citry._lsp_support` does not
+export yet, add it there in the same change (see `docs/codebase.md`,
+"Breaking changes"). That name is missing from older citry 1.x releases,
+so import it in a `try` block, set it to `None` on `ImportError`, and turn
+off the feature that needs it, the way the editor stays quiet about what
+it cannot check. Do not raise the `citry>=` floor for it. A test of that
+feature skips itself when the name is `None`, because the release check
+runs this package's tests against citry 1.0.0.
+
+The same holds for a private class attribute or settings key that
+citry-lsp reads by name: read it through a constant in
+`citry._lsp_support`, such as `DEFINITION_ID_ATTRIBUTE`, not a string
+literal.
+
+Release qualification runs `scripts/lsp_citry_pairs.py`: the oldest
+published citry-lsp of the major version runs its own tests against the
+candidate citry, and this package's tests run against the oldest citry of
+the major version.

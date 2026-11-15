@@ -7,7 +7,13 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    is_vue_directive_attribute,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+)
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 from citry_ui.components.cicon import CIconName  # noqa: TC001 - runtime type hints
 from citry_ui.components.cicon.cicon import _resolve_registered_icon
@@ -27,7 +33,6 @@ _AUTOMATIC_ICON_NAMES = {
     "warn": "warn",
     "error": "danger",
 }
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_OWNED_ATTRS = frozenset(
     {
         "aria-atomic",
@@ -135,10 +140,8 @@ def _validate_attrs(
 ) -> None:
     component_name = f"CAlert {input_name}"
     reject_owned_attrs(attrs, owned, component_name)
-    for key in attrs:
-        if key.casefold().startswith(_RUNTIME_PREFIXES):
-            msg = f"{component_name} cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
+    for key, attr_value in attrs.items():
+        reject_citry_ui_reserved_attr(key, attr_value, where=component_name)
         # A Vue directive could rebind an owned attribute, add listeners, or
         # replace the Alert's children, so none may arrive through Python data.
         if is_vue_directive_attribute(key):

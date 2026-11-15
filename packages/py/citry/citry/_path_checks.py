@@ -179,6 +179,9 @@ def engine_path_verdicts(engine: Citry) -> dict[str, object]:
     reports only the paths checked when the app loaded. ``checked`` is false when
     no integration registered a checker, and the editor then reports nothing.
     """
+    # citry-lsp reads this record from every Citry 1.x (`_path_verdicts` in
+    # citry_lsp/project.py). During 1.x only add keys, never remove or
+    # retype one.
     if not has_path_checkers(engine):
         return {"checked": False, "verdicts": {}}
     paths: set[str] = set()

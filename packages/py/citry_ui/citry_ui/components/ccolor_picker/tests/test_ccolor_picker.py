@@ -72,7 +72,7 @@ def test_invalid_values_fail(attrs: str, swatches: object, match: str) -> None:
     ("attribute", "match"),
     [
         ("role", "cannot override owned attribute"),
-        ("data-citry-morph", "Citry runtime attribute"),
+        ("data-citry-morph", "are reserved for the browser"),
         (":role", "CColorPicker attrs cannot contain the Vue directive"),
         ("v-bind:data-open", "Vue directive"),
         ("v-if", "Vue directive"),

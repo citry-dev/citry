@@ -1,0 +1,2204 @@
+{
+ "AlpineAttributeFinding": {
+  "kind": "class",
+  "init": [
+   {"name": "name", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "message", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "code", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "severity", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "start_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "end_index", "kind": "POSITIONAL_OR_KEYWORD"}
+  ],
+  "members": {
+   "code": {"kind": "attribute"},
+   "end_index": {"kind": "attribute"},
+   "message": {"kind": "attribute"},
+   "name": {"kind": "attribute"},
+   "severity": {"kind": "attribute"},
+   "start_index": {"kind": "attribute"}
+  }
+ },
+ "AlpineAttributeLintConsumer": {
+  "kind": "class",
+  "init": [
+   {"name": "rule_alpine_attribute", "kind": "POSITIONAL_OR_KEYWORD", "default": "'warning'"},
+   {"name": "rule_alpine_cloak", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"}
+  ],
+  "members": {
+   "rule_alpine_attribute": {"kind": "attribute"},
+   "rule_alpine_cloak": {"kind": "attribute"}
+  }
+ },
+ "AttributeValueFinding": {
+  "kind": "class",
+  "init": [
+   {"name": "element", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "attribute", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "value", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "message", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "code", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "severity", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "start_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "end_index", "kind": "POSITIONAL_OR_KEYWORD"}
+  ],
+  "members": {
+   "attribute": {"kind": "attribute"},
+   "code": {"kind": "attribute"},
+   "element": {"kind": "attribute"},
+   "end_index": {"kind": "attribute"},
+   "message": {"kind": "attribute"},
+   "severity": {"kind": "attribute"},
+   "start_index": {"kind": "attribute"},
+   "value": {"kind": "attribute"}
+  }
+ },
+ "AttributeValueLintConsumer": {
+  "kind": "class",
+  "init": [
+   {"name": "rule_invalid_attribute_value", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"}
+  ],
+  "members": {
+   "rule_invalid_attribute_value": {"kind": "attribute"}
+  }
+ },
+ "BROWSER_INCOMPATIBLE_COMPONENT_PROP": {"kind": "value", "value": "citry.browser.incompatible-component-prop"},
+ "BROWSER_INCOMPATIBLE_SERVER_EVENT_FIELD": {"kind": "value", "value": "citry.browser.incompatible-server-event-field"},
+ "BROWSER_INVALID_STATE_BINDING_TARGET": {"kind": "value", "value": "citry.browser.invalid-state-binding-target"},
+ "BROWSER_MISSING_COMPONENT_PROP": {"kind": "value", "value": "citry.browser.missing-component-prop"},
+ "BROWSER_MISSING_FORM_FIELD": {"kind": "value", "value": "citry.browser.missing-form-field"},
+ "BROWSER_MISSING_SERVER_EVENT_FIELD": {"kind": "value", "value": "citry.browser.missing-server-event-field"},
+ "BROWSER_PROP_ASSIGNMENT": {"kind": "value", "value": "citry.browser.prop-assignment"},
+ "BROWSER_UNDECLARED_COMPONENT_EVENT": {"kind": "value", "value": "citry.browser.undeclared-component-event"},
+ "BROWSER_UNDECLARED_EMIT": {"kind": "value", "value": "citry.browser.undeclared-emit"},
+ "BROWSER_UNKNOWN_FORM_FIELD": {"kind": "value", "value": "citry.browser.unknown-form-field"},
+ "BROWSER_UNKNOWN_SERVER_EVENT": {"kind": "value", "value": "citry.browser.unknown-server-event"},
+ "BROWSER_UNKNOWN_SERVER_EVENT_FIELD": {"kind": "value", "value": "citry.browser.unknown-server-event-field"},
+ "BROWSER_UNKNOWN_STATE_FIELD": {"kind": "value", "value": "citry.browser.unknown-state-field"},
+ "BrowserBinding": {
+  "kind": "class",
+  "init": [
+   {"name": "name", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "start_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "end_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "kind", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "position", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "source_start_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "source_end_index", "kind": "POSITIONAL_OR_KEYWORD"}
+  ],
+  "members": {
+   "end_index": {"kind": "attribute"},
+   "kind": {"kind": "attribute"},
+   "name": {"kind": "attribute"},
+   "position": {"kind": "attribute"},
+   "source": {"kind": "attribute"},
+   "source_end_index": {"kind": "attribute"},
+   "source_start_index": {"kind": "attribute"},
+   "start_index": {"kind": "attribute"}
+  }
+ },
+ "BrowserComponentBinding": {
+  "kind": "class",
+  "init": [
+   {"name": "name", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "local_name", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "start_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "end_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "references", "kind": "POSITIONAL_OR_KEYWORD"}
+  ],
+  "members": {
+   "end_index": {"kind": "attribute"},
+   "local_name": {"kind": "attribute"},
+   "name": {"kind": "attribute"},
+   "references": {"kind": "attribute"},
+   "start_index": {"kind": "attribute"}
+  }
+ },
+ "BrowserComponentPropContribution": {
+  "kind": "class",
+  "init": [
+   {"name": "name", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "name_start_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "name_end_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "value_start_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "value_end_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "dynamic", "kind": "POSITIONAL_OR_KEYWORD", "default": "False"}
+  ],
+  "members": {
+   "dynamic": {"kind": "attribute"},
+   "name": {"kind": "attribute"},
+   "name_end_index": {"kind": "attribute"},
+   "name_start_index": {"kind": "attribute"},
+   "source": {"kind": "attribute"},
+   "value_end_index": {"kind": "attribute"},
+   "value_start_index": {"kind": "attribute"}
+  }
+ },
+ "BrowserComponentPropSite": {
+  "kind": "class",
+  "init": [
+   {"name": "tag", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "tag_start_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "tag_end_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "contributions", "kind": "POSITIONAL_OR_KEYWORD"}
+  ],
+  "members": {
+   "contributions": {"kind": "attribute"},
+   "tag": {"kind": "attribute"},
+   "tag_end_index": {"kind": "attribute"},
+   "tag_start_index": {"kind": "attribute"}
+  }
+ },
+ "BrowserComponentSourceAnalysis": {
+  "kind": "class",
+  "init": [
+   {"name": "valid", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "references", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "bindings", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "component_calls", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "public_names", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "sections", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "member_references", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "emits_sections", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"},
+   {"name": "emit_names", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"},
+   {"name": "directives_sections", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"},
+   {"name": "directive_names", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"},
+   {"name": "inherit_attrs", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"}
+  ],
+  "members": {
+   "bindings": {"kind": "attribute"},
+   "component_calls": {"kind": "attribute"},
+   "declared_directives": {"kind": "attribute"},
+   "declared_events": {"kind": "attribute"},
+   "declared_inherit_attrs": {"kind": "attribute"},
+   "directive_names": {"kind": "attribute"},
+   "directives_sections": {"kind": "attribute"},
+   "emit_names": {"kind": "attribute"},
+   "emits_sections": {"kind": "attribute"},
+   "inherit_attrs": {"kind": "attribute"},
+   "member_references": {"kind": "attribute"},
+   "public_names": {"kind": "attribute"},
+   "references": {"kind": "attribute"},
+   "sections": {"kind": "attribute"},
+   "valid": {"kind": "attribute"}
+  }
+ },
+ "BrowserExpression": {
+  "kind": "class",
+  "init": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "start_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "end_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "mode", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "attribute", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "bindings", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"},
+   {"name": "binding_details", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"},
+   {"name": "element", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "host", "kind": "POSITIONAL_OR_KEYWORD", "default": "'vue'"},
+   {"name": "evaluator", "kind": "POSITIONAL_OR_KEYWORD", "default": "'normal'"},
+   {"name": "transform", "kind": "POSITIONAL_OR_KEYWORD", "default": "'identity'"},
+   {"name": "attribute_start_index", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "attribute_end_index", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "python_bindings", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"}
+  ],
+  "members": {
+   "attribute": {"kind": "attribute"},
+   "attribute_end_index": {"kind": "attribute"},
+   "attribute_start_index": {"kind": "attribute"},
+   "binding_details": {"kind": "attribute"},
+   "bindings": {"kind": "attribute"},
+   "canonical_attribute": {"kind": "attribute"},
+   "element": {"kind": "attribute"},
+   "end_index": {"kind": "attribute"},
+   "evaluator": {"kind": "attribute"},
+   "host": {"kind": "attribute"},
+   "mode": {"kind": "attribute"},
+   "python_bindings": {"kind": "attribute"},
+   "source": {"kind": "attribute"},
+   "start_index": {"kind": "attribute"},
+   "transform": {"kind": "attribute"}
+  }
+ },
+ "BrowserObjectProperty": {
+  "kind": "class",
+  "init": [
+   {"name": "name", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "start_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "end_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "value_source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "value_start_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "value_end_index", "kind": "POSITIONAL_OR_KEYWORD"}
+  ],
+  "members": {
+   "end_index": {"kind": "attribute"},
+   "name": {"kind": "attribute"},
+   "start_index": {"kind": "attribute"},
+   "value_end_index": {"kind": "attribute"},
+   "value_source": {"kind": "attribute"},
+   "value_start_index": {"kind": "attribute"}
+  }
+ },
+ "BrowserProp": {
+  "kind": "class",
+  "init": [
+   {"name": "name", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "javascript", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "required", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "has_default", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "start_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "end_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "accepted_javascript", "kind": "POSITIONAL_OR_KEYWORD", "default": "'unknown'"}
+  ],
+  "members": {
+   "accepted_javascript": {"kind": "attribute"},
+   "end_index": {"kind": "attribute"},
+   "has_default": {"kind": "attribute"},
+   "javascript": {"kind": "attribute"},
+   "name": {"kind": "attribute"},
+   "required": {"kind": "attribute"},
+   "start_index": {"kind": "attribute"}
+  }
+ },
+ "CHECK_TEMPLATE_NOT_CHECKED": {"kind": "value", "value": "citry.check.template-not-checked"},
+ "COMPONENT_JS_UNKNOWN_MEMBER": {"kind": "value", "value": "citry.component-js.unknown-member"},
+ "COMPONENT_JS_UNKNOWN_VARIABLE": {"kind": "value", "value": "citry.component-js.unknown-variable"},
+ "COMPONENT_ROOT_ATTRIBUTE": {"kind": "value", "value": "_citry_component_root"},
+ "CSRF_FIELD_NAMES_SETTING": {"kind": "value", "value": "_csrf_field_names"},
+ "Call": {
+  "kind": "class",
+  "init": [
+   {"name": "function", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "args", "kind": "VAR_POSITIONAL"},
+   {"name": "kwargs", "kind": "VAR_KEYWORD"}
+  ],
+  "members": {
+   "args": {"kind": "attribute"},
+   "function": {"kind": "attribute"},
+   "kwargs": {"kind": "attribute"}
+  }
+ },
+ "CheckFinding": {
+  "kind": "class",
+  "init": [
+   {"name": "origin", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "message", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "code", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "severity", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "start_index", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "end_index", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "line", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "column", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "end_line", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "end_column", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "source_kind", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"}
+  ],
+  "members": {
+   "code": {"kind": "attribute"},
+   "column": {"kind": "attribute"},
+   "end_column": {"kind": "attribute"},
+   "end_index": {"kind": "attribute"},
+   "end_line": {"kind": "attribute"},
+   "line": {"kind": "attribute"},
+   "message": {"kind": "attribute"},
+   "origin": {"kind": "attribute"},
+   "severity": {"kind": "attribute"},
+   "source_kind": {"kind": "attribute"},
+   "start_index": {"kind": "attribute"}
+  }
+ },
+ "CheckReport": {
+  "kind": "class",
+  "init": [
+   {"name": "findings", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"},
+   {"name": "app_failure", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "notes", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"},
+   {"name": "skipped_library_findings", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"},
+   {"name": "library_owners", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"}
+  ],
+  "members": {
+   "all_notes": {"kind": "attribute"},
+   "app_failure": {"kind": "attribute"},
+   "exit_code": {"kind": "attribute"},
+   "findings": {"kind": "attribute"},
+   "library_owners": {"kind": "attribute"},
+   "notes": {"kind": "attribute"},
+   "skipped_library_findings": {"kind": "attribute"}
+  }
+ },
+ "ComponentJsLintConsumer": {
+  "kind": "class",
+  "init": [
+   {"name": "known_names", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "rule_unknown_component_js_variable", "kind": "POSITIONAL_OR_KEYWORD"}
+  ],
+  "members": {
+   "known_names": {"kind": "attribute"},
+   "rule_unknown_component_js_variable": {"kind": "attribute"}
+  }
+ },
+ "ComponentSourceLint": {
+  "kind": "class",
+  "init": [
+   {"name": "rule_alpine_attribute", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "rule_alpine_cloak", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "rule_invalid_attribute_value", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "rule_misspelled_directive", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "rule_misspelled_attribute", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "rule_misspelled_element", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "rule_unknown_aria_attribute", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "rule_invalid_nesting", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "rule_duplicate_id", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "rule_missing_image_alt", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "rule_invalid_model_target", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "rule_misspelled_event", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "rule_invalid_vue_expression", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "rule_vue_compile_error", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"}
+  ],
+  "members": {
+   "alpine_consumer": {
+    "kind": "method",
+    "signature": [
+     {"name": "self", "kind": "POSITIONAL_OR_KEYWORD"}
+    ]
+   },
+   "attribute_value_consumer": {
+    "kind": "method",
+    "signature": [
+     {"name": "self", "kind": "POSITIONAL_OR_KEYWORD"}
+    ]
+   },
+   "directive_consumer": {
+    "kind": "method",
+    "signature": [
+     {"name": "self", "kind": "POSITIONAL_OR_KEYWORD"}
+    ]
+   },
+   "markup_consumer": {
+    "kind": "method",
+    "signature": [
+     {"name": "self", "kind": "POSITIONAL_OR_KEYWORD"}
+    ]
+   },
+   "rule_alpine_attribute": {"kind": "attribute"},
+   "rule_alpine_cloak": {"kind": "attribute"},
+   "rule_duplicate_id": {"kind": "attribute"},
+   "rule_invalid_attribute_value": {"kind": "attribute"},
+   "rule_invalid_model_target": {"kind": "attribute"},
+   "rule_invalid_nesting": {"kind": "attribute"},
+   "rule_invalid_vue_expression": {"kind": "attribute"},
+   "rule_missing_image_alt": {"kind": "attribute"},
+   "rule_misspelled_attribute": {"kind": "attribute"},
+   "rule_misspelled_directive": {"kind": "attribute"},
+   "rule_misspelled_element": {"kind": "attribute"},
+   "rule_misspelled_event": {"kind": "attribute"},
+   "rule_unknown_aria_attribute": {"kind": "attribute"},
+   "rule_vue_compile_error": {"kind": "attribute"}
+  }
+ },
+ "DEFINITION_ID_ATTRIBUTE": {"kind": "value", "value": "_definition_id"},
+ "EDITOR_NOTE": {"kind": "value", "value": "This Python has no _symtable module, so a template that uses a name its template_data() method assigns gets no types. Run citry check --types on CPython for full results."},
+ "ENUMERATED_VALUES": {
+  "kind": "collection",
+  "type": "dict",
+  "entries": [
+   "accept-charset",
+   "autocapitalize",
+   "autocomplete",
+   "autocorrect",
+   "charset",
+   "closedby",
+   "colorspace",
+   "contenteditable",
+   "crossorigin",
+   "decoding",
+   "dir",
+   "draggable",
+   "enctype",
+   "enterkeyhint",
+   "fetchpriority",
+   "formenctype",
+   "formmethod",
+   "hidden",
+   "http-equiv",
+   "inputmode",
+   "kind",
+   "loading",
+   "method",
+   "popover",
+   "popovertargetaction",
+   "preload",
+   "referrerpolicy",
+   "scope",
+   "shadowrootmode",
+   "shadowrootslotassignment",
+   "shape",
+   "spellcheck",
+   "translate",
+   "type",
+   "wrap",
+   "writingsuggestions"
+  ]
+ },
+ "FORMAT_INELIGIBLE": {"kind": "value", "value": "citry.format.ineligible"},
+ "FORMAT_PROVIDER_INVALID": {"kind": "value", "value": "citry.format.provider-invalid"},
+ "FORMAT_STALE_DOCUMENT": {"kind": "value", "value": "citry.format.stale-document"},
+ "HTML_ELEMENTS": {
+  "kind": "collection",
+  "type": "frozenset",
+  "entries": [
+   "a",
+   "abbr",
+   "address",
+   "area",
+   "article",
+   "aside",
+   "audio",
+   "b",
+   "base",
+   "bdi",
+   "bdo",
+   "blockquote",
+   "body",
+   "br",
+   "button",
+   "canvas",
+   "caption",
+   "cite",
+   "code",
+   "col",
+   "colgroup",
+   "data",
+   "datalist",
+   "dd",
+   "del",
+   "details",
+   "dfn",
+   "dialog",
+   "div",
+   "dl",
+   "dt",
+   "em",
+   "embed",
+   "fieldset",
+   "figcaption",
+   "figure",
+   "footer",
+   "form",
+   "h1",
+   "h2",
+   "h3",
+   "h4",
+   "h5",
+   "h6",
+   "head",
+   "header",
+   "hgroup",
+   "hr",
+   "html",
+   "i",
+   "iframe",
+   "img",
+   "input",
+   "ins",
+   "kbd",
+   "label",
+   "legend",
+   "li",
+   "link",
+   "main",
+   "map",
+   "mark",
+   "menu",
+   "meta",
+   "meter",
+   "nav",
+   "noscript",
+   "object",
+   "ol",
+   "optgroup",
+   "option",
+   "output",
+   "p",
+   "picture",
+   "pre",
+   "progress",
+   "q",
+   "rp",
+   "rt",
+   "ruby",
+   "s",
+   "samp",
+   "script",
+   "search",
+   "section",
+   "select",
+   "selectedcontent",
+   "slot",
+   "small",
+   "source",
+   "span",
+   "strong",
+   "style",
+   "sub",
+   "summary",
+   "sup",
+   "table",
+   "tbody",
+   "td",
+   "template",
+   "textarea",
+   "tfoot",
+   "th",
+   "thead",
+   "time",
+   "title",
+   "tr",
+   "track",
+   "u",
+   "ul",
+   "var",
+   "video",
+   "wbr"
+  ]
+ },
+ "I18N_ARGUMENT_INVALID": {"kind": "value", "value": "citry.i18n.argument-invalid"},
+ "I18N_CATALOG_INVALID": {"kind": "value", "value": "citry.i18n.catalog-invalid"},
+ "I18N_UNKNOWN_MESSAGE": {"kind": "value", "value": "citry.i18n.unknown-message"},
+ "JS_DATA_PUBLIC_NAME_COLLISION": {"kind": "value", "value": "citry.js-data.public-name-collision"},
+ "JS_DATA_UNSUPPORTED_TYPE": {"kind": "value", "value": "citry.js-data.unsupported-type"},
+ "JsonWireField": {
+  "kind": "class",
+  "init": [
+   {"name": "name", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "value", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "required", "kind": "POSITIONAL_OR_KEYWORD", "default": "True"}
+  ],
+  "members": {
+   "name": {"kind": "attribute"},
+   "required": {"kind": "attribute"},
+   "value": {"kind": "attribute"}
+  }
+ },
+ "JsonWireType": {
+  "kind": "class",
+  "init": [
+   {"name": "kind", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "items", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"},
+   {"name": "fields", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"},
+   {"name": "additional", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "literal", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "unsupported", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"}
+  ],
+  "members": {
+   "additional": {"kind": "attribute"},
+   "display": {"kind": "attribute"},
+   "fields": {"kind": "attribute"},
+   "items": {"kind": "attribute"},
+   "javascript": {"kind": "attribute"},
+   "kind": {"kind": "attribute"},
+   "literal": {"kind": "attribute"},
+   "render": {
+    "kind": "method",
+    "signature": [
+     {"name": "self", "kind": "POSITIONAL_OR_KEYWORD"},
+     {"name": "unknown", "kind": "KEYWORD_ONLY", "default": "'unknown'"}
+    ]
+   },
+   "unsupported": {"kind": "attribute"}
+  }
+ },
+ "KwargsWireClasses": {
+  "kind": "class",
+  "init": [
+   {"name": "members", "kind": "POSITIONAL_OR_KEYWORD", "default": "<factory>"},
+   {"name": "classes", "kind": "POSITIONAL_OR_KEYWORD", "default": "<factory>"},
+   {"name": "class_modules", "kind": "POSITIONAL_OR_KEYWORD", "default": "<factory>"}
+  ],
+  "members": {
+   "class_modules": {"kind": "attribute"},
+   "classes": {"kind": "attribute"},
+   "from_dict": {
+    "kind": "method",
+    "signature": [
+     {"name": "value", "kind": "POSITIONAL_OR_KEYWORD"}
+    ]
+   },
+   "members": {"kind": "attribute"},
+   "to_dict": {
+    "kind": "method",
+    "signature": [
+     {"name": "self", "kind": "POSITIONAL_OR_KEYWORD"}
+    ]
+   }
+  }
+ },
+ "LIBRARY_DEFINITION_ATTRIBUTE": {"kind": "value", "value": "_citry_is_library_component_definition"},
+ "MARKUP_LINT_RULES": {
+  "kind": "collection",
+  "type": "tuple",
+  "entries": [
+   "rule_duplicate_id",
+   "rule_invalid_model_target",
+   "rule_invalid_nesting",
+   "rule_invalid_vue_expression",
+   "rule_missing_image_alt",
+   "rule_misspelled_attribute",
+   "rule_misspelled_element",
+   "rule_misspelled_event",
+   "rule_unknown_aria_attribute",
+   "rule_vue_compile_error"
+  ]
+ },
+ "MarkupLintConsumer": {
+  "kind": "class",
+  "init": [
+   {"name": "rule_misspelled_attribute", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_misspelled_element", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_unknown_aria_attribute", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_invalid_nesting", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_duplicate_id", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_missing_image_alt", "kind": "POSITIONAL_OR_KEYWORD", "default": "'warning'"},
+   {"name": "rule_invalid_model_target", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_misspelled_event", "kind": "POSITIONAL_OR_KEYWORD", "default": "'warning'"},
+   {"name": "rule_invalid_vue_expression", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_vue_compile_error", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "root_may_receive_attributes", "kind": "POSITIONAL_OR_KEYWORD", "default": "True"},
+   {"name": "csp", "kind": "POSITIONAL_OR_KEYWORD", "default": "'off'"}
+  ],
+  "members": {
+   "csp": {"kind": "attribute"},
+   "root_may_receive_attributes": {"kind": "attribute"},
+   "rule_duplicate_id": {"kind": "attribute"},
+   "rule_invalid_model_target": {"kind": "attribute"},
+   "rule_invalid_nesting": {"kind": "attribute"},
+   "rule_invalid_vue_expression": {"kind": "attribute"},
+   "rule_missing_image_alt": {"kind": "attribute"},
+   "rule_misspelled_attribute": {"kind": "attribute"},
+   "rule_misspelled_element": {"kind": "attribute"},
+   "rule_misspelled_event": {"kind": "attribute"},
+   "rule_unknown_aria_attribute": {"kind": "attribute"},
+   "rule_vue_compile_error": {"kind": "attribute"}
+  }
+ },
+ "MarkupLintFinding": {
+  "kind": "class",
+  "init": [
+   {"name": "name", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "message", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "code", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "severity", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "start_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "end_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "context_start_index", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "context_end_index", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"}
+  ],
+  "members": {
+   "code": {"kind": "attribute"},
+   "context_end_index": {"kind": "attribute"},
+   "context_start_index": {"kind": "attribute"},
+   "end_index": {"kind": "attribute"},
+   "message": {"kind": "attribute"},
+   "name": {"kind": "attribute"},
+   "severity": {"kind": "attribute"},
+   "start_index": {"kind": "attribute"}
+  }
+ },
+ "MisspelledDirectiveFinding": {
+  "kind": "class",
+  "init": [
+   {"name": "name", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "suggestion", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "message", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "code", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "severity", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "start_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "end_index", "kind": "POSITIONAL_OR_KEYWORD"}
+  ],
+  "members": {
+   "code": {"kind": "attribute"},
+   "end_index": {"kind": "attribute"},
+   "message": {"kind": "attribute"},
+   "name": {"kind": "attribute"},
+   "severity": {"kind": "attribute"},
+   "start_index": {"kind": "attribute"},
+   "suggestion": {"kind": "attribute"}
+  }
+ },
+ "MisspelledDirectiveLintConsumer": {
+  "kind": "class",
+  "init": [
+   {"name": "rule_misspelled_directive", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "declared_directives", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"}
+  ],
+  "members": {
+   "declared_directives": {"kind": "attribute"},
+   "rule_misspelled_directive": {"kind": "attribute"}
+  }
+ },
+ "OWNER_ATTRIBUTE": {"kind": "value", "value": "_citry_owner"},
+ "PARSE_CONFIGURATION": {"kind": "value", "value": "citry.parse.configuration"},
+ "PythonComponentAssetKind": {
+  "kind": "enum",
+  "members": {
+   "TEMPLATE": {"kind": "value", "value": "template"},
+   "JS": {"kind": "value", "value": "js"},
+   "CSS": {"kind": "value", "value": "css"}
+  }
+ },
+ "PythonComponentAssetNotice": {
+  "kind": "class",
+  "init": [
+   {"name": "component_name", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "kind", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "code", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "message", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "request_id", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"}
+  ],
+  "members": {
+   "code": {"kind": "attribute"},
+   "component_name": {"kind": "attribute"},
+   "kind": {"kind": "attribute"},
+   "message": {"kind": "attribute"},
+   "request_id": {"kind": "attribute"}
+  }
+ },
+ "PythonComponentAssetPlan": {
+  "kind": "class",
+  "init": [
+   {"name": "id", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "requests", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "notices", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "_regions", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "_files", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "_prepared", "kind": "POSITIONAL_OR_KEYWORD"}
+  ],
+  "members": {
+   "id": {"kind": "attribute"},
+   "notices": {"kind": "attribute"},
+   "requests": {"kind": "attribute"},
+   "source": {"kind": "attribute"}
+  }
+ },
+ "PythonComponentAssetRequest": {
+  "kind": "class",
+  "init": [
+   {"name": "plan_id", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "id", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "component_name", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "asset_kind", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "language", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "region_kind", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "virtual_source", "kind": "POSITIONAL_OR_KEYWORD"}
+  ],
+  "members": {
+   "asset_kind": {"kind": "attribute"},
+   "component_name": {"kind": "attribute"},
+   "id": {"kind": "attribute"},
+   "language": {"kind": "attribute"},
+   "plan_id": {"kind": "attribute"},
+   "region_kind": {"kind": "attribute"},
+   "source": {"kind": "attribute"},
+   "virtual_source": {"kind": "attribute"}
+  }
+ },
+ "PythonTemplateFormatError": {
+  "kind": "class",
+  "init": [
+   {"name": "message", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "code", "kind": "KEYWORD_ONLY"},
+   {"name": "notices", "kind": "KEYWORD_ONLY", "default": "()"},
+   {"name": "host_range", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "diagnostic", "kind": "KEYWORD_ONLY", "default": "None"}
+  ],
+  "members": {
+   "code": {"kind": "attribute"},
+   "diagnostic": {"kind": "attribute"},
+   "notices": {"kind": "attribute"},
+   "range": {"kind": "attribute"}
+  }
+ },
+ "PythonTemplateSourceMap": {
+  "kind": "class",
+  "init": [],
+  "members": {
+   "from_ast": {
+    "kind": "method",
+    "signature": [
+     {"name": "host_source", "kind": "POSITIONAL_OR_KEYWORD"},
+     {"name": "node", "kind": "POSITIONAL_OR_KEYWORD"}
+    ]
+   },
+   "from_coordinates": {
+    "kind": "method",
+    "signature": [
+     {"name": "host_source", "kind": "POSITIONAL_OR_KEYWORD"},
+     {"name": "lineno", "kind": "KEYWORD_ONLY"},
+     {"name": "col_offset", "kind": "KEYWORD_ONLY"},
+     {"name": "end_lineno", "kind": "KEYWORD_ONLY", "default": "None"},
+     {"name": "end_col_offset", "kind": "KEYWORD_ONLY", "default": "None"},
+     {"name": "accept_incomplete", "kind": "KEYWORD_ONLY", "default": "False"}
+    ]
+   },
+   "map_range": {
+    "kind": "method",
+    "signature": [
+     {"name": "self", "kind": "POSITIONAL_OR_KEYWORD"},
+     {"name": "start_index", "kind": "POSITIONAL_OR_KEYWORD"},
+     {"name": "end_index", "kind": "POSITIONAL_OR_KEYWORD"}
+    ]
+   },
+   "parser_index_at": {
+    "kind": "method",
+    "signature": [
+     {"name": "self", "kind": "POSITIONAL_OR_KEYWORD"},
+     {"name": "position", "kind": "POSITIONAL_OR_KEYWORD"}
+    ]
+   },
+   "range_is_unambiguous": {
+    "kind": "method",
+    "signature": [
+     {"name": "self", "kind": "POSITIONAL_OR_KEYWORD"},
+     {"name": "start_index", "kind": "POSITIONAL_OR_KEYWORD"},
+     {"name": "end_index", "kind": "POSITIONAL_OR_KEYWORD"}
+    ]
+   },
+   "template_source": {"kind": "attribute"}
+  }
+ },
+ "SECRET_NOT_SENT_REASON": {"kind": "value", "value": "values are never sent to the browser; read the value on the server instead"},
+ "SERVER_EVENT_CALL_NAMES": {
+  "kind": "collection",
+  "type": "frozenset",
+  "entries": [
+   "$error",
+   "$loading",
+   "$sendEvent",
+   "error",
+   "loading",
+   "sendEvent"
+  ]
+ },
+ "ScopedFill": {
+  "kind": "class",
+  "init": [
+   {"name": "tag", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "slot", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "pattern", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "pattern_start_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "pattern_end_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "keys", "kind": "POSITIONAL_OR_KEYWORD"}
+  ],
+  "members": {
+   "keys": {"kind": "attribute"},
+   "pattern": {"kind": "attribute"},
+   "pattern_end_index": {"kind": "attribute"},
+   "pattern_start_index": {"kind": "attribute"},
+   "slot": {"kind": "attribute"},
+   "tag": {"kind": "attribute"}
+  }
+ },
+ "ServerEventPayload": {
+  "kind": "class",
+  "init": [
+   {"name": "takes_data", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "fields", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "rejects_unknown", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "query_string", "kind": "POSITIONAL_OR_KEYWORD", "default": "False"}
+  ],
+  "members": {
+   "fields": {"kind": "attribute"},
+   "query_string": {"kind": "attribute"},
+   "rejects_unknown": {"kind": "attribute"},
+   "takes_data": {"kind": "attribute"}
+  }
+ },
+ "ShadowPythonDocument": {
+  "kind": "class",
+  "init": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "copies", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "source_copies", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"},
+   {"name": "query_function", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"}
+  ],
+  "members": {
+   "copies": {"kind": "attribute"},
+   "query_function": {"kind": "attribute"},
+   "source": {"kind": "attribute"},
+   "source_copies": {"kind": "attribute"}
+  }
+ },
+ "SlotDataWireClass": {
+  "kind": "class",
+  "init": [
+   {"name": "class_name", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "members", "kind": "POSITIONAL_OR_KEYWORD", "default": "<factory>"},
+   {"name": "class_modules", "kind": "POSITIONAL_OR_KEYWORD", "default": "<factory>"}
+  ],
+  "members": {
+   "class_modules": {"kind": "attribute"},
+   "class_name": {"kind": "attribute"},
+   "from_dict": {
+    "kind": "method",
+    "signature": [
+     {"name": "value", "kind": "POSITIONAL_OR_KEYWORD"}
+    ]
+   },
+   "members": {"kind": "attribute"},
+   "to_dict": {
+    "kind": "method",
+    "signature": [
+     {"name": "self", "kind": "POSITIONAL_OR_KEYWORD"}
+    ]
+   }
+  }
+ },
+ "SlotOutlet": {
+  "kind": "class",
+  "init": [
+   {"name": "slot", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "props", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "start_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "end_index", "kind": "POSITIONAL_OR_KEYWORD"}
+  ],
+  "members": {
+   "end_index": {"kind": "attribute"},
+   "props": {"kind": "attribute"},
+   "slot": {"kind": "attribute"},
+   "start_index": {"kind": "attribute"}
+  }
+ },
+ "TEMPLATE_INVALID_ATTRIBUTE_VALUE": {"kind": "value", "value": "citry.template.invalid-attribute-value"},
+ "TEMPLATE_MARKER_NAME_INVALID": {"kind": "value", "value": "citry.template.marker-name-invalid"},
+ "TEMPLATE_UNKNOWN_COMPONENT": {"kind": "value", "value": "citry.template.unknown-component"},
+ "TemplateAnalysis": {
+  "kind": "class",
+  "init": [],
+  "members": {
+   "component_lint": {"kind": "attribute"},
+   "component_names": {"kind": "attribute"},
+   "from_dict": {
+    "kind": "method",
+    "signature": [
+     {"name": "value", "kind": "POSITIONAL_OR_KEYWORD"}
+    ]
+   },
+   "lint": {"kind": "attribute"},
+   "parse_template": {
+    "kind": "method",
+    "signature": [
+     {"name": "self", "kind": "POSITIONAL_OR_KEYWORD"},
+     {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"}
+    ]
+   },
+   "to_dict": {
+    "kind": "method",
+    "signature": [
+     {"name": "self", "kind": "POSITIONAL_OR_KEYWORD"}
+    ]
+   }
+  }
+ },
+ "TemplateDataSourceShape": {
+  "kind": "class",
+  "init": [
+   {"name": "roots", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "completeness", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "open_reasons", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "preserves_kwargs_extras", "kind": "POSITIONAL_OR_KEYWORD", "default": "False"},
+   {"name": "parameters", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"}
+  ],
+  "members": {
+   "completeness": {"kind": "attribute"},
+   "open_reasons": {"kind": "attribute"},
+   "parameters": {"kind": "attribute"},
+   "preserves_kwargs_extras": {"kind": "attribute"},
+   "roots": {"kind": "attribute"}
+  }
+ },
+ "TemplateLintConsumer": {
+  "kind": "class",
+  "init": [
+   {"name": "known_names", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "namespace_policy", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "rule_unknown_template_variable", "kind": "POSITIONAL_OR_KEYWORD"}
+  ],
+  "members": {
+   "known_names": {"kind": "attribute"},
+   "namespace_policy": {"kind": "attribute"},
+   "rule_unknown_template_variable": {"kind": "attribute"}
+  }
+ },
+ "TemplateLintInfo": {
+  "kind": "class",
+  "init": [
+   {"name": "rule_unknown_template_variable", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "template_variables", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "rule_i18n_missing_param_type", "kind": "POSITIONAL_OR_KEYWORD", "default": "'warning'"},
+   {"name": "rule_unknown_vue_variable", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "vue_variables", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"},
+   {"name": "rule_unknown_component_js_variable", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "component_js_globals", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"},
+   {"name": "allows_extra_variables", "kind": "POSITIONAL_OR_KEYWORD", "default": "False"},
+   {"name": "rule_unknown_component_js_member", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_vue_python_variable", "kind": "POSITIONAL_OR_KEYWORD", "default": "'warning'"},
+   {"name": "rule_alpine_attribute", "kind": "POSITIONAL_OR_KEYWORD", "default": "'warning'"},
+   {"name": "rule_alpine_cloak", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_invalid_attribute_value", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_i18n_cross_language_fallback", "kind": "POSITIONAL_OR_KEYWORD", "default": "'warning'"},
+   {"name": "rule_misspelled_directive", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_misspelled_attribute", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_misspelled_element", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_unknown_aria_attribute", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_invalid_nesting", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_duplicate_id", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_missing_image_alt", "kind": "POSITIONAL_OR_KEYWORD", "default": "'warning'"},
+   {"name": "rule_invalid_model_target", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_misspelled_event", "kind": "POSITIONAL_OR_KEYWORD", "default": "'warning'"},
+   {"name": "rule_invalid_vue_expression", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_vue_compile_error", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_undeclared_component_event", "kind": "POSITIONAL_OR_KEYWORD", "default": "'warning'"},
+   {"name": "rule_missing_component_key", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_prop_assignment", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_unknown_server_event_field", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_missing_server_event_field", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_incompatible_server_event_field", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_unknown_form_field", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_missing_form_field", "kind": "POSITIONAL_OR_KEYWORD", "default": "'error'"},
+   {"name": "rule_misspelled_css_variable", "kind": "POSITIONAL_OR_KEYWORD", "default": "'warning'"},
+   {"name": "rule_misspelled_css_class", "kind": "POSITIONAL_OR_KEYWORD", "default": "'warning'"},
+   {"name": "rule_undeclared_css_class", "kind": "POSITIONAL_OR_KEYWORD", "default": "'ignore'"},
+   {"name": "rule_undeclared_css_variable", "kind": "POSITIONAL_OR_KEYWORD", "default": "'ignore'"},
+   {"name": "rule_unknown_url", "kind": "POSITIONAL_OR_KEYWORD", "default": "'warning'"},
+   {"name": "rule_unknown_inject_key", "kind": "POSITIONAL_OR_KEYWORD", "default": "'warning'"},
+   {"name": "template_data_keys", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "security_csp", "kind": "POSITIONAL_OR_KEYWORD", "default": "'off'"}
+  ],
+  "members": {
+   "allows_extra_variables": {"kind": "attribute"},
+   "component_js_globals": {"kind": "attribute"},
+   "from_dict": {
+    "kind": "method",
+    "signature": [
+     {"name": "value", "kind": "POSITIONAL_OR_KEYWORD"}
+    ]
+   },
+   "rule_alpine_attribute": {"kind": "attribute"},
+   "rule_alpine_cloak": {"kind": "attribute"},
+   "rule_duplicate_id": {"kind": "attribute"},
+   "rule_i18n_cross_language_fallback": {"kind": "attribute"},
+   "rule_i18n_missing_param_type": {"kind": "attribute"},
+   "rule_incompatible_server_event_field": {"kind": "attribute"},
+   "rule_invalid_attribute_value": {"kind": "attribute"},
+   "rule_invalid_model_target": {"kind": "attribute"},
+   "rule_invalid_nesting": {"kind": "attribute"},
+   "rule_invalid_vue_expression": {"kind": "attribute"},
+   "rule_missing_component_key": {"kind": "attribute"},
+   "rule_missing_form_field": {"kind": "attribute"},
+   "rule_missing_image_alt": {"kind": "attribute"},
+   "rule_missing_server_event_field": {"kind": "attribute"},
+   "rule_misspelled_attribute": {"kind": "attribute"},
+   "rule_misspelled_css_class": {"kind": "attribute"},
+   "rule_misspelled_css_variable": {"kind": "attribute"},
+   "rule_misspelled_directive": {"kind": "attribute"},
+   "rule_misspelled_element": {"kind": "attribute"},
+   "rule_misspelled_event": {"kind": "attribute"},
+   "rule_prop_assignment": {"kind": "attribute"},
+   "rule_undeclared_component_event": {"kind": "attribute"},
+   "rule_undeclared_css_class": {"kind": "attribute"},
+   "rule_undeclared_css_variable": {"kind": "attribute"},
+   "rule_unknown_aria_attribute": {"kind": "attribute"},
+   "rule_unknown_component_js_member": {"kind": "attribute"},
+   "rule_unknown_component_js_variable": {"kind": "attribute"},
+   "rule_unknown_form_field": {"kind": "attribute"},
+   "rule_unknown_inject_key": {"kind": "attribute"},
+   "rule_unknown_server_event_field": {"kind": "attribute"},
+   "rule_unknown_template_variable": {"kind": "attribute"},
+   "rule_unknown_url": {"kind": "attribute"},
+   "rule_unknown_vue_variable": {"kind": "attribute"},
+   "rule_vue_compile_error": {"kind": "attribute"},
+   "rule_vue_python_variable": {"kind": "attribute"},
+   "security_csp": {"kind": "attribute"},
+   "template_data_keys": {"kind": "attribute"},
+   "template_variables": {"kind": "attribute"},
+   "to_dict": {
+    "kind": "method",
+    "signature": [
+     {"name": "self", "kind": "POSITIONAL_OR_KEYWORD"}
+    ]
+   },
+   "vue_variables": {"kind": "attribute"}
+  }
+ },
+ "TemplatePythonControl": {
+  "kind": "class",
+  "init": [
+   {"name": "kind", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "names", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"},
+   {"name": "free_names", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"},
+   {"name": "slot_target", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"}
+  ],
+  "members": {
+   "free_names": {"kind": "attribute"},
+   "kind": {"kind": "attribute"},
+   "names": {"kind": "attribute"},
+   "slot_target": {"kind": "attribute"},
+   "source": {"kind": "attribute"}
+  }
+ },
+ "TemplatePythonQuery": {
+  "kind": "class",
+  "init": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "start_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "end_index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "host_kind", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "controls", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"},
+   {"name": "free_names", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"},
+   {"name": "attribute_target", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"}
+  ],
+  "members": {
+   "attribute_target": {"kind": "attribute"},
+   "controls": {"kind": "attribute"},
+   "end_index": {"kind": "attribute"},
+   "free_names": {"kind": "attribute"},
+   "host_kind": {"kind": "attribute"},
+   "source": {"kind": "attribute"},
+   "start_index": {"kind": "attribute"}
+  }
+ },
+ "TemplatePythonRoot": {
+  "kind": "class",
+  "init": [
+   {"name": "name", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "presence", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "access", "kind": "POSITIONAL_OR_KEYWORD", "default": "'mapping'"},
+   {"name": "type_module", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "type_qualname", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "type_display", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"}
+  ],
+  "members": {
+   "access": {"kind": "attribute"},
+   "name": {"kind": "attribute"},
+   "presence": {"kind": "attribute"},
+   "type_display": {"kind": "attribute"},
+   "type_module": {"kind": "attribute"},
+   "type_qualname": {"kind": "attribute"}
+  }
+ },
+ "TemplatePythonSlotDataType": {
+  "kind": "class",
+  "init": [
+   {"name": "class_name", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "fields", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"},
+   {"name": "class_modules", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"}
+  ],
+  "members": {
+   "class_modules": {"kind": "attribute"},
+   "class_name": {"kind": "attribute"},
+   "fields": {"kind": "attribute"}
+  }
+ },
+ "TemplatePythonValueType": {
+  "kind": "class",
+  "init": [
+   {"name": "annotation", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "module", "kind": "POSITIONAL_OR_KEYWORD", "default": "None"},
+   {"name": "class_modules", "kind": "POSITIONAL_OR_KEYWORD", "default": "()"}
+  ],
+  "members": {
+   "annotation": {"kind": "attribute"},
+   "class_modules": {"kind": "attribute"},
+   "module": {"kind": "attribute"}
+  }
+ },
+ "TemplateVariableInfo": {
+  "kind": "class",
+  "init": [
+   {"name": "name", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "type_display", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "type_fidelity", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "description", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"}
+  ],
+  "members": {
+   "description": {"kind": "attribute"},
+   "from_dict": {
+    "kind": "method",
+    "signature": [
+     {"name": "value", "kind": "POSITIONAL_OR_KEYWORD"}
+    ]
+   },
+   "name": {"kind": "attribute"},
+   "source": {"kind": "attribute"},
+   "to_dict": {
+    "kind": "method",
+    "signature": [
+     {"name": "self", "kind": "POSITIONAL_OR_KEYWORD"}
+    ]
+   },
+   "type_display": {"kind": "attribute"},
+   "type_fidelity": {"kind": "attribute"}
+  }
+ },
+ "VUE_INVALID_EXPRESSION": {"kind": "value", "value": "citry.vue.invalid-expression"},
+ "VUE_PYTHON_VARIABLE": {"kind": "value", "value": "citry.vue.python-variable"},
+ "VUE_UNKNOWN_VARIABLE": {"kind": "value", "value": "citry.vue.unknown-variable"},
+ "VueLintConsumer": {
+  "kind": "class",
+  "init": [
+   {"name": "known_names", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "rule_unknown_vue_variable", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "namespace_policy", "kind": "POSITIONAL_OR_KEYWORD", "default": "'closed'"},
+   {"name": "rule_vue_python_variable", "kind": "POSITIONAL_OR_KEYWORD", "default": "'warning'"}
+  ],
+  "members": {
+   "known_names": {"kind": "attribute"},
+   "namespace_policy": {"kind": "attribute"},
+   "rule_unknown_vue_variable": {"kind": "attribute"},
+   "rule_vue_python_variable": {"kind": "attribute"}
+  }
+ },
+ "_BrowserSource": {
+  "kind": "class",
+  "init": [
+   {"name": "origin", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "content", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "consumers", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "source_kind", "kind": "POSITIONAL_OR_KEYWORD"}
+  ],
+  "members": {
+   "consumers": {"kind": "attribute"},
+   "content": {"kind": "attribute"},
+   "origin": {"kind": "attribute"},
+   "source_kind": {"kind": "attribute"}
+  }
+ },
+ "_TemplateSource": {
+  "kind": "class",
+  "init": [
+   {"name": "origin", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "content", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "consumers", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "source_kind", "kind": "POSITIONAL_OR_KEYWORD"}
+  ],
+  "members": {
+   "consumers": {"kind": "attribute"},
+   "content": {"kind": "attribute"},
+   "origin": {"kind": "attribute"},
+   "source_kind": {"kind": "attribute"}
+  }
+ },
+ "_ascii_lower": {
+  "kind": "function",
+  "signature": [
+   {"name": "value", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "_check_browser_source": {
+  "kind": "function",
+  "signature": [
+   {"name": "engine", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "profiles", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "i18n_configured", "kind": "KEYWORD_ONLY", "default": "False"}
+  ]
+ },
+ "_check_template": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "rules", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "known_names", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "engine", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "lint_consumers", "kind": "KEYWORD_ONLY", "default": "()"},
+   {"name": "vue_lint_consumers", "kind": "KEYWORD_ONLY", "default": "()"},
+   {"name": "alpine_lint_consumers", "kind": "KEYWORD_ONLY", "default": "()"},
+   {"name": "attribute_value_lint_consumers", "kind": "KEYWORD_ONLY", "default": "()"},
+   {"name": "directive_lint_consumers", "kind": "KEYWORD_ONLY", "default": "()"},
+   {"name": "markup_lint_consumers", "kind": "KEYWORD_ONLY", "default": "()"},
+   {"name": "i18n_manifest", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "i18n_profiles", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "i18n_configured", "kind": "KEYWORD_ONLY", "default": "False"},
+   {"name": "foreign_options", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "nested_foreign_options", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "component_props", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "component_templates", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "links", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "css_templates", "kind": "KEYWORD_ONLY", "default": "None"}
+  ]
+ },
+ "_component_events_info": {
+  "kind": "function",
+  "signature": [
+   {"name": "component_class", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "_component_lint_variable_owners": {
+  "kind": "function",
+  "signature": [
+   {"name": "component_class", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "_find_pair_declaration": {
+  "kind": "function",
+  "signature": [
+   {"name": "comp_cls", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "inline_attr", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "file_attr", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "_inspect_schema_class": {
+  "kind": "function",
+  "signature": [
+   {"name": "schema_class", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "include_default_values", "kind": "KEYWORD_ONLY", "default": "False"}
+  ]
+ },
+ "_loaded_python_file": {
+  "kind": "function",
+  "signature": [
+   {"name": "cls", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "_method_bound_names": {
+  "kind": "function",
+  "signature": [
+   {"name": "module_source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "class_qualname", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "_nearest_data_shape_declaration": {
+  "kind": "function",
+  "signature": [
+   {"name": "cls", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "name", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "_normalized_dynamic_slot_source": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "_renamable_method_locals": {
+  "kind": "function",
+  "signature": [
+   {"name": "module_source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "class_qualname", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "_safe_class_text": {
+  "kind": "function",
+  "signature": [
+   {"name": "cls", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "name", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "_static_class_dict": {
+  "kind": "function",
+  "signature": [
+   {"name": "cls", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "_static_class_mro": {
+  "kind": "function",
+  "signature": [
+   {"name": "cls", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "_tokens": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "_vue_hyphenated_prop_name": {
+  "kind": "function",
+  "signature": [
+   {"name": "name", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "_vue_prop_name": {
+  "kind": "function",
+  "signature": [
+   {"name": "name", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "_with_type_findings": {
+  "kind": "function",
+  "signature": [
+   {"name": "report", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "app_spec", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "cwd", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "analyze_browser_component_source": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "analyze_browser_expression": {
+  "kind": "function",
+  "signature": [
+   {"name": "expression", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "analyze_css_data_source": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "class_qualname", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "analyze_js_data_source": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "class_qualname", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "analyze_template_data_source": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "class_qualname", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "kwargs_fields", "kind": "KEYWORD_ONLY"}
+  ]
+ },
+ "browser_bindings": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY", "default": "<function>"}
+  ]
+ },
+ "browser_completion_at": {
+  "kind": "function",
+  "signature": [
+   {"name": "expression", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "index", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "browser_component_prop_findings": {
+  "kind": "function",
+  "signature": [
+   {"name": "sites", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "declared_props", "kind": "KEYWORD_ONLY"},
+   {"name": "value_type", "kind": "KEYWORD_ONLY"}
+  ]
+ },
+ "browser_component_prop_sites": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY", "default": "<function>"}
+  ]
+ },
+ "browser_component_props": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "browser_declarative_events": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "known_names", "kind": "POSITIONAL_OR_KEYWORD", "default": "frozenset()"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY", "default": "<function>"}
+  ]
+ },
+ "browser_expression_at": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY", "default": "<function>"}
+  ]
+ },
+ "browser_expressions": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY", "default": "<function>"}
+  ]
+ },
+ "browser_i18n_bind_calls": {
+  "kind": "function",
+  "signature": [
+   {"name": "expression", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "owners", "kind": "POSITIONAL_OR_KEYWORD", "default": "frozenset('i18n')"},
+   {"name": "authenticated_owner_spans", "kind": "KEYWORD_ONLY", "default": "frozenset()"},
+   {"name": "proven_owner_spans", "kind": "KEYWORD_ONLY", "default": "None"}
+  ]
+ },
+ "browser_i18n_binding_directives": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY", "default": "<function>"}
+  ]
+ },
+ "browser_i18n_calls_checkable": {
+  "kind": "function",
+  "signature": [
+   {"name": "expression", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "owners", "kind": "POSITIONAL_OR_KEYWORD", "default": "frozenset('$i18n')"},
+   {"name": "i18n_configured", "kind": "KEYWORD_ONLY"},
+   {"name": "proven_owner_spans", "kind": "KEYWORD_ONLY", "default": "None"}
+  ]
+ },
+ "browser_i18n_message_calls": {
+  "kind": "function",
+  "signature": [
+   {"name": "expression", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "owners", "kind": "POSITIONAL_OR_KEYWORD", "default": "frozenset('$i18n')"},
+   {"name": "proven_owner_spans", "kind": "KEYWORD_ONLY", "default": "None"}
+  ]
+ },
+ "browser_i18n_profile_calls": {
+  "kind": "function",
+  "signature": [
+   {"name": "expression", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "owners", "kind": "POSITIONAL_OR_KEYWORD", "default": "frozenset('$i18n')"},
+   {"name": "proven_owner_spans", "kind": "KEYWORD_ONLY", "default": "None"}
+  ]
+ },
+ "browser_identifier_at": {
+  "kind": "function",
+  "signature": [
+   {"name": "expression", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "index", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "browser_identifiers": {
+  "kind": "function",
+  "signature": [
+   {"name": "expression", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "browser_literal_calls": {
+  "kind": "function",
+  "signature": [
+   {"name": "expression", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "names", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "browser_literal_wire_type": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "browser_member_at": {
+  "kind": "function",
+  "signature": [
+   {"name": "expression", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "index", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "browser_state_binding_target_errors": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY", "default": "<function>"}
+  ]
+ },
+ "browser_state_bindings": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY", "default": "<function>"}
+  ]
+ },
+ "build_inferred_template_shadow": {
+  "kind": "function",
+  "signature": [
+   {"name": "module_source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "class_qualname", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "roots", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "query", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "source_module", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "source_is_package", "kind": "KEYWORD_ONLY", "default": "False"},
+   {"name": "kwargs_type", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "value_type", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "slot_data_types", "kind": "KEYWORD_ONLY", "default": "None"}
+  ]
+ },
+ "build_reveal_shadow": {
+  "kind": "function",
+  "signature": [
+   {"name": "module_source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "spans", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "source_module", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "source_is_package", "kind": "KEYWORD_ONLY", "default": "False"}
+  ]
+ },
+ "build_schema_template_shadow": {
+  "kind": "function",
+  "signature": [
+   {"name": "module_source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "schema_qualname", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "roots", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "query", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "source_module", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "source_is_package", "kind": "KEYWORD_ONLY", "default": "False"},
+   {"name": "value_type", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "slot_data_types", "kind": "KEYWORD_ONLY", "default": "None"}
+  ]
+ },
+ "component_js_i18n_owners": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "component_name_match": {
+  "kind": "function",
+  "signature": [
+   {"name": "prefix", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "label", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "is_class_name", "kind": "KEYWORD_ONLY"},
+   {"name": "variant_index", "kind": "KEYWORD_ONLY"}
+  ]
+ },
+ "css_data_completion_at": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "index", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "css_data_reference_at": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "index", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "css_data_references": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "diagnostic_definition": {
+  "kind": "function",
+  "signature": [
+   {"name": "code", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "diagnostic_documentation_url": {
+  "kind": "function",
+  "signature": [
+   {"name": "code", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "discover_python_component_assets": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "app_components", "kind": "KEYWORD_ONLY", "default": "None"}
+  ]
+ },
+ "discover_python_templates": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "recover_incomplete", "kind": "KEYWORD_ONLY", "default": "False"},
+   {"name": "app_components", "kind": "KEYWORD_ONLY", "default": "None"}
+  ]
+ },
+ "discover_untraced_component_templates": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "is_project_module", "kind": "KEYWORD_ONLY"},
+   {"name": "app_components", "kind": "KEYWORD_ONLY", "default": "None"}
+  ]
+ },
+ "engine_inject_keys": {
+  "kind": "function",
+  "signature": [
+   {"name": "engine", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "workspace", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "engine_path_verdicts": {
+  "kind": "function",
+  "signature": [
+   {"name": "engine", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "event_options": {
+  "kind": "function",
+  "signature": [
+   {"name": "func", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "finish_python_component_assets": {
+  "kind": "function",
+  "signature": [
+   {"name": "plan", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "results", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "require_providers", "kind": "KEYWORD_ONLY", "default": "False"}
+  ]
+ },
+ "format_python_templates": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "host_offset", "kind": "KEYWORD_ONLY", "default": "None"}
+  ]
+ },
+ "i18n_configured_guarded_calls": {
+  "kind": "function",
+  "signature": [
+   {"name": "tree", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "i18n_tooling_index": {
+  "kind": "function",
+  "signature": [
+   {"name": "engine", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "json_wire_type_from_annotation": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "json_wire_type_from_expression": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "member_types", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "member_annotations", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "classes", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "inferred", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "unproven", "kind": "KEYWORD_ONLY", "default": "None"},
+   {"name": "widen_literals", "kind": "KEYWORD_ONLY", "default": "False"}
+  ]
+ },
+ "kwargs_wire_classes": {
+  "kind": "function",
+  "signature": [
+   {"name": "component_class", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "line_break_count": {
+  "kind": "function",
+  "signature": [
+   {"name": "text", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "lint_alpine_attributes": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "consumers", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY", "default": "<function>"}
+  ]
+ },
+ "lint_attribute_values": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "consumers", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY", "default": "<function>"}
+  ]
+ },
+ "lint_component_js_prop_assignments": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "severities", "kind": "KEYWORD_ONLY", "default": "()"}
+  ]
+ },
+ "lint_invalid_vue_expressions": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "expressions", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "consumers", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY", "default": "<function>"}
+  ]
+ },
+ "lint_markup": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "consumers", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY", "default": "<function>"}
+  ]
+ },
+ "lint_misspelled_directives": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "consumers", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY", "default": "<function>"}
+  ]
+ },
+ "lint_prop_assignments": {
+  "kind": "function",
+  "signature": [
+   {"name": "expressions", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "component_sources", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "severities", "kind": "KEYWORD_ONLY", "default": "()"}
+  ]
+ },
+ "lint_undeclared_component_js_emits": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "lint_undeclared_component_listeners": {
+  "kind": "function",
+  "signature": [
+   {"name": "expressions", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "child_source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "severities", "kind": "KEYWORD_ONLY", "default": "()"}
+  ]
+ },
+ "lint_undeclared_template_emits": {
+  "kind": "function",
+  "signature": [
+   {"name": "expressions", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "component_sources", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "lint_unknown_component_js_members": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "known_data_names", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "severity", "kind": "KEYWORD_ONLY", "default": "'error'"}
+  ]
+ },
+ "lint_unknown_component_js_variables": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "consumers", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "lint_unknown_slot_props": {
+  "kind": "function",
+  "signature": [
+   {"name": "fills", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "props_for", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "lint_unknown_template_variables": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "consumers", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "lint_unknown_vue_variables": {
+  "kind": "function",
+  "signature": [
+   {"name": "expressions", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "consumers", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "lint_vue_compile": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "consumers", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "renders_in_place", "kind": "KEYWORD_ONLY", "default": "None"}
+  ]
+ },
+ "lint_vue_python_variables": {
+  "kind": "function",
+  "signature": [
+   {"name": "expressions", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "consumers", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "looks_like_i18n_binding": {
+  "kind": "function",
+  "signature": [
+   {"name": "name", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "mark_literal_findings": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY", "default": "<function>"}
+  ]
+ },
+ "merge_json_wire_types": {
+  "kind": "function",
+  "signature": [
+   {"name": "values", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "outlets_for_slot": {
+  "kind": "function",
+  "signature": [
+   {"name": "outlets", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "slot", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "parse_authored_expression": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "prepare_python_component_assets": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "kinds", "kind": "KEYWORD_ONLY", "default": "(<PythonComponentAssetKind.TEMPLATE: 'template'>, <PythonComponentAssetKind.JS: 'js'>, <PythonComponentAssetKind.CSS: 'css'>)"},
+   {"name": "host_offset", "kind": "KEYWORD_ONLY", "default": "None"}
+  ]
+ },
+ "project_module_exists": {
+  "kind": "function",
+  "signature": [
+   {"name": "module", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "level", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "file", "kind": "KEYWORD_ONLY"},
+   {"name": "root", "kind": "KEYWORD_ONLY"}
+  ]
+ },
+ "python_application_lint_variable_range": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "target_name", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "variable_name", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "python_class_asset_resolution_signature": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "class_qualname", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "kind", "kind": "POSITIONAL_OR_KEYWORD", "default": "'template'"}
+  ]
+ },
+ "python_class_defines_direct_method": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "class_qualname", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "method_name", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "python_class_direct_method_first_line": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "class_qualname", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "method_name", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "python_class_resolution_signature": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "class_qualname", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "python_class_static_asset_matches": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "class_qualname", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "inline_value", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "file_value", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "kind", "kind": "POSITIONAL_OR_KEYWORD", "default": "'template'"}
+  ]
+ },
+ "python_component_lint_variable_range": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "lint_qualname", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "variable_name", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "python_event_handler_range": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "function_qualname", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "method_name", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "wire_name", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "render_diagnostic": {
+  "kind": "function",
+  "signature": [
+   {"name": "code", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "variant", "kind": "KEYWORD_ONLY", "default": "'default'"},
+   {"name": "parameters", "kind": "VAR_KEYWORD"}
+  ]
+ },
+ "run": {
+  "kind": "function",
+  "signature": [
+   {"name": "generator", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "scoped_fills": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY"}
+  ]
+ },
+ "server_event_calls": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "handler_names", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY"}
+  ]
+ },
+ "server_event_form_findings": {
+  "kind": "function",
+  "signature": [
+   {"name": "form", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "payload", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "dropped_names", "kind": "KEYWORD_ONLY", "default": "frozenset()"}
+  ]
+ },
+ "server_event_forms": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "handler_names", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY"}
+  ]
+ },
+ "server_event_payload_findings": {
+  "kind": "function",
+  "signature": [
+   {"name": "call", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "payload", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "server_event_payload_from_description": {
+  "kind": "function",
+  "signature": [
+   {"name": "handler", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "slot_data_wire_classes": {
+  "kind": "function",
+  "signature": [
+   {"name": "component_class", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "slot_outlets": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY"}
+  ]
+ },
+ "slot_prop_name": {
+  "kind": "function",
+  "signature": [
+   {"name": "attribute", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "source_lines": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "start_django_from_environment": {
+  "kind": "function",
+  "signature": []
+ },
+ "symtable": {"kind": "object"},
+ "symtable_missing": {
+  "kind": "function",
+  "signature": []
+ },
+ "template_python_queries": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY", "default": "<function>"}
+  ]
+ },
+ "template_python_query_at": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "index", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY", "default": "<function>"}
+  ]
+ },
+ "template_static_input_queries": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY", "default": "<function>"}
+  ]
+ },
+ "template_urls": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY"}
+  ]
+ },
+ "unknown_component_uses": {
+  "kind": "function",
+  "signature": [
+   {"name": "template", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "known_names", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "parse_nested", "kind": "KEYWORD_ONLY", "default": "<function>"}
+  ]
+ },
+ "unknown_inject_key_findings": {
+  "kind": "function",
+  "signature": [
+   {"name": "source", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "tree", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "qualname", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "component", "kind": "KEYWORD_ONLY"},
+   {"name": "provided", "kind": "KEYWORD_ONLY"},
+   {"name": "everywhere", "kind": "KEYWORD_ONLY"}
+  ]
+ },
+ "unknown_slot_props_for": {
+  "kind": "function",
+  "signature": [
+   {"name": "receivers", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "unknown_url_findings": {
+  "kind": "function",
+  "signature": [
+   {"name": "urls", "kind": "POSITIONAL_OR_KEYWORD"},
+   {"name": "verdicts", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ },
+ "vue_listener_event_names": {
+  "kind": "function",
+  "signature": [
+   {"name": "event", "kind": "POSITIONAL_OR_KEYWORD"}
+  ]
+ }
+}

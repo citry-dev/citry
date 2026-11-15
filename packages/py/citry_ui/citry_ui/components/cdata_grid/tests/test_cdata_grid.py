@@ -315,7 +315,7 @@ def test_root_table_column_row_and_cell_attrs_merge_but_owned_attrs_are_rejected
 @pytest.mark.parametrize(
     ("destination", "attribute", "message"),
     [
-        ("attrs", "data-citry-morph", "CDataGrid attrs cannot contain Citry runtime attribute"),
+        ("attrs", "data-citry-morph", "are reserved for the browser"),
         ("attrs", ":aria-busy", "CDataGrid attrs cannot contain the Vue directive"),
         ("attrs", "v-if", "CDataGrid attrs cannot contain the Vue directive"),
         ("attrs", "V-IF", "CDataGrid attrs cannot contain the Vue directive"),

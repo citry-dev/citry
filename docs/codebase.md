@@ -2037,6 +2037,35 @@ These are not covered, so any minor or patch release may change them:
 - Features marked experimental in their docs and docstrings, such as
   `ComponentGraph`.
 
+One private module has a rule of its own. citry-lsp imports the Citry
+internals it needs, and the experimental template analysis names, from
+`citry._lsp_support`, which also holds the private attribute and setting
+names that citry-lsp reads by name. Every citry-lsp 1.x must work with
+every `citry` 1.x. Users must not import it, and the docs do not describe it,
+but during 1.x treat it as covered:
+
+- Do not remove or rename a name, remove a parameter, make a parameter
+  required, change a default, remove a public member of a class it
+  exports, change the value of a string or number constant, or remove an
+  entry from a collection constant. Keep what a function returns and the
+  arguments it passes to a callback.
+- You may add names, optional parameters and class members.
+- When citry-lsp needs another Citry internal, add it to the module and
+  record it by running
+  `packages/py/citry/tests/test_lsp_support_module.py` as a script. That
+  test checks the rules above against the recorded
+  `lsp_support_names.json`, and citry-lsp's `test_citry_imports.py`
+  fails when citry-lsp imports a private Citry module directly.
+- A name added after 1.0.0 is missing from older releases, so citry-lsp
+  imports it in a `try` block and turns off the feature that needs it
+  when the import fails. Do not raise citry-lsp's `citry>=` floor above
+  1.0.0 for it.
+- Release qualification runs `scripts/lsp_citry_pairs.py` for two
+  pairs: the oldest citry-lsp of the major version with the candidate
+  `citry`, and the candidate citry-lsp with the oldest `citry` of the
+  major version. Its docstring says what to do when an old test fails
+  for a reason that is not a break.
+
 Three kinds of change may come in a minor release even though they can
 break a user's setup. List each one in the changelog:
 
@@ -2172,8 +2201,8 @@ versions running together for a while, and a deploy can skip releases
 State tokens (the tokens that carry a component's State, or point to it
 on the server), Events requests, and HTML fragments that the server
 sends after the page has loaded. So a change to a Citry format should
-leave an open page working, or at worst make the browser ask the visitor
-to reload. The one case that still fails is a page from a newer release
+leave an open page working, or at worst make the next event call fail
+with `stale_state`. The one case that still fails is a page from a newer release
 that calls a server still running an older release (see the
 `citry-events/1` bullet below). The rules cover a deploy between any two
 1.x releases. A deploy from 0.x to 1.0.0 is a fresh start, so 1.0.0 does
@@ -2249,8 +2278,9 @@ it as public and ask the maintainer in the pull request.
   server answers `stale_state` (409) for a token whose prefix has the same
   shape (`ce`, a letter, a number) but another value, such as `cev2.`, and
   for a token or server-stored entry whose payload names a version other
-  than 1. Citry's browser client offers a reload for that code. The
-  visitor accepts the prompt and the page then has a fresh token. Until
+  than 1. Citry's browser client reports that code as an out-of-date
+  page (the app decides what the visitor sees; a development page asks
+  Citry's own reload question), and a reload brings a fresh token. Until
   then the call fails with `stale_state`. So a release may raise the
   token version. A new token version changes the prefix and keeps its
   shape, because 1.0.0 answers `invalid_state` for a prefix of any other shape; the
@@ -2261,7 +2291,8 @@ it as public and ask the maintainer in the pull request.
   for a different helper contract) and the Vue fragment messages
   (`citry-vue-fragment/1`) meet this condition too. When Citry's browser
   code in a page that an older 1.x release rendered gets a render or a
-  fragment it cannot read, it offers the visitor a reload. Before you
+  fragment it cannot read, it reports an out-of-date page the same way
+  (`citry:events:stale` or `citry:fragments:stale`). Before you
   change any other message between the server and Citry's browser code,
   check what the browser code of the oldest 1.x release does with a
   version it does not know, because an open page keeps running the
@@ -2282,7 +2313,7 @@ For both kinds:
   data, the code that reads it, and every test, fixture and doc that
   shows it.
 - Record the new version in the changelog when a visitor or an operator
-  can notice it, such as an open page that asks for a reload or a
+  can notice it, such as an open page whose calls fail with `stale_state` or a
   render cache that renders again. A major release also lists it in its
   "Upgrading from" section.
 
@@ -2408,10 +2439,16 @@ Prepare a release as follows:
    ```
 5. Inspect the candidate run and its selected package graph. Require the
    repository Check and applicable language, browser, and example CI runs to
-   pass for the same commit before publishing. Qualification is
+   pass for the same commit before publishing, including the
+   `framework-floors` job in `py--tests.yml`. Qualification is
    the expensive part and happens before release intent. Independent package
    builds run in parallel; the candidate retains their exact artifact IDs and
    GitHub archive digests for 30 days.
+   Citry's qualification also runs `scripts/rolling_deploy/check.py`, which
+   sends the requests of pages the previous release rendered to the
+   candidate and the other way round, as a rolling deploy does; a failed
+   check stops the release only when both releases share a major version
+   of 1 or later.
    Qualification requires each worker to be dispatched from the planned commit
    on `main`. If `main` advances before dispatch, prepare a new candidate on
    current `main`.
@@ -3030,6 +3067,20 @@ The paths are:
   four file-level workers share one GitHub runner
 - Runs this checkout's `citry` and `citry-ui` in Pyodide (the `pyodide-smoke`
   job, described under "The Pyodide check" below)
+- Tests the oldest framework versions that the
+  [Compatibility](../docs_site/content/about/compatibility.md) page lists
+  (the `framework-floors` job). On Python 3.11, it installs the workspace,
+  replaces Django, FastAPI, Starlette, Flask and Werkzeug with the versions
+  pinned in the job's `FRAMEWORK_FLOORS` (plus httpx, which old Starlette
+  needs), and runs every test file that imports one of them. It runs beside
+  the `test` jobs and takes about a minute, so it adds no time to the run.
+- By the maintainer's decision, `framework-floors` runs on pushes that
+  start this workflow and on manual runs, not on pull requests. A change
+  that needs a newer framework shows up in the push run after the merge.
+  To check a branch before merging, start **Run workflow** on it.
+- When you raise the oldest supported version of a framework, change the
+  starter in `examples/starters`, the job's pins and the Compatibility page
+  together. `test_ci_workflows.py` checks that the first two match.
 
 **Configuration**:
 

@@ -227,6 +227,11 @@ lowercase.
   Vue `@click` in a component with `js`, or write a plain tag in a `c-if`
   branch. A plain `<c-element is="div" onclick="...">` with no `c-bind`
   makes an ordinary element, so it works.
+- A `<c-element>` that has `c-is` or `c-bind` also refuses the names
+  Citry reserves for its own use, such as `c-render-id`, `data-cid-*`,
+  and `data-citry-key`, whether you wrote them or passed them in. It
+  raises `ValueError`. See
+  [Names Citry reserves](/advanced/html-attributes/#names-citry-reserves).
 - It accepts only the default slot. A named `<c-fill>` written in the
   template raises `SyntaxError`. A fill whose name is computed at render
   time, such as `<c-fill c-name="...">`, raises `ValueError`.

@@ -22,6 +22,7 @@ from citry_ui.components._attrs import (
     is_vue_directive_attribute,
     merge_root_attrs,
     pop_html_attr,
+    reject_citry_ui_reserved_attr,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
 from citry_ui.components._form_control_runtime import FORM_CONTROL_RUNTIME_DEPENDENCY, FORM_CONTROL_STYLE_DEPENDENCY
@@ -92,7 +93,6 @@ class _ResolvedTag:
 _VARIANTS = ("outline", "filled", "plain")
 _SIZES = ("sm", "md", "lg")
 _ASCII_WHITESPACE = "\t\n\f\r "
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 
 
 def _fingerprint(value: object) -> str:
@@ -351,7 +351,8 @@ def _destination_attrs(
                 f"CTagsInput {destination} cannot contain the Vue directive {key!r}; "
                 "author Vue bindings and listeners in a template instead."
             )
-        if normalized in owned or normalized in _OWNERSHIP_DIRECTIVES or normalized.startswith(_RUNTIME_PREFIXES):
+        reject_citry_ui_reserved_attr(key, value, where=f"CTagsInput {destination}")
+        if normalized in owned or normalized in _OWNERSHIP_DIRECTIVES:
             raise ValueError(f"CTagsInput {destination} cannot override owned attribute {key!r}.")
         copied[key] = value
     return copied

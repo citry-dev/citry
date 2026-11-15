@@ -8,7 +8,14 @@ from typing import Any, Literal, Protocol, TypedDict, cast
 
 from citry import LibraryComponent, SlotInput
 from citry.ext.dependencies import Script, Style
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    citry_ui_owned_value,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -32,7 +39,6 @@ def _dialog_scripts() -> tuple[Script, ...]:
     return tuple(dependencies.js)
 
 
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _OWNED_ATTRS = frozenset(
     {
         "aria-describedby",
@@ -99,9 +105,8 @@ def _copy_attrs(attrs: Mapping[str, object] | None) -> dict[str, object]:
     # A Vue directive could rebind an owned attribute, add listeners, or
     # change the dialog's structure, so none may arrive through Python data.
     reject_vue_directive_attrs(copied, "CAlertDialog")
-    for key in copied:
-        if key.casefold().startswith(_RUNTIME_PREFIXES):
-            raise ValueError(f"CAlertDialog attrs cannot contain reserved Citry runtime attribute {key!r}.")
+    for key, attr_value in copied.items():
+        reject_citry_ui_reserved_attr(key, attr_value, where="CAlertDialog attrs")
     return copied
 
 
@@ -154,16 +159,16 @@ class CAlertDialog(LibraryComponent):
                 "aria-haspopup": "dialog",
                 "aria-controls": dialog_id,
                 "aria-expanded": "true" if kwargs.open else "false",
-                "data-citry-dialog-trigger": "",
+                "data-citry-dialog-trigger": citry_ui_owned_value(),
             },
             "button_type": "button",
             "cancel_attrs": {
                 "autofocus": True,
-                "data-citry-dialog-close": "",
+                "data-citry-dialog-close": citry_ui_owned_value(),
                 "value": "cancel",
             },
             "action_attrs": {
-                "data-citry-dialog-close": "",
+                "data-citry-dialog-close": citry_ui_owned_value(),
                 "value": "action",
             },
             "attrs": merge_root_attrs(_copy_attrs(kwargs.attrs), kwargs.class_, kwargs.style),

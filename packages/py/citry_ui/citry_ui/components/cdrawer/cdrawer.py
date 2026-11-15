@@ -10,6 +10,7 @@ from citry import LibraryComponent, SlotInput
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
+    citry_ui_owned_value,
     merge_root_attrs,
     reject_vue_directive_attrs,
 )
@@ -160,9 +161,9 @@ class CDrawer(LibraryComponent):
                 "aria-haspopup": "dialog",
                 "aria-controls": drawer_id,
                 "aria-expanded": "true" if kwargs.open else "false",
-                "data-citry-drawer-trigger": "",
+                "data-citry-drawer-trigger": citry_ui_owned_value(),
             },
-            "close_attrs": {"data-citry-drawer-close": ""},
+            "close_attrs": {"data-citry-drawer-close": citry_ui_owned_value()},
             "attrs": merge_root_attrs(kwargs.attrs, kwargs.class_, kwargs.style),
         }
 

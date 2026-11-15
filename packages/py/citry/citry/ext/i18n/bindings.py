@@ -25,6 +25,7 @@ from citry._vue.capture import (
 from citry._walk import Call, run
 from citry.attrs import (
     merge_attrs,
+    reject_citry_marker_attr_name,
     reject_script_capable_attr_name,
     reject_vue_code_attr_name,
     template_attr_value,
@@ -363,6 +364,8 @@ class I18nBindingElementAttrsNode(Node):
                         tag_name=self.original.tag_name,
                     )
                     _reject_reserved_output(resolved_key, self.original.tag_name)
+                    # After the Events and reserved-output checks, so those names keep their own errors.
+                    reject_citry_marker_attr_name(resolved_key, tag_name=self.original.tag_name, where="c-bind")
                     normalized = const_value(value)
                     contribution[resolved_key] = normalized
                     _note_provenance(provenance, composed, _html_identity(resolved_key), captures, normalized)

@@ -17,6 +17,7 @@ from citry_ui.components._attrs import (
     get_html_form_owner,
     merge_root_attrs,
     pop_html_attr,
+    reject_citry_ui_reserved_attr,
     reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FIELD_CONTROL_MARKER, FORM_CONTEXT_KEY
@@ -37,7 +38,6 @@ CTimeInputSize = Literal["sm", "md", "lg"]
 
 _VARIANTS = ("outline", "filled", "plain")
 _SIZES = ("sm", "md", "lg")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _OWNED_ATTRS = frozenset(
     {
         "aria-invalid",
@@ -84,12 +84,10 @@ def _attrs(value: Mapping[str, object] | None) -> dict[str, object]:
     # A Vue directive could rebind an owned attribute, add a listener, or
     # change the structure, so none may arrive through Python data.
     reject_vue_directive_attrs(copied, "CTimeInput")
-    for key in copied:
+    for key, attr_value in copied.items():
         if not isinstance(key, str):
             raise TypeError(f"CTimeInput attrs require string keys, got {key!r}.")
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
-            raise ValueError(f"CTimeInput attrs cannot contain reserved runtime attribute {key!r}.")
+        reject_citry_ui_reserved_attr(key, attr_value, where="CTimeInput attrs")
     return copied
 
 

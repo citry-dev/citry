@@ -232,7 +232,7 @@ def test_empty_part_attrs_are_harmless_when_the_destination_is_absent(input_name
     ],
 )
 def test_owned_and_reserved_runtime_attrs_are_rejected(input_name, attribute, slots):
-    with pytest.raises(ValueError, match=r"owned attribute|reserved Citry runtime"):
+    with pytest.raises(ValueError, match=r"owned attribute|are reserved for the browser"):
         _render(CCard(**{input_name: {attribute: "consumer"}}, slots=slots))
 
 

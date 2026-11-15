@@ -15,6 +15,7 @@ from citry_ui.components._attrs import (
     get_html_form_owner,
     merge_root_attrs,
     pop_html_attr,
+    reject_citry_ui_reserved_attr,
     reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
@@ -64,7 +65,6 @@ _CALENDAR_DATE_FORMATS = (
     "citry-ui-calendar-day",
     "citry-ui-calendar-date-label",
 )
-_RUNTIME_PREFIXES = ("data-citry-", "data-ccalendar", "data-cid")
 _ROOT_OWNED = frozenset(
     {
         "aria-disabled",
@@ -95,11 +95,10 @@ def _attrs(value: Mapping[str, object] | None) -> dict[str, object]:
     # A Vue directive could rebind an owned attribute, add listeners, or
     # change the grid's structure, so none may arrive through Python data.
     reject_vue_directive_attrs(copied, "CCalendar")
-    for key in copied:
+    for key, attr_value in copied.items():
         if not isinstance(key, str):
             raise TypeError(f"CCalendar attrs require string keys, got {key!r}.")
-        if key.casefold().startswith(_RUNTIME_PREFIXES):
-            raise ValueError(f"CCalendar attrs cannot contain reserved runtime attribute {key!r}.")
+        reject_citry_ui_reserved_attr(key, attr_value, where="CCalendar attrs", extra_prefixes=("data-ccalendar",))
     return copied
 
 

@@ -263,6 +263,10 @@ def _runs_unless_skipped(*parents: str) -> str:
     return f"${{{{ !cancelled() && {results} }}}}"
 
 
+# Jobs in py--tests.yml that run on pushes and manual runs only. Each still
+# needs its parent like any other job, and adds one clause to its condition.
+_SKIPS_ON_PULL_REQUESTS = {"framework-floors"}
+
 # The jobs that build the shared citry-core wheel once per OS.
 _CORE_WHEEL_JOBS = ("citry-core-wheel-linux", "citry-core-wheel-windows", "citry-core-wheel-macos")
 
@@ -317,7 +321,10 @@ def test_python_tests_start_on_every_pull_request_and_skip_without_python_change
             # skipped, and `changes` is skipped on every push.
             condition = " ".join(job["if"].split())
             if all(parent in _CORE_WHEEL_JOBS for parent in needs):
-                assert condition == _runs_unless_skipped(*needs), name
+                expected = _runs_unless_skipped(*needs)
+                if name in _SKIPS_ON_PULL_REQUESTS:
+                    expected = expected.removesuffix(" }}") + " && github.event_name != 'pull_request' }}"
+                assert condition == expected, name
             else:
                 assert condition == _runs_after(*needs), name
 
@@ -715,7 +722,9 @@ def test_workspace_core_wheel_consumers_reject_ambiguous_cached_outputs() -> Non
         for step in job.get("steps", [])
         if "--core-wheel" in step.get("run", "")
     ]
-    assert len(core_consumers) == 2
+    # The two distribution smoke steps, the rolling-deploy check and the
+    # lsp-pairs check.
+    assert len(core_consumers) == 4
     for step in core_consumers:
         assert step["shell"] == "bash"
         assert "${#core_wheels[@]} -ne 1" in step["run"]
@@ -767,3 +776,38 @@ def test_the_small_thread_depth_probes_run_in_one_native_path_cell() -> None:
     probe_cell = (probes["os"], probes["python"])
     assert probe_cell in _python_test_cells()["pr"]
     assert probe_cell != (python_path["os"], python_path["python"])
+
+
+def _release_tuple(version: str) -> tuple[int, ...]:
+    """Return a plain release number as integers without trailing zeros, so 5.2 equals 5.2.0."""
+    parts = [int(part) for part in version.split(".")]
+    while parts and parts[-1] == 0:
+        parts.pop()
+    return tuple(parts)
+
+
+def test_the_framework_floor_job_tests_the_floors_the_starters_declare() -> None:
+    jobs = _load_workflow("py--tests.yml")["jobs"]
+    job = jobs["framework-floors"]
+    pins = dict(pin.split("==") for pin in job["env"]["FRAMEWORK_FLOORS"].split())
+
+    # Each starter declares the oldest version of its framework a new project
+    # may install, so the job must test exactly that version. A starter that
+    # raises its floor without the job, or the reverse, fails here.
+    starters = _REPO_ROOT / "examples" / "starters"
+    for framework in ("django", "fastapi", "flask"):
+        project = tomllib.loads((starters / framework / "pyproject.toml").read_text(encoding="utf-8"))
+        declared = [
+            match["floor"]
+            for requirement in project["project"]["dependencies"]
+            if (match := re.fullmatch(rf"{framework}>=(?P<floor>[\d.]+)(,<\d+)?", requirement))
+        ]
+        assert len(declared) == 1, (framework, project["project"]["dependencies"])
+        assert _release_tuple(declared[0]) == _release_tuple(pins[framework]), framework
+
+    # The floors run on the oldest supported Python, which every floor
+    # supports; an old framework release may predate the newest Python.
+    python_steps = [step for step in job["steps"] if step.get("uses", "").startswith("actions/setup-python@")]
+    assert len(python_steps) == 1
+    oldest = min((cell[1] for cell in _python_test_cells()["full"]), key=_release_tuple)
+    assert python_steps[0]["with"]["python-version"] == oldest

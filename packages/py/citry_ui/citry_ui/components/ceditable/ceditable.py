@@ -15,6 +15,7 @@ from citry_ui.components._attrs import (
     is_vue_directive_attribute,
     merge_root_attrs,
     pop_html_attr,
+    reject_citry_ui_reserved_attr,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
 from citry_ui.components._i18n import uses_catalog_default
@@ -39,7 +40,6 @@ _ACTION_POSITIONS = ("inside", "outside")
 _SUBMIT_MODES = ("enter", "blur", "both", "explicit")
 _VARIANTS = ("outline", "filled", "plain")
 _SIZES = ("sm", "md", "lg")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_OWNED = frozenset(
     {
         "aria-hidden",
@@ -144,12 +144,11 @@ def _attrs(
         raise TypeError(f"{owner} {input_name} must be a mapping or None, got {attrs!r}.")
     copied = dict(attrs or {})
     reject_owned_attrs(copied, owned, f"{owner} {input_name}")
-    for key in copied:
+    for key, attr_value in copied.items():
         if not isinstance(key, str):
             raise TypeError(f"{owner} {input_name} requires string keys, got {key!r}.")
         normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
-            raise ValueError(f"{owner} {input_name} cannot contain Citry runtime attribute {key!r}.")
+        reject_citry_ui_reserved_attr(key, attr_value, where=f"{owner} {input_name}")
         # A Vue directive could rebind an owned attribute (including the
         # description links the component merges), change a part's structure,
         # or attach a listener, so none may arrive through Python data.

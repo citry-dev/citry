@@ -7,7 +7,13 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    is_vue_directive_attribute,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+)
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._url import check_link_url
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
@@ -15,7 +21,6 @@ from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 CBreadcrumbsSize = Literal["sm", "md", "lg"]
 
 _SIZES = ("sm", "md", "lg")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_OWNED_ATTRS = frozenset({"aria-hidden", "aria-label", "data-citry-ui-part", "data-size", "data-wrap", "role"})
 _LIST_OWNED_ATTRS = frozenset({"aria-hidden", "data-citry-ui-part", "role"})
 _ITEM_OWNED_ATTRS = frozenset({"aria-current", "aria-hidden", "data-citry-ui-part", "href", "role"})
@@ -82,9 +87,8 @@ def _copy_attrs(input_name: str, attrs: Mapping[str, object] | None) -> dict[str
 def _validate_attrs(input_name: str, attrs: dict[str, object], owned: frozenset[str]) -> None:
     component_name = f"CBreadcrumbs {input_name}"
     reject_owned_attrs(attrs, owned, component_name)
-    for key in attrs:
-        if key.casefold().startswith(_RUNTIME_PREFIXES):
-            raise ValueError(f"{component_name} cannot contain reserved Citry runtime attribute {key!r}.")
+    for key, attr_value in attrs.items():
+        reject_citry_ui_reserved_attr(key, attr_value, where=component_name)
         # A Vue directive could rebind an owned attribute such as `href`, add
         # listeners, or change the trail's structure, so none may arrive through Python data.
         if is_vue_directive_attribute(key):

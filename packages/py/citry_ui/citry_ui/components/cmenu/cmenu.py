@@ -13,7 +13,14 @@ from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_DEPENDENCY,
     ANCHORED_LAYER_RUNTIME_JS,
 )
-from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    citry_ui_owned_value,
+    is_vue_directive_attribute,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+)
 from citry_ui.components._direct_output import feed_typed_direct_output
 from citry_ui.components._shared_component_assets import build_shared_component_assets
 from citry_ui.components._url import check_link_url
@@ -155,7 +162,6 @@ _PLACEMENTS = (
 _SIZES = ("sm", "md", "lg")
 _INTENTS = ("default", "danger")
 _MENU_CONTEXT_KEY = "citry_ui_menu"
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _SURFACE_OWNED_ATTRS = frozenset(
     {
         "aria-hidden",
@@ -405,15 +411,13 @@ def _validate_attrs(
 ) -> None:
     reject_owned_attrs(attrs, owned, component_name)
     normalized_keys: set[str] = set()
-    for key in attrs:
+    for key, attr_value in attrs.items():
         normalized = key.casefold()
         if normalized in normalized_keys:
             msg = f"{component_name} cannot contain duplicate case variants of {key!r}."
             raise ValueError(msg)
         normalized_keys.add(normalized)
-        if normalized.startswith(_RUNTIME_PREFIXES):
-            msg = f"{component_name} cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
+        reject_citry_ui_reserved_attr(key, attr_value, where=component_name)
         # A Vue directive could rebind owned focus, visibility, or anchoring,
         # change the menu structure, or attach a listener, so none may arrive
         # through Python data.
@@ -811,7 +815,7 @@ def _build_menu_root_snapshot(
             "aria-haspopup": "menu",
             "aria-controls": menu_id,
             "aria-expanded": "true" if kwargs.open and not kwargs.disabled else "false",
-            "data-citry-menu-trigger": "",
+            "data-citry-menu-trigger": citry_ui_owned_value(),
             "style": {"anchor-name": anchor_name},
         },
         "activator_disabled": bool(kwargs.disabled),

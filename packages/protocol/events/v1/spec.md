@@ -963,9 +963,14 @@ place. A refreshed token arrives the same two ways: in the Events records of a
 new render, or in a `state` action beside the refreshed values.
 
 When the server rejects a token, it answers one of two error codes. The
-difference matters to the browser: Citry's browser client offers to reload
-the page when a call answers `stale_state` (409), because a reload brings
-a fresh token. It treats `invalid_state` (403) like any other error.
+difference matters to the browser: Citry's browser client treats a
+`stale_state` (409) answer as an out-of-date page, which a reload fixes
+because the reloaded page carries a fresh token. It fires
+`citry:events:stale` with reason `version`, so the app can tell the
+visitor. Unless a listener cancels the event, it also reports the page
+once: on a page rendered in development mode it asks its own reload
+question, and on any other page it writes a console warning. It
+treats `invalid_state` (403) like any other error.
 
 The server checks the token of a call that needs State in this order, and
 answers the first problem it finds:
@@ -991,8 +996,8 @@ all. A component without State ignores a token.
 Step 1 exists because a later release can change the token format.
 During a deploy, a page that the new release rendered can send its token
 to a process still running the old release. That process answers
-`stale_state`, so Citry's browser client asks the visitor to reload
-instead of showing a plain error.
+`stale_state`, so Citry's browser client reports an out-of-date page
+instead of a plain error.
 
 A server cannot tell a token with a changed signature from an honest token
 signed with a secret it has since removed, because both are readable
@@ -1244,18 +1249,21 @@ client written against this document keeps working on every 1.x release.
 
 The `prepared` object of a `vue-prepared/1` render is one part this
 document does not define. Its contents belong to the browser runtime of the
-release that wrote it, and Citry's browser code refuses one whose helper
-contract differs from its own. So during an upgrade, a page rendered by the
-old release can fail to apply a `vue-prepared/1` render from a server
-already running the new release. The call fails with an error, no reload
-prompt appears, and the page keeps failing such calls until the visitor
-reloads it. An `html-fragment/1`
-render has no such limit.
+release that wrote it, and Citry's browser code refuses a render built for
+different render helpers than its own. So during an upgrade, a page
+rendered by one release can fail to apply a `vue-prepared/1` render from a
+server running another. The browser, not the server, then fails the call
+with an error whose code is `stale_state` and whose `status` is 0. That
+error never travels on the wire, so the 409 pairing in [Errors](#errors)
+does not apply to it. The page reports it as it reports a `stale_state`
+answer from the server, and keeps failing such calls until it is
+reloaded. An `html-fragment/1` render has no such limit.
 
 The format inside `stateToken` is not defined here either, and a 1.x
 release may change it. A server answers a token from a token version it
 does not know with `stale_state` (see [State tokens](#state-tokens)), so
-during an upgrade a page with such a token is offered a reload.
+during an upgrade a page with such a token reports that it is out of
+date.
 
 A v1 reader rejects unknown fields and values (see
 [The contract is strict](#the-contract-is-strict)), so v1 has no room for

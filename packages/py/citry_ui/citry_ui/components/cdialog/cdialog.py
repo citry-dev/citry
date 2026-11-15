@@ -8,7 +8,13 @@ from typing import Any, ClassVar, Literal
 
 from citry import LibraryComponent, SlotInput
 from citry_ui.components._anchored_layer import ANCHORED_LAYER_RUNTIME_DEPENDENCY
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    citry_ui_owned_value,
+    merge_root_attrs,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._dialog_controller import DIALOG_CONTROLLER_RUNTIME_DEPENDENCY
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
@@ -145,10 +151,12 @@ class CDialog(LibraryComponent):
                 "aria-haspopup": "dialog",
                 "aria-controls": dialog_id,
                 "aria-expanded": "true" if kwargs.open else "false",
-                "data-citry-dialog-trigger": "",
+                # Marked as written by Citry UI, so a `<c-CButton>` that gets
+                # these attrs through slot data accepts the name.
+                "data-citry-dialog-trigger": citry_ui_owned_value(),
             },
             "close_attrs": {
-                "data-citry-dialog-close": "",
+                "data-citry-dialog-close": citry_ui_owned_value(),
             },
             "attrs": merge_root_attrs(kwargs.attrs, kwargs.class_, kwargs.style),
         }

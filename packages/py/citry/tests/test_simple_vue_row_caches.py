@@ -235,6 +235,10 @@ ERROR_CASES: list[dict[str, object]] = [
     {"$c-props": "x"},
     {"$C-PROPS": "x"},
     {"innerHTML": "x"},
+    # Names Citry reserves for its own elements and placeholders.
+    {"c-render-id": "x"},
+    {"data-cid-x": "x"},
+    {"DATA-CITRY-VUE-FRAGMENT": "x"},
 ]
 
 

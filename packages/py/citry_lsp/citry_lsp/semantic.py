@@ -13,8 +13,7 @@ from typing import TYPE_CHECKING
 
 from lsprotocol import types
 
-from citry._source_lines import source_lines
-from citry.analysis import JsonWireType, build_reveal_shadow, json_wire_type_from_annotation
+from citry._lsp_support import JsonWireType, build_reveal_shadow, json_wire_type_from_annotation, source_lines
 from citry_lsp.engine import (
     _I18N_CALL_SIGNATURES,
     _I18N_OPERATION_SIGNATURES,

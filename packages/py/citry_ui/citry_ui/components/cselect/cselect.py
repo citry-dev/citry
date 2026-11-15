@@ -18,6 +18,7 @@ from citry_ui.components._attrs import (
     get_html_form_owner,
     merge_root_attrs,
     pop_html_attr,
+    reject_citry_ui_reserved_attr,
     reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
@@ -51,7 +52,6 @@ CSelectOpenReason = Literal[
 _PLACEMENTS = ("bottom-start", "bottom-end", "top-start", "top-end")
 _VARIANTS = ("outline", "filled", "plain")
 _SIZES = ("sm", "md", "lg")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_OWNED = frozenset(
     {
         "aria-hidden",
@@ -210,13 +210,11 @@ def _attrs(
         raise TypeError(msg)
     copied = dict(attrs or {})
     reject_owned_attrs(copied, owned, f"{owner} {input_name}")
-    for key in copied:
+    for key, attr_value in copied.items():
         if not isinstance(key, str):
             msg = f"{owner} {input_name} requires string keys, got {key!r}."
             raise TypeError(msg)
-        if key.casefold().startswith(_RUNTIME_PREFIXES):
-            msg = f"{owner} {input_name} cannot contain Citry runtime attribute {key!r}."
-            raise ValueError(msg)
+        reject_citry_ui_reserved_attr(key, attr_value, where=f"{owner} {input_name}")
     # A Vue directive could rebind the selection, listbox wiring, or Form
     # state this component owns, so none may arrive through Python data.
     reject_vue_directive_attrs(copied, f"{owner} {input_name.removesuffix('attrs').rstrip('_')}".rstrip())

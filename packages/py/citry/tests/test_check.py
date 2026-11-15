@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import importlib.metadata
 import json
 import os
 import sys
 import textwrap
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import TYPE_CHECKING, cast
 
 import pytest
@@ -24,6 +25,7 @@ from citry._checker import (
 )
 from citry._diagnostic_catalog import I18N_CATALOG_INVALID, I18N_MISSING_PARAM_TYPE, TEMPLATE_MARKER_NAME_INVALID
 from citry._symbol_table import CHECK_NOTE, symtable
+from citry.commands import check as check_command
 from citry.ext.i18n import DateFormat, FormatRegistry, NumberFormat
 from citry.ext.i18n.extension import I18nExtension
 
@@ -3379,3 +3381,115 @@ def test_registry_check_reports_lowercase_child_listener_typos_with_the_configur
             "Component 'c-card' does not declare event 'hdie' in its emits option. Did you mean 'hide'?",
         ),
     ]
+
+
+def _fake_module(name: str, **attributes: object) -> ModuleType:
+    module = ModuleType(name)
+    vars(module).update(attributes)
+    return module
+
+
+@pytest.fixture
+def _citry_lsp_without_one_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    # An installed citry-lsp from another release: every module is there,
+    # but `citry_lsp.typescript` lacks a name this citry imports.
+    modules = {
+        "lsprotocol": _fake_module("lsprotocol"),
+        "lsprotocol.types": _fake_module("lsprotocol.types", DiagnosticSeverity=object),
+        "citry_lsp": _fake_module("citry_lsp"),
+        "citry_lsp.project": _fake_module("citry_lsp.project", load_project=object),
+        "citry_lsp.project_check": _fake_module(
+            "citry_lsp.project_check", check_project_python_types=object, project_documents=object
+        ),
+        "citry_lsp.type_analysis": _fake_module("citry_lsp.type_analysis", TyUnavailableError=Exception),
+        "citry_lsp.typescript": _fake_module(
+            "citry_lsp.typescript", TypeScriptUnavailableError=Exception, check_project_types=object
+        ),
+    }
+    for name, module in modules.items():
+        monkeypatch.setitem(sys.modules, name, module)
+
+
+def _fake_versions(monkeypatch: pytest.MonkeyPatch, versions: dict[str, str]) -> None:
+    def version(name: str) -> str:
+        if name not in versions:
+            raise importlib.metadata.PackageNotFoundError(name)
+        return versions[name]
+
+    monkeypatch.setattr(importlib.metadata, "version", version)
+
+
+@pytest.mark.usefixtures("_citry_lsp_without_one_name")
+def test_check_types_names_the_matching_citry_lsp_when_one_name_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _fake_versions(monkeypatch, {"citry": "1.2.0", "citry-lsp": "0.4.0"})
+
+    with pytest.raises(SystemExit) as exit_info:
+        check_command._with_type_findings(cast("CheckReport", None), "app:engine", tmp_path)
+
+    assert exit_info.value.code == 2
+    assert capsys.readouterr().err == (
+        "citry check: error: --types cannot run the type checks: citry-lsp 0.4.0 does not match "
+        "citry 1.2.0; install it with 'python -m pip install \"citry-lsp>=1.0.0,<2\"'\n"
+    )
+
+
+def test_check_types_asks_for_citry_lsp_when_it_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # None in sys.modules makes the import fail as if the package were absent,
+    # also when an earlier test already imported its modules.
+    for name in ("citry_lsp", "citry_lsp.project", "citry_lsp.project_check", "citry_lsp.type_analysis"):
+        monkeypatch.setitem(sys.modules, name, None)
+    _fake_versions(monkeypatch, {"citry": "1.2.0"})
+
+    with pytest.raises(SystemExit) as exit_info:
+        check_command._with_type_findings(cast("CheckReport", None), "app:engine", tmp_path)
+
+    assert exit_info.value.code == 2
+    assert capsys.readouterr().err == (
+        "citry check: error: --types cannot run the type checks: they need the citry-lsp package; "
+        "install it with 'python -m pip install \"citry-lsp>=1.0.0,<2\"'\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("versions", "error", "expected"),
+    [
+        pytest.param(
+            {"citry": "0.9.0", "citry-lsp": "0.4.0"},
+            ImportError("cannot import name 'find_typescript_compiler'"),
+            "citry-lsp 0.4.0 does not match citry 0.9.0; install a matching release with "
+            "'python -m pip install --upgrade citry-lsp'",
+            id="0.x-citry-has-no-range",
+        ),
+        pytest.param(
+            {"citry-lsp": "1.0.0"},
+            ImportError("cannot import name 'find_typescript_compiler'"),
+            "citry-lsp 1.0.0 does not match citry (unknown version); install a matching release with "
+            "'python -m pip install --upgrade citry-lsp'",
+            id="no-citry-metadata",
+        ),
+        pytest.param(
+            {"citry": "1+local", "citry-lsp": "1.0.0"},
+            AttributeError("x"),
+            "citry-lsp 1.0.0 does not match citry 1+local; install a matching release with "
+            "'python -m pip install --upgrade citry-lsp'",
+            id="unusual-version",
+        ),
+        pytest.param(
+            {"citry": "1.2.0", "citry-lsp": "1.2.0"},
+            ModuleNotFoundError("No module named 'lsprotocol'", name="lsprotocol"),
+            "citry-lsp 1.2.0 cannot import 'lsprotocol', which it needs; reinstall it with "
+            "'python -m pip install --force-reinstall citry-lsp'",
+            id="broken-install",
+        ),
+    ],
+)
+def test_citry_lsp_import_message(
+    monkeypatch: pytest.MonkeyPatch, versions: dict[str, str], error: ImportError, expected: str
+) -> None:
+    _fake_versions(monkeypatch, versions)
+
+    assert check_command._citry_lsp_import_message(error) == expected

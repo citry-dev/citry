@@ -586,6 +586,7 @@ Sources are paths under `packages/`. `client.js` is
 | Event | Source | Documented | Status |
 |---|---|---|---|
 | `citry:events:before` (cancelable), `after` `{ok}`, `error` `{error}`, `swapped` `{els}`, `stale` `{reason}` (cancelable for reason `version`), with `{instance, class, event}` | `client.js:4891-4905`; `events-vue.ts` | BA `#events-fired-around-each-call` | covered. The `error` detail is a `citry-events/1` error, or one with code `timeout` or `transport` for a failure in the browser (`events-vue.ts:242-256`); BA does not describe that shape yet |
+| `citry:fragments:stale` `{reason, error}` (bubbles, cancelable), fired on the fragment's data block or on `document` | `js/citry-fragments.ts:124-146` | BA `#out-of-date-pages` | covered |
 | A server `Dispatch` event, under the app's own name | `client.js:4217-4230` | BA (`$onEvent`, `Citry.events.on`) | covered |
 | `citry:ready` `{appId, revision}` | `client.js:4776` | `docs_site/content/vue/server-rendering.md` | covered as documented there; the detail fields are not described |
 | `citry:rendered` `{appId, revision}` | `client.js:4327` | none | not covered |
@@ -641,11 +642,13 @@ Open items found while making this inventory, left for the maintainer:
   `vue-prepared/1` render carries a helper contract hash
   (`py/citry/citry/_vue/compiler.py:526-540`) that the browser checks
   against its own (`client.js:1462`). A page rendered by the old release
-  cannot apply a render from a newer server whose helpers changed. The
-  spec now says so. Rolling deploys are promised only between 1.x
-  releases (decided; 0.x to 1.0.0 starts fresh), so the rolling-deploy
-  test (decision 10) should cover a 1.x upgrade that changes the
-  helpers.
+  cannot apply a render from a newer server whose helpers changed; it
+  fails the call with `stale_state` and reports an out-of-date page
+  (a reload question only in development mode), and the spec
+  says so. Rolling deploys are promised only between 1.x
+  releases (decided; 0.x to 1.0.0 starts fresh).
+  `scripts/rolling_deploy/check.py` covers it once a 1.x release changes
+  the helpers.
 - **Security fixes.** Decided: a 1.x release may refuse a
   `citry-events/1` input that earlier releases accepted when a security
   fix needs it, and says so in the changelog. The public "Versioning and

@@ -326,7 +326,7 @@ def test_item_is_direct_only_and_nested_accordion_is_panel_only():
     [
         ("attrs", "aria-label", "cannot override owned attribute"),
         ("attrs", "popover", "cannot override owned attribute"),
-        ("attrs", "data-citry-hostile", "reserved Citry runtime attribute"),
+        ("attrs", "data-citry-hostile", "are reserved for the browser"),
         ("attrs", "v-bind:data-state", "Vue directive"),
         ("attrs", "v-if", "Vue directive"),
         ("attrs", "V-IF", "Vue directive"),

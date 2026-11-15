@@ -212,14 +212,42 @@
         pageVuePlugins.push(Object.freeze({plugin, options}));
       }});
   }
-  // Ask at most once per page: a deploy tends to make every following call stale at once, and asking again
-  // after the user declined would nag. One page may run several apps, so the flag lives outside them.
-  let reloadPrompted = false;
-  function promptReload() {
-    if (reloadPrompted) return;
-    reloadPrompted = true;
-    if (global.confirm("This page and the server are running different versions of the app. Reload to get back in sync?"))
-      global.location.reload();
+  // Report an out-of-date page at most once: a deploy tends to make every following call stale at once,
+  // and repeating it would nag. One page may run several apps, so the flag lives outside them.
+  let outOfDateReported = false;
+  // The mode of the first app the page itself started (through startDocument), or undefined on a page
+  // that only receives fragments. A fragment's own flag is used only on such a page, so a fragment block
+  // injected into a production page cannot make the page ask its question.
+  let pageDevelopment;
+  function reportOutOfDate(development) {
+    if (outOfDateReported) return;
+    outOfDateReported = true;
+    // Only a page Citry(mode="development") rendered asks the built-in question, so a developer notices
+    // the case. In production the app decides how to tell its visitors, and Citry never reloads by itself.
+    if (development) {
+      if (global.confirm("This page is out of date. Reload to continue?")) global.location.reload();
+      return;
+    }
+    console.warn("[Citry] This page is out of date: the server no longer accepts its State, or it sent a " +
+      "render or fragment from another Citry release. Citry does not reload the page by itself. To tell the visitor, " +
+      "listen for citry:events:stale (reason \"version\") and citry:fragments:stale; see " +
+      "https://citry.dev/reference/browser-apis/#out-of-date-pages");
+  }
+  // A render or fragment written by another release of the app (a newer server during a deploy) can
+  // use a format this runtime cannot read. It fails with the code the server gives a State token it
+  // no longer accepts, so Citry reports it the same way and a page that handles `stale_state`
+  // handles this case too. Status 0 marks a failure found in the browser, as it does for `timeout`.
+  function pageOutOfDateError(message) {
+    const error = new Error(message);
+    error.status = 0;
+    error.code = "stale_state";
+    return error;
+  }
+  // The helper contract names the render helpers a definition was compiled against. Another value
+  // means another release compiled it, which is a page to reload rather than a broken render.
+  function assertSameHelperContract(value) {
+    if (typeof value === "string" && value !== HELPER_CONTRACT)
+      throw pageOutOfDateError("[Citry] the server sent a render from a different Citry release; reload the page");
   }
   const registeredTypeOptions = new Map();
   const browserPluginFactories = new Map();
@@ -1119,6 +1147,8 @@
 
   function normalizeDefinitionAsset(asset) {
     plain(asset, "prepared definition asset");
+    // Checked before the field list, which a release with other helpers may also have changed.
+    assertSameHelperContract(asset.helperContract);
     const keys = ["directiveSignature", "dynamicElements", "helperContract", "id", "localCallRuns",
       "localCalls", "opaqueHtmlSites", "replacementSites", "runtimeEventSites", "sha256", "target", "url"];
     if (Object.keys(asset).sort().join(",") !== [...keys].sort().join(",") ||
@@ -1459,6 +1489,7 @@
 
   function registerDefinition(appId, definitionId, definition, expected = null) {
     plain(definition, "render definition");
+    assertSameHelperContract(definition.helperContract);
     if (typeof definitionId !== "string" || typeof definition.render !== "function" || definition.target !== ORDINARY_TARGET || definition.helperContract !== HELPER_CONTRACT) throw new TypeError("invalid render definition");
     const normalized = Object.freeze({render: definition.render, target: definition.target, helperContract: definition.helperContract, dynamicElements:normalizeDynamicElements(definition.dynamicElements || []),directiveSignature: normalizeDirectiveSignature(definition.directiveSignature),replacementSites:normalizeReplacementSites(definition.replacementSites),localCalls:normalizeLocalCalls(definition.localCalls),localCallRuns:normalizeLocalCallRuns(definition.localCallRuns),opaqueHtmlSites:normalizeOpaqueHtmlSites(definition.opaqueHtmlSites),runtimeEventSites:normalizeRuntimeEventSites(definition.runtimeEventSites || [])});
     validateRuntimeEventSiteDeclarations(normalized.directiveSignature, normalized.runtimeEventSites);
@@ -3725,6 +3756,13 @@
       preflightResult(result, source) {
         const renders = result.ok ? result.actions.filter(action => action.action === "render") : [];
         if (!renders.length) return {result};
+        // A render from another Citry release can fail any later check with a plain error, so its
+        // helper contract is read first and the page reports that it is out of date instead.
+        for (const action of renders) {
+          const definitions = action.prepared?.definitions;
+          if (Array.isArray(definitions))
+            for (const asset of definitions) assertSameHelperContract(asset?.helperContract);
+        }
         if (renders.length > 1) {
           const indexes = renders.map(action => result.actions.indexOf(action));
           if (indexes.some((index, ordinal) => index !== indexes[0] + ordinal) ||
@@ -4241,7 +4279,7 @@
         const mounted = ownedApp.mounted.get(effectiveSource.stableId);
         // The calling component may be unmounted or replaced while its call is in flight. Page
         // listeners on `document` must still hear the notification (a `stale` event under reason
-        // `version` decides whether the reload prompt appears), so a gone component only changes
+        // `version` decides whether Citry makes its own report), so a gone component only changes
         // where the event starts. The detail keeps the render ID and class the call last reported,
         // so a listener can still match the notification to the `before` event it saw.
         const live = context && mounted && mounted.record.generation === effectiveSource.generation;
@@ -4254,7 +4292,7 @@
         return dispatchLifecycleEvent(
           kind, identity, live ? liveRootElements(mounted.component) : [], event, extra);
       },
-      promptReload,
+      reportOutOfDate() { reportOutOfDate(configuration.development === true); },
       redirect(url) { navigateToRedirect(url); },
       updateUrl(url, mode) { updateHistory(mode, {}, url); },
       takePendingState(source, handlerName) {
@@ -4899,7 +4937,7 @@
     return (roots[0] || pageDocument).dispatchEvent(new CustomEvent(`citry:events:${kind}`, {
       detail,
       bubbles: true,
-      // A page cancels `before` to stop a call, and a version-skew `stale` to replace the reload prompt.
+      // A page cancels `before` to stop a call, and a version-skew `stale` to replace Citry's own report.
       cancelable: kind === "before" || (kind === "stale" && extra.reason === "version"),
     }));
   }
@@ -5753,6 +5791,7 @@
     const configuration = JSON.parse(blocks[0].textContent);
     if (configuration?.manifest?.appId !== appId)
       throw new Error(`[Citry] the configuration block for app ${appId} describes a different app`);
+    pageDevelopment ??= configuration.development === true;
     // Report a failed start as an uncaught error on the page (window.onerror and the
     // console see it), without leaving an unhandled promise rejection.
     startPrepared(configuration).catch(error => queueMicrotask(() => { throw error; }));
@@ -5770,5 +5809,7 @@
     startPrepared,
     documentNonce,
     carriesPageNonce,
+    // The page's own mode wins over the one a fragment claims; see pageDevelopment.
+    (fragmentDevelopment) => reportOutOfDate(pageDevelopment ?? fragmentDevelopment),
   );
 })(window);

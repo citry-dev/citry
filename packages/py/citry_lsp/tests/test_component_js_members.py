@@ -8,8 +8,7 @@ import pytest
 from lsprotocol import types
 
 from citry import Citry, Component
-from citry._checker import _BrowserSource, _check_browser_source
-from citry.analysis import lint_unknown_component_js_members
+from citry._lsp_support import _BrowserSource, _check_browser_source, lint_unknown_component_js_members
 from citry_lsp.engine import DocumentState, browser_diagnostics, declaration, definition, references
 from citry_lsp.project import load_project
 

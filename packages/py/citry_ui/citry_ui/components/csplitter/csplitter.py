@@ -8,7 +8,13 @@ from hashlib import sha256
 from typing import Any, Literal, TypedDict, cast
 
 from citry import CitryRender, LibraryComponent, Slot, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CSplitterOrientation = Literal["horizontal", "vertical"]
@@ -20,7 +26,6 @@ _ORIENTATIONS = ("horizontal", "vertical")
 _VARIANTS = ("plain", "soft", "outline")
 _SIZES = ("sm", "md", "lg")
 _CONTEXT = "citry_ui_splitter"
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_OWNED = frozenset(
     {
         "aria-hidden",
@@ -175,10 +180,8 @@ def _attrs(
     # A Vue directive could rebind an owned attribute, spread over the root,
     # or change its structure, so none may arrive through Python data.
     reject_vue_directive_attrs(copied, owner)
-    for key in copied:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
-            raise ValueError(f"{owner} attrs cannot contain Citry runtime attribute {key!r}.")
+    for key, attr_value in copied.items():
+        reject_citry_ui_reserved_attr(key, attr_value, where=f"{owner} attrs")
     return merge_root_attrs(copied, class_, style)
 
 

@@ -17,66 +17,39 @@ from types import FunctionType, ModuleType
 from typing import TYPE_CHECKING, Any, Literal
 
 from citry import Citry, ComponentLibrary
-from citry._class_introspection import _safe_class_text, _static_class_dict, _static_class_mro
-from citry._component_introspection import _loaded_python_file
-from citry._linting import _component_lint_variable_owners
-from citry._nested_declarations import _nearest_data_shape_declaration
-from citry._schema_introspection import _inspect_schema_class
-from citry._wire_classes import KwargsWireClasses, kwargs_wire_classes
-from citry.analysis import (
+from citry._lsp_support import (
+    CSRF_FIELD_NAMES_SETTING,
+    DEFINITION_ID_ATTRIBUTE,
+    LIBRARY_DEFINITION_ATTRIBUTE,
+    OWNER_ATTRIBUTE,
+    KwargsWireClasses,
+    _component_events_info,
+    _component_lint_variable_owners,
+    _find_pair_declaration,
+    _inspect_schema_class,
+    _loaded_python_file,
+    _nearest_data_shape_declaration,
+    _safe_class_text,
+    _static_class_dict,
+    _static_class_mro,
+    engine_inject_keys,
+    engine_path_verdicts,
+    event_options,
+    i18n_tooling_index,
+    kwargs_wire_classes,
     python_application_lint_variable_range,
     python_class_asset_resolution_signature,
     python_class_direct_method_first_line,
     python_class_resolution_signature,
     python_class_static_asset_matches,
     python_component_lint_variable_range,
+    slot_data_wire_classes,
+    start_django_from_environment,
 )
-from citry.assets import _find_pair_declaration
-from citry.ext.events.extension import _component_events_info
-from citry.ext.events.handlers import event_options
-
-try:
-    from citry._wire_classes import slot_data_wire_classes
-except ImportError:  # pragma: no cover - an older citry in the app's environment
-    # Without it the worker sends no slot data, and the editor leaves each
-    # fill's data name untyped.
-    slot_data_wire_classes = None  # type: ignore[assignment]
-try:
-    from citry._django_startup import start_django_from_environment
-except ImportError:  # pragma: no cover - an older citry in the app's environment
-
-    def start_django_from_environment() -> None:
-        """Start Django as citry._django_startup does, for a Citry without that module."""
-        # A Django module that imports a model fails to load unless Django has
-        # loaded its apps first, whichever Citry the app runs on.
-        if not os.environ.get("DJANGO_SETTINGS_MODULE"):
-            return
-        try:
-            import django  # noqa: PLC0415
-            from django.apps import apps  # noqa: PLC0415
-        except ImportError:
-            # Without Django the variable is left over from another shell.
-            return
-
-        if not (apps.ready or apps.loading):
-            django.setup()
-
-
-try:
-    from citry._path_checks import engine_path_verdicts
-except ImportError:  # pragma: no cover - an older citry in the app's environment
-    # Without it the worker sends no link verdicts, and the editor checks no links.
-    engine_path_verdicts = None  # type: ignore[assignment]
-
-try:
-    from citry._provide_keys import engine_inject_keys
-except ImportError:  # pragma: no cover - an older citry in the app's environment
-    # Without it the worker sends no provide keys, and the editor checks no inject() keys.
-    engine_inject_keys = None  # type: ignore[assignment]
 
 if TYPE_CHECKING:
-    from citry import TemplateAnalysis
-    from citry.introspection import ComponentCatalog
+    from citry import ComponentCatalog
+    from citry._lsp_support import TemplateAnalysis
 
 _SOURCE_ANALYSIS_VERSION = 1
 
@@ -172,8 +145,6 @@ def _path_verdicts(engine: Citry) -> dict[str, object]:
     The worker exits after this envelope, so the editor cannot ask the
     framework later; it reports only the paths answered here.
     """
-    if engine_path_verdicts is None:
-        return {"checked": False, "verdicts": {}}
     try:
         return engine_path_verdicts(engine)
     except Exception:  # noqa: BLE001 - a failing link check must not stop the editor from loading the app
@@ -187,8 +158,6 @@ def _inject_keys(engine: Citry, workspace: Path) -> dict[str, object]:
     The editor compares the ``self.inject()`` keys in the file being edited
     with these, so it needs no loaded app of its own.
     """
-    if engine_inject_keys is None:
-        return {"checked": False, "classes": []}
     try:
         return engine_inject_keys(engine, workspace)
     except Exception:  # noqa: BLE001 - a failing walk must not stop the editor from loading the app
@@ -198,11 +167,9 @@ def _inject_keys(engine: Citry, workspace: Path) -> dict[str, object]:
 def _extension_analysis(engine: Citry) -> dict[str, object]:
     """Copy opt-in extension indexes without retaining project objects."""
     indexes: dict[str, object] = {}
-    for name in ("i18n",):
-        extension = engine.extensions.get_extension(name)
-        inspector = getattr(extension, "_tooling_index", None)
-        if callable(inspector):
-            indexes[name] = inspector()
+    i18n_index = i18n_tooling_index(engine)
+    if i18n_index is not None:
+        indexes["i18n"] = i18n_index
     indexes["events"] = {"csrf_field_names": _csrf_field_names(engine)}
     return indexes
 
@@ -217,7 +184,7 @@ def _csrf_field_names(engine: Citry) -> list[str]:
     about a ``csrfmiddlewaretoken`` control there.
     """
     defaults = engine.settings.extensions_defaults.get("events", {})
-    value = defaults.get("_csrf_field_names") if isinstance(defaults, Mapping) else None
+    value = defaults.get(CSRF_FIELD_NAMES_SETTING) if isinstance(defaults, Mapping) else None
     if isinstance(value, (list, tuple, set, frozenset)) and all(type(name) is str for name in value):
         return sorted(value)
     return ["csrfmiddlewaretoken"]
@@ -232,7 +199,7 @@ def _source_analysis(
     """Copy static method-resolution provenance without retaining project objects."""
     by_definition: dict[str, type] = {}
     for component_class in engine.components.values():
-        definition_id = _static_class_dict(component_class).get("_definition_id")
+        definition_id = _static_class_dict(component_class).get(DEFINITION_ID_ATTRIBUTE)
         if type(definition_id) is str:
             by_definition[definition_id] = component_class
     components: list[dict[str, object]] = []
@@ -329,10 +296,9 @@ def _slot_data_classes(component_class: type | None) -> dict[str, object]:
     Copy the fields each typed slot passes to its fill, by slot name.
 
     A parent template's `<c-fill data="card">` types `card` from these, so
-    `card.titel` is reported. An older citry that cannot describe slot data
-    sends none, and the fill's name stays untyped.
+    `card.titel` is reported.
     """
-    if component_class is None or slot_data_wire_classes is None:
+    if component_class is None:
         return {}
     return {name: described.to_dict() for name, described in slot_data_wire_classes(component_class).items()}
 
@@ -571,13 +537,12 @@ def _data_resolution_chain(
         # that wrapper; equal source text alone cannot prove generated classes
         # are equivalent to their authored bases.
         next_is_library_definition = (
-            index + 1 < len(mro)
-            and _static_class_dict(mro[index + 1]).get("_citry_is_library_component_definition") is True
+            index + 1 < len(mro) and _static_class_dict(mro[index + 1]).get(LIBRARY_DEFINITION_ATTRIBUTE) is True
         )
         materialized_library_wrapper = (
             index == 0
-            and namespace.get("_citry_owner") is engine
-            and namespace.get("_citry_is_library_component_definition") is False
+            and namespace.get(OWNER_ATTRIBUTE) is engine
+            and namespace.get(LIBRARY_DEFINITION_ATTRIBUTE) is False
             and next_is_library_definition
             and method_name not in namespace
         )
@@ -671,13 +636,12 @@ def _is_materialized_library_wrapper(
     """Identify only Citry's positively marked engine-owned library wrapper."""
     namespace = _static_class_dict(candidate)
     next_is_library_definition = (
-        index + 1 < len(mro)
-        and _static_class_dict(mro[index + 1]).get("_citry_is_library_component_definition") is True
+        index + 1 < len(mro) and _static_class_dict(mro[index + 1]).get(LIBRARY_DEFINITION_ATTRIBUTE) is True
     )
     return (
         index == 0
-        and namespace.get("_citry_owner") is engine
-        and namespace.get("_citry_is_library_component_definition") is False
+        and namespace.get(OWNER_ATTRIBUTE) is engine
+        and namespace.get(LIBRARY_DEFINITION_ATTRIBUTE) is False
         and next_is_library_definition
         and "template_data" not in namespace
     )

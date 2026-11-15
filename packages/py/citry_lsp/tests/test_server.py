@@ -16,7 +16,7 @@ from pygls.exceptions import JsonRpcInvalidParams
 from pytest_lsp import ClientServerConfig, LanguageClient
 
 import citry_lsp.server as server_module
-from citry._symbol_table import EDITOR_NOTE, symtable
+from citry._lsp_support import EDITOR_NOTE, symtable
 from citry_lsp.engine import BrowserProjection, CompletionResult, DocumentState, HtmlProjection, TemplateVariableHover
 from citry_lsp.formatting import PreparedComponentAssets, prepare_component_assets
 from citry_lsp.project import ProjectState

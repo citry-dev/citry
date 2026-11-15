@@ -127,7 +127,7 @@ def test_textarea_accepts_python_decimal_string_dimensions():
         ({"required": 1}, TypeError, r"CTextarea\.Kwargs\.required expects bool \| None"),
         ({"attrs": "id=notes"}, TypeError, r"CTextarea\.Kwargs\.attrs expects Mapping"),
         ({"attrs": {"rows": 9}}, ValueError, "cannot override owned attribute"),
-        ({"attrs": {"data-citry-root": "x"}}, ValueError, "reserved Citry runtime attribute"),
+        ({"attrs": {"data-citry-root": "x"}}, ValueError, "are reserved for the browser"),
     ],
 )
 def test_textarea_rejects_invalid_server_inputs(kwargs, error, message):

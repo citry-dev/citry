@@ -9,7 +9,13 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict, cast
 
 from citry import CitryRender, LibraryComponent, Slot, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_html_id
 
@@ -20,7 +26,6 @@ CSortableChangeSource = Literal["pointer", "keyboard", "reset", "client"]
 _CONTEXT = "citry_ui_sortable"
 _LAYOUTS = ("vertical", "horizontal", "grid")
 _SIZES = ("sm", "md", "lg")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_OWNED = frozenset(
     {
         "aria-disabled",
@@ -136,11 +141,10 @@ def _attrs(
         raise TypeError(f"{owner} attrs must be a mapping or None, got {attrs!r}.")
     copied = dict(attrs or {})
     reject_owned_attrs(copied, owned, f"{owner} attrs")
-    for key in copied:
+    for key, attr_value in copied.items():
         if not isinstance(key, str):
             raise TypeError(f"{owner} attrs require string keys, got {key!r}.")
-        if key.casefold().startswith(_RUNTIME_PREFIXES):
-            raise ValueError(f"{owner} attrs cannot contain Citry runtime attribute {key!r}.")
+        reject_citry_ui_reserved_attr(key, attr_value, where=f"{owner} attrs")
     # A Vue directive could rebind the order, drag handles, or ARIA state this
     # component owns, so none may arrive through Python data.
     reject_vue_directive_attrs(copied, owner)

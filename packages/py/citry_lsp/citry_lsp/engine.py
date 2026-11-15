@@ -17,15 +17,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 from lsprotocol import types
 
 from citry import LspPosition, LspRange
-from citry._authored_expression import parse_authored_expression
-from citry._browser_expressions import (
-    _ascii_lower,
-    _normalized_dynamic_slot_source,
-    _tokens,
-    _vue_hyphenated_prop_name,
-    _vue_prop_name,
-)
-from citry._diagnostic_catalog import (
+from citry._lsp_support import (
     BROWSER_INCOMPATIBLE_COMPONENT_PROP,
     BROWSER_INCOMPATIBLE_SERVER_EVENT_FIELD,
     BROWSER_INVALID_STATE_BINDING_TARGET,
@@ -37,47 +29,17 @@ from citry._diagnostic_catalog import (
     BROWSER_UNKNOWN_SERVER_EVENT_FIELD,
     BROWSER_UNKNOWN_STATE_FIELD,
     CHECK_TEMPLATE_NOT_CHECKED,
+    COMPONENT_ROOT_ATTRIBUTE,
     I18N_ARGUMENT_INVALID,
     I18N_CATALOG_INVALID,
     I18N_UNKNOWN_MESSAGE,
     JS_DATA_PUBLIC_NAME_COLLISION,
     JS_DATA_UNSUPPORTED_TYPE,
+    MARKUP_LINT_RULES,
     PARSE_CONFIGURATION,
+    SERVER_EVENT_CALL_NAMES,
     TEMPLATE_MARKER_NAME_INVALID,
     TEMPLATE_UNKNOWN_COMPONENT,
-)
-from citry._diagnostics import diagnostic_definition, diagnostic_documentation_url, render_diagnostic
-from citry._html_attribute_values import ENUMERATED_VALUES as ENUMERATED_ATTRIBUTE_VALUES
-from citry._html_attribute_values import HTML_ELEMENTS as HTML_ELEMENT_NAMES
-from citry._i18n_directives import looks_like_i18n_binding
-from citry._i18n_guards import i18n_configured_guarded_calls
-from citry._markup_lint import MARKUP_LINT_RULES
-from citry._registry_lint import (
-    ServerEventPayload,
-    server_event_calls,
-    server_event_form_findings,
-    server_event_forms,
-    server_event_payload_findings,
-    server_event_payload_from_description,
-    template_urls,
-    unknown_inject_key_findings,
-    unknown_url_findings,
-)
-from citry._slot_props import (
-    ScopedFill,
-    SlotOutlet,
-    lint_unknown_slot_props,
-    outlets_for_slot,
-    scoped_fills,
-    slot_outlets,
-    slot_prop_name,
-    unknown_slot_props_for,
-)
-from citry._source_lines import source_lines
-from citry._vue_compile_lint import lint_vue_compile
-from citry._walk import Call, run
-from citry.analysis import (
-    SERVER_EVENT_CALL_NAMES,
     AlpineAttributeFinding,
     AlpineAttributeLintConsumer,
     AttributeValueFinding,
@@ -90,6 +52,7 @@ from citry.analysis import (
     BrowserExpression,
     BrowserObjectProperty,
     BrowserProp,
+    Call,
     ComponentJsLintConsumer,
     JsonWireField,
     JsonWireType,
@@ -97,7 +60,10 @@ from citry.analysis import (
     MarkupLintFinding,
     MisspelledDirectiveFinding,
     MisspelledDirectiveLintConsumer,
+    ScopedFill,
+    ServerEventPayload,
     ShadowPythonDocument,
+    SlotOutlet,
     TemplateLintConsumer,
     TemplatePythonControl,
     TemplatePythonQuery,
@@ -105,6 +71,11 @@ from citry.analysis import (
     TemplatePythonSlotDataType,
     TemplatePythonValueType,
     VueLintConsumer,
+    _ascii_lower,
+    _normalized_dynamic_slot_source,
+    _tokens,
+    _vue_hyphenated_prop_name,
+    _vue_prop_name,
     analyze_browser_component_source,
     analyze_browser_expression,
     analyze_css_data_source,
@@ -137,7 +108,10 @@ from citry.analysis import (
     css_data_completion_at,
     css_data_reference_at,
     css_data_references,
+    diagnostic_definition,
+    diagnostic_documentation_url,
     discover_untraced_component_templates,
+    i18n_configured_guarded_calls,
     json_wire_type_from_annotation,
     json_wire_type_from_expression,
     lint_alpine_attributes,
@@ -152,11 +126,16 @@ from citry.analysis import (
     lint_undeclared_template_emits,
     lint_unknown_component_js_members,
     lint_unknown_component_js_variables,
+    lint_unknown_slot_props,
     lint_unknown_template_variables,
     lint_unknown_vue_variables,
+    lint_vue_compile,
     lint_vue_python_variables,
+    looks_like_i18n_binding,
     mark_literal_findings,
     merge_json_wire_types,
+    outlets_for_slot,
+    parse_authored_expression,
     project_module_exists,
     python_application_lint_variable_range,
     python_class_asset_resolution_signature,
@@ -164,12 +143,29 @@ from citry.analysis import (
     python_class_resolution_signature,
     python_component_lint_variable_range,
     python_event_handler_range,
+    render_diagnostic,
+    run,
+    scoped_fills,
+    server_event_calls,
+    server_event_form_findings,
+    server_event_forms,
+    server_event_payload_findings,
+    server_event_payload_from_description,
+    slot_outlets,
+    slot_prop_name,
+    source_lines,
     template_python_queries,
     template_python_query_at,
     template_static_input_queries,
+    template_urls,
     unknown_component_uses,
+    unknown_inject_key_findings,
+    unknown_slot_props_for,
+    unknown_url_findings,
     vue_listener_event_names,
 )
+from citry._lsp_support import ENUMERATED_VALUES as ENUMERATED_ATTRIBUTE_VALUES
+from citry._lsp_support import HTML_ELEMENTS as HTML_ELEMENT_NAMES
 from citry_core.i18n import CatalogCompiler, I18nCompileError
 from citry_core.template_parser import (
     CITRY_DIRECTIVE_NAMES,
@@ -209,9 +205,8 @@ from citry_lsp.uri import file_uri_path
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Sequence
 
-    from citry._linting import TemplateLintInfo, TemplateVariableInfo
-    from citry._template_data_source import TemplateDataSourceShape
-    from citry.settings import LintSeverity
+    from citry import LintSeverity
+    from citry._lsp_support import TemplateDataSourceShape, TemplateLintInfo, TemplateVariableInfo
     from citry_core.template_parser import Template
     from citry_lsp.catalog import CatalogIndex, ComponentRecord, FieldRecord, SchemaRecord
     from citry_lsp.project import (
@@ -14352,7 +14347,7 @@ def _is_component_root(class_node: ast.ClassDef) -> bool:
         value = getattr(statement, "value", None)
         if (
             isinstance(target, ast.Name)
-            and target.id == "_citry_component_root"
+            and target.id == COMPONENT_ROOT_ATTRIBUTE
             and isinstance(value, ast.Constant)
             and value.value is True
         ):

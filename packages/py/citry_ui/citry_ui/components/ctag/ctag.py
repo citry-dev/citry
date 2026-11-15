@@ -7,7 +7,13 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._context import FORM_CONTEXT_KEY
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_html_id
@@ -21,7 +27,6 @@ _TAG_CONTEXT_KEY = "citry_ui_tag_group"
 _SELECTION_MODES = ("none", "single", "multiple")
 _VARIANTS = ("soft", "solid", "outline")
 _SIZES = ("sm", "md", "lg")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _COMMON_OWNED = frozenset(
     {
         "aria-hidden",
@@ -142,11 +147,8 @@ def _copy_attrs(
     # A Vue directive could rebind an owned attribute, spread over the root,
     # or change its structure, so none may arrive through Python data.
     reject_vue_directive_attrs(copied, component)
-    for key in copied:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
-            msg = f"{component} attrs cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
+    for key, attr_value in copied.items():
+        reject_citry_ui_reserved_attr(key, attr_value, where=f"{component} attrs")
     return copied
 
 

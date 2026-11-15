@@ -15,6 +15,7 @@ from citry_ui.components._attrs import (
     is_vue_directive_attribute,
     merge_root_attrs,
     pop_html_attr,
+    reject_citry_ui_reserved_attr,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FIELD_CONTROL_MARKER, FORM_CONTEXT_KEY
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_optional_boolean
@@ -24,7 +25,6 @@ CSwitchLabelPos = Literal["start", "end"]
 
 _SIZES = ("sm", "md", "lg")
 _LABEL_POSITIONS = ("start", "end")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_OWNED_ATTRS = frozenset(
     {
         "aria-hidden",
@@ -124,11 +124,8 @@ def _copy_attrs(input_name: str, attrs: Mapping[str, object] | None) -> dict[str
 def _validate_attrs(input_name: str, attrs: dict[str, object], *, owned: frozenset[str]) -> None:
     component_name = f"CSwitch {input_name}"
     reject_owned_attrs(attrs, owned, component_name)
-    for key in attrs:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
-            msg = f"{component_name} cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
+    for key, attr_value in attrs.items():
+        reject_citry_ui_reserved_attr(key, attr_value, where=component_name)
         # A Vue directive could rebind the checkbox state or naming, add a
         # listener, or change the structure, so none may arrive through Python
         # data. The message names `attrs` or `input_attrs`, whichever held it.

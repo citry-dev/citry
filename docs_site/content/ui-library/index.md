@@ -43,13 +43,20 @@ other URLs on your page.
 
 Two inputs need checks of your own:
 
-- Build attribute maps (`attrs=` and the other `*_attrs=` arguments) in
-  your own code. Citry UI refuses a key such as `onclick`, or one the
-  component sets itself, with a `ValueError`, but it does not check what
-  the other names mean.
+- Build attribute maps (`attrs=` and the other `*_attrs=` arguments)
+  in your own code. Citry UI raises `ValueError` for a key such as
+  `onclick`, a key the component sets itself, or a key that starts
+  with `data-citry-`, `data-cui-`, `data-cev` or `data-cid`. Citry's
+  browser code finds its elements by those names, so a key from
+  request data could make it act on the element. Citry UI does not
+  check what the other names mean.
 - Choose `style` values in your own code. Citry does not check them as
   CSS, so a value from request data can add declarations of its own,
   such as a background image from another site.
+
+A component can give you attrs in slot data, such as `CDialog`'s
+`activator_attrs`. Pass them to a `<c-CButton>` as they are, or add
+your own keys with `c-attrs="{**activator_attrs, 'title': 'More'}"`.
 
 ## Upgrade with care { #upgrade-with-care }
 

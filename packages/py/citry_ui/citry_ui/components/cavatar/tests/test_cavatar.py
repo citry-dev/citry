@@ -141,7 +141,7 @@ def test_fallback_image_attributes_require_valid_html_names(attribute):
         ("attrs", "ARIA-LABEL", "cannot override owned attribute"),
         ("attrs", "tabindex", "cannot override owned attribute"),
         ("attrs", "data-status", "cannot override owned attribute"),
-        ("attrs", "data-citry-morph", "reserved Citry runtime attribute"),
+        ("attrs", "data-citry-morph", "are reserved for the browser"),
         ("attrs", ":data-shape", "Vue directive"),
         ("attrs", "v-if", "Vue directive"),
         ("attrs", "V-IF", "Vue directive"),

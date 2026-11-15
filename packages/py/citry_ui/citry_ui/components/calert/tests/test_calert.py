@@ -227,7 +227,7 @@ def test_alert_merges_root_class_style_and_trusted_unrelated_attrs():
         ("attrs", "ARIA-LIVE", "cannot override owned attribute"),
         ("attrs", "tabindex", "cannot override owned attribute"),
         ("attrs", "data-intent", "cannot override owned attribute"),
-        ("attrs", "data-citry-root", "reserved Citry runtime attribute"),
+        ("attrs", "data-citry-root", "are reserved for the browser"),
         ("attrs", ":contenteditable", "Vue directive"),
         ("attrs", "v-bind:data-intent", "Vue directive"),
         ("attrs", "v-bind", "Vue directive"),

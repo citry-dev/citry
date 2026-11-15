@@ -7,7 +7,13 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput, merge_attrs
-from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    is_vue_directive_attribute,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+)
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
     reject_owned_attrs,
@@ -305,13 +311,14 @@ class CTable(LibraryComponent):
         copied = dict(value or {})
         # A Vue directive could rebind an owned attribute or add a listener, so
         # none may arrive through Python data.
-        for key in copied:
+        for key, attr_value in copied.items():
             if isinstance(key, str) and is_vue_directive_attribute(key):
                 msg = (
                     f"{location} cannot contain the Vue directive {key!r}; "
                     "author Vue bindings and listeners in a template instead."
                 )
                 raise ValueError(msg)
+            reject_citry_ui_reserved_attr(key, attr_value, where=location)
         return copied
 
     @classmethod

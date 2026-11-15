@@ -14,7 +14,7 @@ import pytest
 from lsprotocol import types
 from pygls.client import JsonRPCClient
 
-from citry.analysis import TemplatePythonQuery, TemplatePythonRoot, build_inferred_template_shadow
+from citry._lsp_support import TemplatePythonQuery, TemplatePythonRoot, build_inferred_template_shadow
 from citry_lsp import type_analysis
 from citry_lsp.type_analysis import (
     TyAnalyzer,

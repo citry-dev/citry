@@ -151,7 +151,7 @@ def test_invalid_server_inputs_fail_deterministically(kwargs, error, match) -> N
         ("type", "cannot override owned attribute"),
         ("value", "cannot override owned attribute"),
         ("data-empty", "cannot override owned attribute"),
-        ("data-citry-hostile", "reserved runtime attribute"),
+        ("data-citry-hostile", "are reserved for the browser"),
         (":min", "Vue directive"),
         ("v-bind:value", "Vue directive"),
         ("v-model", "Vue directive"),

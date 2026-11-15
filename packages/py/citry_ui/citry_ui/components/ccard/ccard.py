@@ -7,14 +7,19 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput
-from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    is_vue_directive_attribute,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+)
 from citry_ui.components._validation import reject_owned_attrs
 
 CCardTag = Literal["div", "article", "section", "li"]
 CCardVariant = Literal["elevated", "outline", "subtle"]
 CCardSize = Literal["sm", "md", "lg"]
 
-_RESERVED_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_OWNED_ATTRS = frozenset({"data-citry-ui-part", "data-size", "data-variant"})
 _PART_OWNED_ATTRS = frozenset({"data-citry-ui-part"})
 
@@ -62,7 +67,7 @@ def _copy_attrs(
         msg = f"CCard {input_name} must be a mapping or None, got {attrs!r}."
         raise TypeError(msg)
     reject_owned_attrs(attrs, owned, f"CCard {input_name}")
-    for key in attrs or {}:
+    for key, attr_value in (attrs or {}).items():
         # A Vue directive could rebind the part's owned attributes or change
         # its structure, so none may arrive through Python data.
         if is_vue_directive_attribute(key):
@@ -71,10 +76,7 @@ def _copy_attrs(
                 "author Vue bindings and listeners in a template instead."
             )
             raise ValueError(msg)
-        normalized = key.lower()
-        if normalized.startswith(_RESERVED_RUNTIME_PREFIXES):
-            msg = f"CCard {input_name} cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
+        reject_citry_ui_reserved_attr(key, attr_value, where=f"CCard {input_name}")
     return dict(attrs or {})
 
 

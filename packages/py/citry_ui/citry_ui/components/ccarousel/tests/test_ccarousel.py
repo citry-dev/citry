@@ -118,7 +118,7 @@ def test_carousel_uses_the_shared_scroll_geometry_dependency() -> None:
         ('id="two words"', "ASCII whitespace"),
         ('previous_label=""', "previous_label"),
         ("c-attrs=\"{'role': 'group'}\"", "owned"),
-        ("c-attrs=\"{'data-citry-morph': 'x'}\"", "Citry runtime attribute"),
+        ("c-attrs=\"{'data-citry-morph': 'x'}\"", "are reserved for the browser"),
         ("c-attrs=\"{'v-bind:role': 'group'}\"", "CCarousel attrs cannot contain the Vue directive"),
         ("c-attrs=\"{'v-show': 'shown'}\"", "Vue directive"),
         ("c-attrs=\"{'V-IF': 'shown'}\"", "Vue directive"),

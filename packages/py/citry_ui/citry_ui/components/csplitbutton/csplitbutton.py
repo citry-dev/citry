@@ -8,7 +8,13 @@ from typing import Any, ClassVar, cast
 
 from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._anchored_layer import ANCHORED_LAYER_RUNTIME_DEPENDENCY
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._context import FORM_CONTEXT_KEY
 from citry_ui.components._validation import validate_boolean
 from citry_ui.components.cbutton.cbutton import (
@@ -93,7 +99,6 @@ _PRIMARY_EXTRA_ATTRS = {
 _TRIGGER_EXTRA_ATTRS = {"aria-describedby", "aria-details", "aria-keyshortcuts"}
 _MENU_EXTRA_ATTRS = {"aria-describedby", "aria-details", "aria-keyshortcuts"}
 _CITRY_DIRECTIVES = {"$c-props", "c-bind", "c-props"}
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_RESERVED = {
     "id",
     "is",
@@ -268,7 +273,7 @@ def _copy_destination_attrs(
     reject_vue_directive_attrs(attrs, f"CSplitButton {input_name.removesuffix('attrs').replace('_', ' ')}".rstrip())
     seen: set[str] = set()
     allowed = _COMMON_ATTRS | extra_allowed
-    for key in attrs:
+    for key, attr_value in attrs.items():
         if not isinstance(key, str):
             msg = f"CSplitButton {input_name} requires string keys, got {key!r}."
             raise TypeError(msg)
@@ -277,7 +282,8 @@ def _copy_destination_attrs(
             msg = f"CSplitButton {input_name} cannot contain duplicate case variants of {key!r}."
             raise ValueError(msg)
         seen.add(normalized)
-        if normalized.startswith(_RUNTIME_PREFIXES) or normalized in reserved:
+        reject_citry_ui_reserved_attr(key, attr_value, where=f"CSplitButton {input_name}")
+        if normalized in reserved:
             msg = f"CSplitButton {input_name} cannot override owned attribute {key!r}."
             raise ValueError(msg)
         if normalized in _CITRY_DIRECTIVES:

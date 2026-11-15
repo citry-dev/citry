@@ -108,7 +108,7 @@ def test_every_decision_slot_is_required(missing: str) -> None:
         ({"role": "dialog"}, "cannot override owned attribute"),
         ({"open": True}, "cannot override owned attribute"),
         ({"aria-describedby": "other"}, "cannot override owned attribute"),
-        ({"data-citry-private": "bad"}, "reserved Citry runtime attribute"),
+        ({"data-citry-private": "bad"}, "are reserved for the browser"),
         ({":aria-modal": "false"}, "Vue directive"),
         ({"v-bind:role": "alert"}, "Vue directive"),
         ({"v-if": "bad"}, "Vue directive"),

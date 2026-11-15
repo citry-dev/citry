@@ -123,7 +123,7 @@ def test_hover_card_public_schema_is_runtime_introspectable() -> None:
         ({"attrs": {"v-html": "markup"}}, ValueError, "cannot contain the Vue directive"),
         ({"attrs": {"#default": ""}}, ValueError, "cannot contain the Vue directive"),
         ({"attrs": {"@mouseenter": "peek()"}}, ValueError, "cannot contain the Vue directive"),
-        ({"attrs": {"data-citry-root": ""}}, ValueError, "runtime attribute"),
+        ({"attrs": {"data-citry-root": ""}}, ValueError, "are reserved for the browser"),
     ],
 )
 def test_hover_card_rejects_invalid_or_owned_inputs(

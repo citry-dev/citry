@@ -147,10 +147,11 @@ docs and the tests. Paths are relative to
 **Browser code.**
 
 - No TypeScript or `client.js` source names a runtime URL. `loadDefinition`
-  (`_vue/client.js:2733-2758`) rejects when a definition fails to load and
-  never retries or reloads. `promptReload` (`_vue/client.js:183-188`) shows a
-  once-per-page `confirm()` and reloads, but only on a `stale_state` call
-  failure.
+  (`_vue/client.js:2834-2859`) rejects when a definition fails to load and
+  never retries or reloads. `reportOutOfDate` (`_vue/client.js:218-232`)
+  runs once per page, only on a `stale_state` failure: on a page rendered
+  in development mode it shows a `confirm()` and reloads when the visitor
+  agrees; otherwise it writes a console warning.
 - `HELPER_CONTRACT` (`_vue/compiler.py:526-540`, `_vue/client.js:117-122`)
   changes only when the definition format changes, not on every build.
 - The i18n build ID (`packages/js/citry-client/build-support.mjs:110-121,187-191`,

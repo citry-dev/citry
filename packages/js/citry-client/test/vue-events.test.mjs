@@ -1107,7 +1107,7 @@ test("a stale_state answer reports a cancelable version notification before the 
       lifecycle.push([kind, event, detail]);
       return true;
     },
-    promptReload() {
+    reportOutOfDate() {
       prompts += 1;
     },
   };
@@ -1132,7 +1132,7 @@ test("a stale_state answer reports a cancelable version notification before the 
   assert.equal(prompts, 2);
 });
 
-test("a cancelled version notification skips the reload prompt, and other errors never prompt", async () => {
+test("a cancelled version notification skips Citry's own report, and other errors never report", async () => {
   const kinds = [];
   let prompts = 0;
   let answer = staleStateError;
@@ -1142,7 +1142,7 @@ test("a cancelled version notification skips the reload prompt, and other errors
       kinds.push(kind === "stale" ? `stale:${detail.reason}` : kind);
       return kind !== "stale";
     },
-    promptReload() {
+    reportOutOfDate() {
       prompts += 1;
     },
   };
@@ -1158,6 +1158,72 @@ test("a cancelled version notification skips the reload prompt, and other errors
   await assert.rejects(bridge.send({ source, handler: "move" }), (error) => error.code === "invalid_state");
   assert.equal(prompts, 0);
   assert.deepEqual(kinds, ["before", "stale:version", "error", "after", "before", "error", "after"]);
+});
+
+test("a result the page cannot apply because it is out of date is reported on every path", async () => {
+  // The prepared runtime fails this way when a server on another Citry release sends a render
+  // compiled against other helpers. It finds that in preflight; here the host's `event` action
+  // also fails the same way, which stands in for a failure while an action is applied.
+  const outOfDate = () =>
+    Object.assign(new Error("[Citry] the server sent a render from a different Citry release"), {
+      status: 0,
+      code: "stale_state",
+    });
+  const kinds = [];
+  let prompts = 0;
+  let failInPreflight = false;
+  const host = {
+    ...basicHost(),
+    preflightResult() {
+      if (failInPreflight) throw outOfDate();
+      return undefined;
+    },
+    dispatchEvent() {
+      throw outOfDate();
+    },
+    lifecycle(kind, _source, _event, detail) {
+      kinds.push(kind === "stale" ? `stale:${detail.reason}` : kind === "error" ? `error:${detail.error.code}` : kind);
+      return true;
+    },
+    reportOutOfDate() {
+      prompts += 1;
+    },
+  };
+  let actions = [{ action: "event", eventName: "changed" }];
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    host,
+    fetch: async (_url, init) => resultResponse(JSON.parse(init.body), actions),
+  });
+  const source = { stableId: "board", generation: 1 };
+  const errors = [];
+  const consoleError = console.error;
+  console.error = (...args) => errors.push(args);
+  try {
+    // An action the call waits for: the call rejects with the runtime's error.
+    await assert.rejects(bridge.send({ source, handler: "move" }), (error) => error.code === "stale_state");
+    // An action the call does not wait for: the call succeeds and the failure is still reported.
+    actions = [{ action: "event", eventName: "changed", wait: false }];
+    await bridge.send({ source, handler: "move" });
+    await sleep(10);
+    // A result the page applies itself, as a custom transport does, refused in preflight.
+    failInPreflight = true;
+    await assert.rejects(
+      bridge.applyActions([{ action: "event", eventName: "changed" }], source),
+      (error) => error.code === "stale_state",
+    );
+  } finally {
+    console.error = consoleError;
+  }
+  assert.deepEqual(kinds, [
+    ...["before", "stale:version", "error:stale_state", "after"],
+    // An undelayed action that is not waited for still starts before the call finishes.
+    ...["before", "stale:version", "error:stale_state", "after"],
+    ...["before", "stale:version", "error:stale_state", "after"],
+  ]);
+  // The bridge asks the host each time; the host keeps the once-per-page rule.
+  assert.equal(prompts, 3);
+  assert.equal(errors.length, 1);
 });
 
 test("Vue Events cancellation is reported by after without an error lifecycle", async () => {

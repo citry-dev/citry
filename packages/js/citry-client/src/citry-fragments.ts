@@ -4,6 +4,12 @@ import { pageDocument } from "./page-dom";
 
 type VueMount = { protocol: "citry-vue-fragment/1"; appId: string; host: string; prepared: unknown };
 type FragmentManifest = { vue?: VueMount };
+// The same shape as the prepared runtime's error for a render from another release: the code the
+// server gives a State token it no longer accepts, and status 0 for a failure found in the browser.
+const pageOutOfDateError = (message: string): Error =>
+  Object.assign(new TypeError(message), { status: 0, code: "stale_state" });
+const isPageOutOfDate = (error: unknown): boolean =>
+  error !== null && typeof error === "object" && (error as { code?: unknown }).code === "stale_state";
 export type FragmentManager = { load(manifest: unknown, tag?: HTMLScriptElement): Promise<void> };
 export function installFragmentManager(
   publicApi: Record<string, unknown>,
@@ -14,6 +20,7 @@ export function installFragmentManager(
   ) => Promise<{ appId: string; app: { unmount(): void } }>,
   documentNonce = "",
   carriesPageNonce: (block: HTMLScriptElement) => boolean = (block) => block.nonce === documentNonce,
+  reportOutOfDate: (development: boolean) => void = () => {},
 ): FragmentManager {
   const processed = new WeakMap<HTMLScriptElement, Promise<void>>();
   const reservedHosts = new Set<Element>();
@@ -44,12 +51,18 @@ export function installFragmentManager(
       pendingAttributeObserver = null;
     }
   };
-  const load = async (raw: unknown, tag?: HTMLScriptElement): Promise<void> => {
+  const loadOnce = async (raw: unknown, tag?: HTMLScriptElement): Promise<void> => {
     if (!raw || typeof raw !== "object" || Array.isArray(raw))
       throw new TypeError("[Citry] fragment manifest is not an object.");
     const manifest = raw as FragmentManifest;
-    if (Object.keys(manifest).some((key) => key !== "vue"))
-      throw new TypeError("[Citry] Vue fragments cannot carry legacy dependency state.");
+    // A fragment written by another release of the app (a newer server during a deploy) can use a
+    // field or a protocol this runtime does not know. That is a page to reload, not a broken page.
+    const protocol = (manifest.vue as { protocol?: unknown } | null | undefined)?.protocol;
+    if (
+      Object.keys(manifest).some((key) => key !== "vue") ||
+      (typeof protocol === "string" && protocol !== "citry-vue-fragment/1")
+    )
+      throw pageOutOfDateError("[Citry] this Vue fragment comes from a different Citry release; reload the page.");
     const vue = manifest.vue;
     if (
       !vue ||
@@ -108,6 +121,30 @@ export function installFragmentManager(
       reservedHosts.delete(host);
     }
   };
+  // A fragment the prepared runtime refuses for the same reason (a render compiled by another
+  // release) fails with the same code. A fragment comes from no event call, so no
+  // `citry:events:stale` reports it; `citry:fragments:stale` does, with the same `reason`, and a
+  // listener may cancel it to replace Citry's own report. The load still rejects, so a caller of
+  // `Citry.fragments.load` sees the failure.
+  const load = (raw: unknown, tag?: HTMLScriptElement): Promise<void> =>
+    loadOnce(raw, tag).catch((error: unknown) => {
+      if (isPageOutOfDate(error)) {
+        // The event starts at the fragment's data block when it is still in the page, like a call's
+        // notification starts at its component, and reaches a listener on `document` either way.
+        const target = tag?.isConnected ? tag : pageDocument;
+        const notice = new CustomEvent("citry:fragments:stale", {
+          detail: { reason: "version", error },
+          bubbles: true,
+          cancelable: true,
+        });
+        // The configuration the fragment carries says whether a development server wrote it. The
+        // runtime uses this only when the page started no app of its own, whose mode it prefers.
+        const development =
+          (raw as { vue?: { prepared?: { development?: unknown } } } | null)?.vue?.prepared?.development === true;
+        if (target.dispatchEvent(notice)) reportOutOfDate(development);
+      }
+      throw error;
+    });
   const manager: FragmentManager = {
     load(raw, tag) {
       if (tag) {

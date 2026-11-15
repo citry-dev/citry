@@ -99,13 +99,15 @@ def test_reload_tests_run_once_in_the_check_workflow_and_nowhere_else() -> None:
     matrix_steps = {step.get("name"): step for step in test_jobs[0]["steps"]}
     assert f"--ignore {_RELOAD_TEST_PATH}" in matrix_steps["Run Python tests"]["run"]
     reload_invocations = [
-        step["run"]
+        (workflow.name, job_name)
         for workflow in sorted(workflows.glob("*.yml"))
-        for job in (yaml.safe_load(workflow.read_text(encoding="utf-8")) or {}).get("jobs", {}).values()
+        for job_name, job in (yaml.safe_load(workflow.read_text(encoding="utf-8")) or {}).get("jobs", {}).items()
         for step in job.get("steps", ())
         if _RELOAD_TEST_PATH in step.get("run", "") and f"--ignore {_RELOAD_TEST_PATH}" not in step.get("run", "")
     ]
-    assert reload_invocations == []
+    # The framework-floors job runs them a second time on purpose, against the
+    # oldest supported Django and FastAPI, on pushes only.
+    assert reload_invocations == [("py--tests.yml", "framework-floors")]
     check_steps = yaml.safe_load((workflows / "repo--check.yml").read_text(encoding="utf-8"))["jobs"]["check"]["steps"]
     assert any("scripts/check.py --profile full" in step.get("run", "") for step in check_steps)
 

@@ -8,7 +8,13 @@ from dataclasses import dataclass
 from typing import Any, Literal, TypedDict, cast
 
 from citry import LibraryComponent, SlotInput, merge_attrs
-from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    is_vue_directive_attribute,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+)
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
     reject_owned_attrs,
@@ -29,7 +35,6 @@ CDataGridRangeReason = Literal["initial", "scroll", "resize", "configuration", "
 CDataGridEditor = Literal["text", "number", "checkbox", "select"]
 CDataGridEditSource = Literal["pointer", "keyboard"]
 
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_OWNED = frozenset(
     {
         "aria-disabled",
@@ -276,11 +281,10 @@ def _attrs(
         raise TypeError(f"{owner} must be a mapping or None, got {value!r}.")
     copied = dict(value or {})
     reject_owned_attrs(copied, owned, owner)
-    for key in copied:
+    for key, attr_value in copied.items():
         if not isinstance(key, str):
             raise TypeError(f"{owner} requires string keys, got {key!r}.")
-        if key.casefold().startswith(_RUNTIME_PREFIXES):
-            raise ValueError(f"{owner} cannot contain Citry runtime attribute {key!r}.")
+        reject_citry_ui_reserved_attr(key, attr_value, where=owner)
         # A Vue directive could rebind an owned grid attribute, add listeners,
         # or change the table structure, so none may arrive through Python data.
         if is_vue_directive_attribute(key):
@@ -311,6 +315,7 @@ def _editor_attrs(column: CDataGridColumn) -> dict[str, str | int | float | bool
     copied: dict[str, str | int | float | bool] = {}
     allowed = _EDITOR_ATTRS[column.editor]
     for key, raw in dict(value or {}).items():
+        reject_citry_ui_reserved_attr(key, raw, where=f"CDataGrid column {column.key!r} editor_attrs")
         if not isinstance(key, str) or key.casefold() not in allowed:
             raise ValueError(
                 f"CDataGrid column {column.key!r} editor_attrs cannot contain {key!r} for editor={column.editor!r}."

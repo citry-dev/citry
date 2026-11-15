@@ -10,7 +10,14 @@ from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_DEPENDENCY,
 )
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    citry_ui_owned_value,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CPopoverPlacement = Literal[
@@ -67,7 +74,6 @@ _PLACEMENTS = (
     "bottom",
     "bottom-end",
 )
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _SURFACE_OWNED_ATTRS = frozenset(
     {
         "aria-describedby",
@@ -144,10 +150,8 @@ def _validate_attrs(attrs: dict[str, object]) -> None:
     # A Vue directive could rebind the surface's popover wiring, replace its
     # listeners, or change its structure, so none may arrive through Python data.
     reject_vue_directive_attrs(attrs, "CPopover")
-    for key in attrs:
-        if key.casefold().startswith(_RUNTIME_PREFIXES):
-            msg = f"CPopover attrs cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
+    for key, attr_value in attrs.items():
+        reject_citry_ui_reserved_attr(key, attr_value, where="CPopover attrs")
 
 
 class CPopover(LibraryComponent):
@@ -222,10 +226,10 @@ class CPopover(LibraryComponent):
                 "aria-haspopup": "dialog",
                 "aria-controls": popover_id,
                 "aria-expanded": "true" if kwargs.open else "false",
-                "data-citry-popover-trigger": "",
+                "data-citry-popover-trigger": citry_ui_owned_value(),
                 "style": {"anchor-name": anchor_name},
             },
-            "close_attrs": {"data-citry-popover-close": ""},
+            "close_attrs": {"data-citry-popover-close": citry_ui_owned_value()},
             "attrs": merge_root_attrs(attrs, kwargs.class_, surface_style),
         }
         self._cui_popover_snapshot = snapshot

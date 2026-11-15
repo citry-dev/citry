@@ -100,6 +100,12 @@ episode and use the server value for that field.
 `type`, `href`, and `attrs` remain server-only because they define native
 structure and browser behavior.
 
+`attrs` raises `ValueError` for a name that starts with `data-citry-`,
+`data-cui-`, `data-cev`, or `data-cid`, because Citry's browser code finds
+its elements by those names. The exception is the slot attrs that a component
+such as [`CDialog`](/ui-library/components/dialog/) gives you, such as `activator_attrs`.
+Pass them on with `c-attrs="activator_attrs"`.
+
 ## Choose a variant
 
 Use `solid` for the strongest action, `outline` for a visible alternative, and

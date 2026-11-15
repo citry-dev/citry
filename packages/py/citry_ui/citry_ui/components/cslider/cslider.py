@@ -17,6 +17,7 @@ from citry_ui.components._attrs import (
     CStyleValue,
     get_html_form_owner,
     merge_root_attrs,
+    reject_citry_ui_reserved_attr,
     reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FIELD_CONTROL_MARKER, FORM_CONTEXT_KEY
@@ -44,7 +45,6 @@ CSliderChangePhase = Literal["change", "end"]
 CRangeSliderThumb = Literal["lower", "upper"]
 
 _PLAIN_DECIMAL = re.compile(r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
-_RUNTIME_PREFIXES = ("data-citry-", "data-csl", "data-cid")
 _ROOT_OWNED = frozenset(
     {
         "data-active",
@@ -158,11 +158,12 @@ def _attrs(
         raise TypeError(f"{component} {destination} must be a mapping or None, got {value!r}.")
     copied = dict(value or {})
     reject_owned_attrs(copied, owned, f"{component} {destination}")
-    for key in copied:
+    for key, attr_value in copied.items():
         if not isinstance(key, str):
             raise TypeError(f"{component} {destination} requires string keys, got {key!r}.")
-        if key.casefold().startswith(_RUNTIME_PREFIXES):
-            raise ValueError(f"{component} {destination} cannot contain runtime attribute {key!r}.")
+        reject_citry_ui_reserved_attr(
+            key, attr_value, where=f"{component} {destination}", extra_prefixes=("data-csl",)
+        )
     # A Vue directive could rebind the value, listeners, or Form wiring this
     # component owns, so none may arrive through Python data.
     reject_vue_directive_attrs(copied, f"{component} {destination.removesuffix('attrs').replace('_', ' ')}".rstrip())

@@ -8,7 +8,13 @@ from dataclasses import dataclass
 from typing import Any, Literal, cast
 
 from citry import LibraryComponent, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._i18n import inline_translation_value, uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_html_id
 
@@ -29,7 +35,6 @@ _PLACEMENTS = (
     "block-end-end",
 )
 _PRIORITIES = ("polite", "assertive")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_OWNED_ATTRS = frozenset(
     {
         "aria-atomic",
@@ -163,11 +168,8 @@ def _validate_attrs(attrs: dict[str, object]) -> None:
     # A Vue directive could rebind an owned attribute, add a listener, or
     # change the structure, so none may arrive through Python data.
     reject_vue_directive_attrs(attrs, "CToastRegion")
-    for key in attrs:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
-            msg = f"CToastRegion attrs cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
+    for key, attr_value in attrs.items():
+        reject_citry_ui_reserved_attr(key, attr_value, where="CToastRegion attrs")
 
 
 def _normalize_message(message: object, index: int) -> dict[str, object]:

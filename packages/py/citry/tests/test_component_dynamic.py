@@ -821,7 +821,9 @@ class TestDynamicElement:
         assert occurrence.prepared_data["citryKey0"] == "row"
         assert ':key="$citryPrepared.citryKey0"' in compile_input.template
 
-    def test_private_key_rejects_an_ordinary_attribute_before_attrs_hook(self):
+    def test_written_private_key_attribute_is_refused_as_a_citry_marker(self):
+        # `data-citry-key` is the attribute Citry writes for `#c-key`, so the
+        # marker-name check refuses it before the metadata conflict check runs.
         c = Citry()
 
         class Page(Component):
@@ -834,7 +836,7 @@ class TestDynamicElement:
                 />
             """
 
-        with pytest.raises(ValueError, match=r"data-citry-key.*#c-key metadata"):
+        with pytest.raises(ValueError, match=r"'data-citry-key' on <hr>.*Citry reserves"):
             render_prepared_direct(Page())
 
 

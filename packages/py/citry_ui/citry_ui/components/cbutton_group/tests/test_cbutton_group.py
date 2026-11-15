@@ -107,7 +107,7 @@ def test_invalid_inputs_fail(template, error, match):
         ("aria-label", "cannot override owned attribute"),
         ("tabindex", "cannot override owned attribute"),
         ("disabled", "cannot override owned attribute"),
-        ("data-citry-morph", "reserved Citry runtime attribute"),
+        ("data-citry-morph", "are reserved for the browser"),
         (":data-grow", "Vue directive"),
         ("v-bind:role", "Vue directive"),
         ("v-if", "Vue directive"),

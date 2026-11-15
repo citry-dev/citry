@@ -7,7 +7,13 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._reveal import REVEAL_RUNTIME_DEPENDENCY
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
@@ -18,7 +24,6 @@ CToolbarSize = Literal["sm", "md", "lg"]
 _ORIENTATIONS = ("horizontal", "vertical")
 _VARIANTS = ("plain", "soft", "outline")
 _SIZES = ("sm", "md", "lg")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _OWNED_ATTRS = frozenset(
     {
         "aria-hidden",
@@ -75,11 +80,8 @@ def _copy_attrs(attrs: Mapping[str, object] | None) -> dict[str, object]:
     # A Vue directive could rebind an owned attribute, add a listener, or
     # change the structure, so none may arrive through Python data.
     reject_vue_directive_attrs(copied, "CToolbar")
-    for key in copied:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
-            msg = f"CToolbar attrs cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
+    for key, attr_value in copied.items():
+        reject_citry_ui_reserved_attr(key, attr_value, where="CToolbar attrs")
     return copied
 
 

@@ -16,6 +16,7 @@ from citry_ui.components._attrs import (
     is_vue_directive_attribute,
     merge_root_attrs,
     pop_html_attr,
+    reject_citry_ui_reserved_attr,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_optional_boolean
@@ -27,7 +28,6 @@ CFileInputSize = Literal["sm", "md", "lg"]
 _CAPTURES = ("user", "environment")
 _VARIANTS = ("outline", "soft", "plain")
 _SIZES = ("sm", "md", "lg")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _INPUT_OWNED_ATTRS = frozenset(
     {
         "accept",
@@ -129,14 +129,12 @@ def _copy_attrs(
         raise TypeError(msg)
     copied = dict(attrs or {})
     reject_owned_attrs(copied, owned, component_name)
-    for key in copied:
+    for key, attr_value in copied.items():
         if not isinstance(key, str):
             msg = f"{component_name} requires string keys, got {key!r}."
             raise TypeError(msg)
         normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
-            msg = f"{component_name} cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
+        reject_citry_ui_reserved_attr(key, attr_value, where=component_name)
         # A Vue directive could rebind an owned attribute (including the
         # relationships the component merges), change the structure, or
         # attach a listener, so none may arrive through Python data.

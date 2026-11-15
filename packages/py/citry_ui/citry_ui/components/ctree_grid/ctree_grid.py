@@ -9,7 +9,13 @@ from dataclasses import dataclass
 from typing import Any, Literal, TypedDict, cast
 
 from citry import LibraryComponent, SlotInput, const_value, merge_attrs
-from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    is_vue_directive_attribute,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+)
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
     reject_owned_attrs,
@@ -24,7 +30,6 @@ CTreeGridDensity = Literal["compact", "comfortable", "spacious"]
 CTreeGridAlign = Literal["start", "center", "end"]
 CTreeGridSource = Literal["pointer", "keyboard", "reset"]
 
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_OWNED = frozenset(
     {
         "aria-disabled",
@@ -202,12 +207,10 @@ def _attrs(
         raise TypeError(f"{owner} must be a mapping or None, got {value!r}.")
     copied = dict(value or {})
     reject_owned_attrs(copied, owned, owner)
-    for key in copied:
+    for key, attr_value in copied.items():
         if not isinstance(key, str):
             raise TypeError(f"{owner} requires string keys, got {key!r}.")
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
-            raise ValueError(f"{owner} cannot contain Citry runtime attribute {key!r}.")
+        reject_citry_ui_reserved_attr(key, attr_value, where=owner)
         # A Vue directive could rebind an owned attribute, replace a row or
         # cell's structure, or add a listener, so none may arrive through
         # Python data. `owner` already names the exact mapping, such as one
