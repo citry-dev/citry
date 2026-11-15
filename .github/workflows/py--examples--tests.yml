@@ -98,11 +98,26 @@ jobs:
           uv venv .example-tools --python "${{ matrix.python-version }}"
           uv pip install --python .example-tools/bin/python pytest==9.2.0
 
+      # Fail on any deprecation warning. The root pyproject.toml sets the same
+      # rule for these tests, and the flag repeats it so it shows in this
+      # workflow. This environment holds only pytest, so only pytest's or
+      # Python's own code can raise one.
       - name: Validate the catalog and archives
-        run: .example-tools/bin/python -m pytest examples/tests -q
+        run: .example-tools/bin/python -m pytest examples/tests -q -W error::DeprecationWarning
 
+      # Each example project's own tests run in this step, in a clean copy
+      # outside the repository, so the root pyproject.toml does not reach
+      # them. PYTEST_ADDOPTS fails them on a Citry deprecation, so an example
+      # never teaches a feature that Citry will remove. The projects'
+      # pyproject.toml files ship in the starter archives, so the rule is set
+      # here and not in them. It names Citry's class, not every
+      # DeprecationWarning. A project's pytest, anyio or web framework can
+      # raise their own, and pytest fails to start when importing one of its
+      # plugins raises one.
       - name: Qualify clean copies against candidate wheels
         shell: bash
+        env:
+          PYTEST_ADDOPTS: -W error::citry.CitryDeprecationWarning
         run: |
           wheel_args=()
           for wheel in dist/example-wheels/*.whl; do

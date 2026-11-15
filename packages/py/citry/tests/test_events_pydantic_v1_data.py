@@ -111,6 +111,11 @@ class V1DataclassInList:
 # Pydantic warns that it does not support a v1 model inside a v2 class.
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", message="Mixing V1 models and V2 models", category=UserWarning)
+    # Pydantic v2 reads a v1 dataclass in a field through its deprecated
+    # `__get_validators__`. These tests cover v1 data on purpose, so they
+    # ignore that deprecation here. The repository's pytest settings make it
+    # an error everywhere else.
+    warnings.filterwarnings("ignore", message="`__get_validators__` is deprecated")
 
     class V2Field(pydantic.BaseModel):
         d: Tag
