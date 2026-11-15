@@ -221,8 +221,8 @@ string is used as written, and Citry raises `ValueError` when it has:
 Remove a control character from the text, or keep it inside a quoted
 string.
 
-A value containing a null or surrogate character, `</style`, or `<!--`
-always raises. `rgb(...)`, `calc(...)`, and `url(...)` values work,
+A value containing a null or surrogate character, `<!--`, or the start
+of a `</style>` end tag in any letter case always raises. `rgb(...)`, `calc(...)`, and `url(...)` values work,
 including SVG data URLs.
 
 To use data in a stylesheet, pass it through `css_data()`, not through
