@@ -18,8 +18,9 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   `_script_type_is_executable`, `_classify_dependency_attribute`,
   `_is_javascript_url` and `_JAVASCRIPT_MIME_TYPES`, which `citry` also uses
   on structured `Script` and `Style` values, and `_csp_attribute_problem`,
-  which judges one attribute written in a template by the same rules. Only
-  the `citry` package calls them.
+  which judges one attribute written in a template by the same rules, and
+  `_read_url_scheme`, the shared URL scheme reader that `citry/_urls.py`
+  wraps. Only the `citry` package calls them.
 - `src/i18n.rs` - exposes ICU4X locale canonicalization and direction lookup,
   and wraps the language-neutral `citry_i18n` catalog runtime.
 - `src/safe_eval.rs` - wraps `python_safe_eval`.

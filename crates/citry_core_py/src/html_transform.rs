@@ -27,7 +27,7 @@ use citry_html_transform::{
     check_output_html as check_output_html_rust,
     csp_attribute_problem as csp_attribute_problem_rust, is_activation_attribute,
     is_javascript_url, is_native_event_attribute, is_url_attribute,
-    script_type_is_executable as script_type_is_executable_rust,
+    script_type_is_executable as script_type_is_executable_rust, url_scheme,
 };
 
 #[pyfunction]
@@ -530,10 +530,28 @@ pub fn csp_attribute_problem(
     .map(|problem| problem.code())
 }
 
-/// Whether a URL starts with `javascript:`, read without entity decoding.
+/// Whether a URL has the `javascript:` scheme as the browser reads it,
+/// read without entity decoding.
 #[pyfunction(name = "_is_javascript_url")]
 pub fn is_javascript_url_py(value: &Bound<'_, PyString>) -> bool {
     is_javascript_url(&value.to_string_lossy())
+}
+
+/// The lowercase scheme of a URL and the text after its colon (trailing C0
+/// controls and spaces, U+0000 to U+0020, trimmed, tab, LF and CR removed), read as the
+/// browser's URL parser reads it, or `None` for a relative URL. Decodes no
+/// character references. A lone surrogate reads as U+FFFD replacement
+/// characters, which are never part of a scheme.
+#[pyfunction(name = "_read_url_scheme")]
+pub fn read_url_scheme_py(url: &Bound<'_, PyString>) -> Option<(String, String)> {
+    let url = url.to_string_lossy();
+    url_scheme(&url).map(|scheme| {
+        // Python callers compare the rest as the browser reads it, and the
+        // parser removes tab, line feed and carriage return anywhere in the
+        // URL.
+        let rest = scheme.after_colon().replace(['\t', '\n', '\r'], "");
+        (scheme.to_lowercase(), rest)
+    })
 }
 
 /// The MIME types that make a `<script>` a classic script.

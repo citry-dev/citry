@@ -15,6 +15,7 @@ mod stack;
 pub mod static_html;
 mod tokenizer;
 pub mod transformer;
+pub mod url_scheme;
 
 // Re-export the types and functions that users need
 pub use html_limits::{
@@ -40,3 +41,4 @@ pub use static_html::{
     static_html_in_context, static_html_node_count, StaticHtmlFacts, StaticHtmlUse,
 };
 pub use transformer::{transform_html, HtmlTransformerConfig};
+pub use url_scheme::{url_scheme, url_scheme_is, UrlScheme};

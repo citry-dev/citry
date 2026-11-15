@@ -10,23 +10,20 @@ and raises ``ValueError`` for anything else. The check reads the URL as the
 browser will: for a ``Markup`` value, that is the text after Citry decodes
 its character references, so ``Markup("java&#115;cript:x")`` is refused.
 
-The CAvatar and CImage browser code repeats the image rule for client props;
-``tests/test_url_schemes.py`` runs both against the same cases.
+The scheme itself is read by ``citry._urls``, the reader every server-side
+URL check in Citry shares. The CAvatar and CImage browser code repeats the
+image rule for client props; ``tests/test_url_schemes.py`` runs both against
+the same cases and against the shared table of URLs in
+``crates/citry_html_transform/tests/fixtures/url_schemes.json``.
 """
 
 from __future__ import annotations
 
 import html
-import string
 
+from citry._urls import url_scheme, url_scheme_and_rest
 from citry.util.html import escape_attribute_value
 
-# The WHATWG URL parser strips these from both ends before it reads the scheme.
-_C0_CONTROL_OR_SPACE = "".join(chr(code) for code in range(0x21))
-# It removes tab, LF, and CR anywhere, so "java\tscript:" reads as "javascript:".
-_ASCII_TAB_OR_NEWLINE = str.maketrans("", "", "\t\n\r")
-_SCHEME_START_CHARS = frozenset(string.ascii_letters)
-_SCHEME_CHARS = frozenset(string.ascii_letters + string.digits + "+-.")
 # The data: URL processor strips this whitespace around the media type.
 _ASCII_WHITESPACE = " \t\n\f\r"
 
@@ -59,27 +56,6 @@ def attribute_text(value: object) -> str:
     return html.unescape(escape_attribute_value(value))
 
 
-def _read_scheme(url: str) -> tuple[str | None, str]:
-    """
-    Return the lowercase scheme a browser reads from ``url``, and the text after its colon.
-
-    The scheme is ``None`` for a relative URL such as ``/orders``, ``?page=2``,
-    ``#top``, or ``//example.com/x``. This follows the first steps of the URL
-    parser browsers use (the WHATWG URL standard), so the answer matches what
-    the browser will navigate to or load.
-    """
-    text = url.strip(_C0_CONTROL_OR_SPACE).translate(_ASCII_TAB_OR_NEWLINE)
-    colon = text.find(":")
-    # A scheme starts with a letter and runs up to the first colon. Any other
-    # character before the colon (such as "/", "?", or "#") makes it relative.
-    if colon < 1 or text[0] not in _SCHEME_START_CHARS:
-        return None, text
-    scheme = text[:colon]
-    if not all(char in _SCHEME_CHARS for char in scheme):
-        return None, text
-    return scheme.lower(), text[colon + 1 :]
-
-
 def check_link_url(label: str, url: str) -> str:
     """
     Return ``url`` unchanged if it is safe to use as a link or form action.
@@ -95,7 +71,7 @@ def check_link_url(label: str, url: str) -> str:
             sms, or tel.
 
     """
-    scheme, _ = _read_scheme(attribute_text(url))
+    scheme = url_scheme(attribute_text(url))
     if scheme is not None and scheme not in LINK_SCHEMES:
         msg = f"{label} must be {_LINK_RULE}."
         raise ValueError(msg)
@@ -104,9 +80,11 @@ def check_link_url(label: str, url: str) -> str:
 
 def is_image_url_allowed(url: str) -> bool:
     """Return whether ``url`` is a relative URL or an allowed image source, read as Citry writes it."""
-    scheme, rest = _read_scheme(attribute_text(url))
-    if scheme is None:
+    read = url_scheme_and_rest(attribute_text(url))
+    if read is None:
+        # No scheme: a relative URL loads from the page's own site.
         return True
+    scheme, rest = read
     if scheme == "data":
         # The browser reads the media type from the text before the first comma;
         # only one that starts with image/ may load.

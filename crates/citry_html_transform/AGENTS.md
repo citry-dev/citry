@@ -27,12 +27,22 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   page is only parsed in full when the stored answers cannot cover it. The
   module docs list what a stored answer relies on; the random-tree test
   compares it with the full parse.
+- `src/url_scheme.rs` - `url_scheme` and `url_scheme_is` read a URL's
+  scheme the way the browser's URL parser does, and decode nothing. They
+  are the one scheme rule for every server-side check: `is_javascript_url`
+  and the `data:` readers in `output_policy.rs`, and, through
+  `_read_url_scheme` and `citry/_urls.py`, `Redirect`, the Events redirect
+  resolver and Citry UI's link and image checks. The browser keeps its own
+  copies (`redirectScheme` in `client.js`, `isImageUrlAllowed` in CAvatar
+  and CImage); every copy is tested against
+  `tests/fixtures/url_schemes.json`. Keep one row per line there: the Rust
+  test skips the `python_only` rows line by line.
 - `src/output_policy.rs` - runs the strict-CSP and JavaScript-policy rules
   over the HTML `serialize()` returns and reports only what they find; the
   Python validators (`packages/py/citry/citry/_csp_validation.py`,
   `packages/py/citry/citry/_javascript_policy.py`) write the messages and
-  decide whether to warn or raise. Its character-reference decoding and
-  letter matching copy Python's on purpose.
+  decide whether to warn or raise. Its character-reference decoding copies
+  Python's on purpose.
   - `animation_sets_href`, `is_url_value`, and `is_javascript_url_value`
     are the one rule for "this attribute holds a `javascript:` URL". The
     page check and the embedded-document check both call them. They cover
@@ -130,7 +140,8 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
     including `Markup.format()` output.
   - `classify_dependency_attribute` (in `citry_core_py`) reads only
     structured `Script` and `Style` attributes, so it keeps calling
-    `is_url_attribute` and `is_javascript_url` directly.
+    `is_url_attribute` and `is_javascript_url` directly. `is_javascript_url`
+    reads the scheme through `url_scheme_is`.
   `packages/py/citry/tests/_output_policy_reference.py` keeps the Python
   rules, `packages/py/citry/tests/test_output_policy_differential.py`
   compares the two on generated pages, and running any test suite with

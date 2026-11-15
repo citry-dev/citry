@@ -307,7 +307,10 @@ def test_the_shared_output_predicates() -> None:
     assert _classify_dependency_attribute("script", "@load", None) == 1
     assert _classify_dependency_attribute("link", "ONLOAD", "x") == 2
     assert _classify_dependency_attribute("link", "href", " java\tscript:x") == 4
-    assert _is_javascript_url("\x00JAVA\u017fCRIPT:x")
+    assert _is_javascript_url("\x00JAVASCRIPT:x")
+    # The browser compares scheme letters as ASCII, so the long s (U+017F)
+    # is not `s`.
+    assert not _is_javascript_url("\x00JAVA\u017fCRIPT:x")
     assert "text/javascript" in _JAVASCRIPT_MIME_TYPES
 
 
@@ -322,6 +325,11 @@ def test_the_shared_output_predicates() -> None:
         ("div", "data", "javascript:go()", None),
         ("a", "href", None, None),
         ("a", "href", "/home", None),
+        # Browsers compare scheme letters as ASCII and read these as
+        # relative URLs that run nothing, so neither check reports them.
+        ("a", "href", "java&#383;cript:go()", None),
+        ("a", "href", "javascr&#305;pt:go()", None),
+        ("a", "href", "javascr\u0130pt:go()", None),
     ],
 )
 def test_a_template_attribute_gets_the_problem_the_page_check_reports(

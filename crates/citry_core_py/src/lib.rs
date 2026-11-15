@@ -115,6 +115,10 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
         html_transform::is_javascript_url_py,
         &html_transform_mod
     )?)?;
+    html_transform_mod.add_function(wrap_pyfunction!(
+        html_transform::read_url_scheme_py,
+        &html_transform_mod
+    )?)?;
     html_transform_mod.add(
         "_JAVASCRIPT_MIME_TYPES",
         html_transform::javascript_mime_types(m.py())?,

@@ -2426,6 +2426,9 @@ class TestSvgAnimationUrls:
         '<svg><a><set attributeName=" xlink:href " to="javascript:run()"/></a></svg>',
         # Only the first attributeName counts, as in the browser.
         '<svg><a><set attributeName="href" attributeName="x" to="javascript:run()"/></a></svg>',
+        # The ASCII item is reported although another item spells the
+        # scheme with a letter browsers do not read as `s`.
+        '<svg><a><animate attributeName="href" values="java&#383;cript:run();javascript:run()" dur="1s"/></a></svg>',
     ]
     _INERT_ANIMATIONS = [
         '<svg><a><set attributeName="href" to="#x"/></a></svg>',
@@ -2439,6 +2442,10 @@ class TestSvgAnimationUrls:
         '<svg><a><set attributeName="href" to="java\x01script:run()"/></a></svg>',
         '<svg><a><set attributeName="href" to="javascript"/></a></svg>',
         '<svg><a><set attributeName="href" to="/javascript:run()"/></a></svg>',
+        # Browsers compare scheme letters as ASCII, so the long s (U+017F) and the
+        # dotless or dotted `i` (U+0131, U+0130) read as a relative URL.
+        '<svg><a><set attributeName="href" to="java&#383;cript:run()"/></a></svg>',
+        '<svg><a><animate attributeName="href" values="#a;javascr\u0131pt:run()" dur="1s"/></a></svg>',
         # Not an attribute that holds a value to set.
         '<svg><a><set attributeName="href" title="javascript:run()"/></a></svg>',
         # `animateTransform` sets a transform, not a link.

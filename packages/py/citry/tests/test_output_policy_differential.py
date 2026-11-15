@@ -105,10 +105,14 @@ _REFERENCES = [
     "&lt;script&gt;", "&#X73;", "&", "&&amp;",
 ]  # fmt: skip
 _JS_LETTERS = {
-    "s": ["s", "S", "\u017f", "&#115;", "&#x73;", "&#0000115;"],
-    "i": ["i", "I", "\u0131", "\u0130", "&#105;"],
+    "s": ["s", "S", "&#115;", "&#x73;", "&#0000115;"],
+    "i": ["i", "I", "&#105;"],
     "j": ["j", "J", "&#106;", "&#x6a;"],
 }
+# Letters that Unicode case folding turns into `s` or `i`. Browsers compare
+# scheme letters as ASCII, so one of these makes a relative URL; they are
+# picked rarely so most generated URLs still read as `javascript:`.
+_FOLDING_LETTERS = {"s": ["\u017f", "&#383;"], "i": ["\u0131", "\u0130", "&#305;"]}
 
 
 def _javascript_text(rng: random.Random) -> str:
@@ -117,6 +121,8 @@ def _javascript_text(rng: random.Random) -> str:
     out = [prefix]
     for letter in "javascript":
         options = _JS_LETTERS.get(letter, [letter, letter.upper(), f"&#{ord(letter)};"])
+        if letter in _FOLDING_LETTERS and rng.random() < 0.05:
+            options = _FOLDING_LETTERS[letter]
         out.append(rng.choice(options))
         if rng.random() < 0.15:
             out.append(rng.choice(["\t", "\n", "\r", "&#9;", "&#10;", "&Tab;", "&NewLine;", " ", "\x0b"]))

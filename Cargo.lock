@@ -365,6 +365,7 @@ dependencies = [
  "html5gum",
  "markup5ever_rcdom",
  "quick-xml",
+ "serde_json",
  "stacker",
 ]
 
