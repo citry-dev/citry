@@ -65,6 +65,9 @@
 
 ### Fixes
 
+- When the installed `citry-lsp` does not match your citry release,
+  `citry check --types` now names the `citry-lsp` versions to install,
+  rather than always asking you to upgrade it.
 - With `security_javascript="omit"`, Citry now drops a `Script` or
   `Style` dependency whose URL is a `javascript:` URL written as `Markup`
   with a character reference, such as

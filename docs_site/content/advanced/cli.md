@@ -326,8 +326,9 @@ that imports the rest of the project.
   directory or a parent, or from `PATH`. Install it with
   `npm install --save-dev typescript`.
 
-If one is missing, or ty cannot start or stops responding, the command
-exits with status 2 and says what to install or fix.
+If one is missing, the installed `citry-lsp` does not match your citry
+release, or ty cannot start or stops responding, the command exits with
+status 2 and says what to install or fix.
 
 `--types` skips components installed from another package. It needs your
 registered components, so it cannot be combined with `--static`, and it
