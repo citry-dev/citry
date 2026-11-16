@@ -124,8 +124,8 @@ def test_catalog_projects_include_locked_citry_editor_setup() -> None:
         assert settings == expected_settings
 
         manifest = tomllib.loads(project.source.joinpath("pyproject.toml").read_text(encoding="utf-8"))
-        # citry-lsp 0.2 is the line that supports Citry 0.6.
-        assert "citry-lsp>=0.2,<0.3" in manifest["dependency-groups"]["dev"]
+        # citry-lsp 1.x is the line that supports Citry 1.x.
+        assert "citry-lsp>=1.0.0,<2" in manifest["dependency-groups"]["dev"]
 
         # The locked version must satisfy that range, but a lock can only name a
         # published release, so the release gate checks it after publication.

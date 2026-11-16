@@ -22,7 +22,7 @@ synchronous Citry Event that calls Python.
 - Python 3.11 through 3.14
 - [uv](https://docs.astral.sh/uv/)
 
-The project accepts Citry 0.6.0 or newer. Its
+The project accepts any Citry 1.x release, starting at Citry 1.0.0. Its
 lockfile pins the version exercised by the tests.
 
 ## Run the project
