@@ -35,8 +35,8 @@ VUE_TYPE_PACKAGES = {
     "@vue/reactivity": VUE_VERSION,
     "@vue/runtime-core": VUE_VERSION,
     "@vue/runtime-dom": VUE_VERSION,
-    "@babel/types": "7.29.8",
-    "@babel/parser": "7.29.9",
+    "@babel/types": "7.29.14",
+    "@babel/parser": "7.29.14",
     "csstype": "3.2.3",
 }
 
