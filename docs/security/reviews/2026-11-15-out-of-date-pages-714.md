@@ -89,8 +89,8 @@ server" (the Vue fragment data block), and "The CSP nonce".
     under a nonce-based CSP. That block is refused before the new check,
     and a node test covers it.
   - Author-only by design: a custom transport or the public `applyActions`.
-  - A nuisance, not a hole: on a page without a nonce-based CSP, injected
-    markup can raise the report (a console warning in production) and use
+  - A nuisance, not a hole: on a page without a nonce-based CSP (a
+    hash-based CSP or none), injected markup can raise the report (a console warning in production) and use
     up the once-per-page report. Without CSP, the same injection can
     already run script.
 - **The production change.** Partway through the pull request, the
@@ -242,4 +242,8 @@ server" (the Vue fragment data block), and "The CSP nonce".
 
 ## Follow-ups
 
-None.
+- [#720](https://github.com/citry-dev/citry/issues/720) (v1.1): found
+  during this review and present before it. On a page whose CSP does not
+  use nonces, injected markup can start a Vue fragment whose definition
+  script URLs it chooses. The issue checks which URLs the fragment loader
+  accepts.
