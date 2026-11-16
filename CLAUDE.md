@@ -75,6 +75,10 @@ carries the rules, or the work is done without them.
   what is next, open decisions) in a short progress file named in its brief.
   The measurements behind this rule are in
   [`docs/agent/RATIONALE.md`](docs/agent/RATIONALE.md#token-cost-of-long-running-agents).
+- **Long-running agents report progress.** Ask every long-running agent for
+  a short progress note at each stage boundary and at least every 20
+  minutes, and relay each note to the maintainer in a few lines. When you
+  start one, say what it will do and roughly how long it takes.
 - **Check free disk space before starting agents in parallel.** Every
   worktree, virtual environment (venv), build, and test run writes to the
   same disk as Claude Code's temporary directory, and when it fills, every
@@ -94,6 +98,47 @@ carries the rules, or the work is done without them.
   it to find definitions and references rather than grepping and then reading
   whole files. Read the line range you need rather than the whole file. Every
   read stays in the agent's context and is re-read on each later turn.
+
+## Working with the maintainer
+
+- Ask questions in your reply, not through a question dialog. A dialog stops
+  every background agent until someone answers it. Write each decision as a
+  short numbered item with the options and your recommendation, hold only the
+  work that depends on it, and keep the rest moving.
+- In a planning or review session, "go ahead" moves the plan, the issues, or
+  the design docs forward. Write code only when the session is about
+  implementation, and ask when you cannot tell.
+- Do not end a turn with a status list while known tasks you can do remain
+  (for a subagent, tasks within its brief). Stop only when every open item
+  waits on the maintainer: a review, a merge, or a decision.
+- Check state again before you act on it. Hours can pass between messages
+  and other agents work in this repository meanwhile, so a branch position,
+  the number of changed files, a package version, a tag, or a workflow
+  setting you saw earlier may be wrong now. Say so when a fresh check
+  contradicts something said earlier.
+- Do not merge a pull request unless the maintainer explicitly tells you to
+  merge it; the maintainer reviews every pull request first. Open it ready
+  for review and list it in your report. When the scope of a merge
+  instruction is unclear, ask which pull requests it covers.
+
+## Sibling repositories
+
+Two private repositories are usually cloned beside this checkout:
+`citry-dev/citry-ops` (outreach, metrics, content) and
+`citry-dev/citry--security` (private security work). A session started here
+does not load either sibling's `CLAUDE.md`.
+
+- Before you work in either repository, read its own `CLAUDE.md`. When you
+  brief a subagent to work there, name that file in the brief.
+- Log a hole in a released version, and any decision it needs, in
+  `citry--security`'s `TRACKER.md` section 8, and keep it out of this
+  repository, `citry-ops`, and any public place. Mechanism 7 step 5 says how
+  to handle each kind of hole.
+- Both sibling `CLAUDE.md` files copy, in shorter form and under their own
+  headings, "Delegating to subagents and workflows", "Working with the
+  maintainer", and "House style" from this file. When you change one of
+  those sections here, carry the change over in the same session, or name
+  the follow-up in your report.
 
 ## What this project is
 
@@ -465,7 +510,7 @@ these are source-controlled and visible in `git status`, which is the point.
 | Crate-local gotcha specific to one crate | `/<crate>/AGENTS.md` - "Gotchas" section |
 | Monorepo dev/build/release convention | [`/docs/codebase.md`](docs/codebase.md) |
 | Why a rule exists / post-mortem context | [`/docs/agent/RATIONALE.md`](docs/agent/RATIONALE.md) |
-| Per-user, repo-specific preference | `/.claude/settings.local.json` or `/CLAUDE.local.md` (both gitignored) |
+| Per-user or machine-local setting (local paths, tool permissions) | `/.claude/settings.local.json` or `/CLAUDE.local.md` (both gitignored) |
 
 **Pick one location, not two.** If a fact already lives in
 [`docs/codebase.md`](docs/codebase.md) or another source-controlled design
@@ -473,7 +518,7 @@ document, the agent entry is a one-line pointer, not a copy.
 
 **Do not** write durable project knowledge into the machine-local, gitignored
 agent memory store (`~/.claude/projects/<project>/memory/`). That store is for
-genuine per-user/machine-local preferences only. Architectural facts go in the
+genuine per-user or machine-local settings only. Architectural facts go in the
 source-controlled docs above so the whole team (and future sessions) see them.
 
 When **looking for** knowledge, in order: this file, then
