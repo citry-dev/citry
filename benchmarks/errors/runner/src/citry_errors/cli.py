@@ -604,6 +604,11 @@ def main(argv: list[str] | None = None) -> int:
     rep = commands.add_parser("report", help="write the matrix for one run")
     rep.add_argument("run_dir", type=Path)
     rep.add_argument("--output", type=Path, required=True)
+    rep.add_argument(
+        "--keep-from",
+        type=Path,
+        help="an earlier report folder or its results.json; frameworks this run did not measure keep their results",
+    )
     args = parser.parse_args(argv)
     try:
         if args.command == "validate":
@@ -621,7 +626,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "run":
             print(run(args))
             return 0
-        report.write(args.run_dir, args.output)
+        report.write(args.run_dir, args.output, args.keep_from)
         return 0
     except ConfigError as error:
         print(f"citry-errors: {error}", file=sys.stderr)

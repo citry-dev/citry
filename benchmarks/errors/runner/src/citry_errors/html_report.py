@@ -289,6 +289,24 @@ def render(summary: dict[str, Any]) -> str:
             f"{' plus uncommitted changes to them' if dirty else ''}, not a published release.</p>"
         )
 
+    for origin in summary.get("kept", []):
+        # Results kept from an earlier run name that run, not this one.
+        listed = ", ".join(names.get(key, key) for key in origin["frameworks"])
+        kept_source = origin.get("source") or {}
+        notice = f"{escape(listed)}: kept from run {escape(origin['run'])}"
+        if kept_source.get("commit"):
+            notice += f", cases and tools from commit {escape(kept_source['commit'][:12])}"
+        if kept_source.get("inputs_tree"):
+            notice += f", benchmark inputs tree {escape(kept_source['inputs_tree'][:12])}"
+        notice += ", with uncommitted benchmark changes" if kept_source.get("inputs_changed") else ""
+        out.append(f'<p class="notice">{notice}.</p>')
+        for key, packages, dirty in checkout_packages(kept_source):
+            out.append(
+                f'<p class="notice">{escape(names.get(key, key))}: {escape(packages)} built from this '
+                f"repository at commit {escape(kept_source.get('commit', '')[:12])}"
+                f"{' plus uncommitted changes to them' if dirty else ''}, not a published release.</p>"
+            )
+
     out.append('<section class="group"><details open><summary><h2>Outcomes</h2></summary><div class="group-body">')
     out.append('<article class="chart"><details open><summary><h3>How each mistake ended</h3></summary>')
     out.append(

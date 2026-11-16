@@ -8,7 +8,7 @@ from collections import Counter
 from pathlib import Path
 
 from . import html_report
-from .config import CACHE, OUTCOMES, REPO_ROOT, STATIC_STAGES, load_catalogue, load_frameworks
+from .config import CACHE, OUTCOMES, REPO_ROOT, STATIC_STAGES, ConfigError, load_catalogue, load_frameworks
 
 # One short letter per outcome keeps the matrix readable at 24 x 6 cells.
 # A runtime warning shares R with a runtime error; the `w` mark tells them apart.
@@ -118,6 +118,10 @@ def caught_total(by: dict, framework: str, mistake_ids: list[str]) -> str:
 
 def cell(record: dict) -> str:
     """Show where the mistake was first reported, marked `w` when that report was only a warning."""
+    # A record kept from an earlier report has lost its stages, which the
+    # marks need, so it keeps the cell that report worked out.
+    if "cell" in record:
+        return record["cell"]
     if record["status"] != "ported":
         return SHORT[record["status"]]
     if record["strict"] == record["lenient"]:
@@ -160,14 +164,108 @@ def _public(text: str) -> str:
     return text if len(text) <= _EVIDENCE_CHARS else text[: _EVIDENCE_CHARS - 3] + "..."
 
 
-def write(run_dir: Path, output: Path) -> None:
+def _kept(keep_from: Path, measured: set[str], mistake_ids: set[str]) -> tuple[list[dict], list[dict], dict[str, str]]:
+    """
+    Take the records of every framework this run did not measure from an earlier report's results.json.
+
+    Returns three things: those records; for each group of frameworks, the
+    run that measured them (the earlier report's own run, or the run that
+    report kept them from); and the name the earlier report gave each
+    framework.
+    """
+    path = keep_from / "results.json" if keep_from.is_dir() else keep_from
+    earlier = json.loads(path.read_text(encoding="utf-8"))
+    records = [record for record in earlier["results"] if record["framework"] not in measured]
+    stray = sorted({record["mistake"] for record in records} - mistake_ids)
+    if stray:
+        # A mistake the catalogue does not list would reach the page with no row to sit in.
+        raise ConfigError(f"{path} has results for mistakes the catalogue does not list: {stray}")
+    keys = {record["framework"] for record in records}
+    for key in sorted(keys):
+        # A mistake added since the earlier run has no cell in a kept column,
+        # and the docs page needs one for every mistake.
+        missing = sorted(mistake_ids - {record["mistake"] for record in records if record["framework"] == key})
+        if missing:
+            raise ConfigError(f"{path} has no result for {key} on {missing}; measure {key} again")
+    origins = []
+    # Frameworks the earlier report kept from a still earlier one keep that origin.
+    for origin in earlier.get("kept", []):
+        frameworks = [key for key in origin["frameworks"] if key in keys]
+        if frameworks:
+            origins.append(origin | {"frameworks": frameworks, "source": _origin_source(origin["source"], frameworks)})
+    inherited = {key for origin in origins for key in origin["frameworks"]}
+    own = [row["key"] for row in earlier["frameworks"] if row["key"] in keys - inherited]
+    if own:
+        source = _origin_source(earlier.get("source") or {}, own)
+        origins.insert(0, {"run": earlier["run"], "source": source, "frameworks": own})
+    return records, origins, {row["key"]: row["name"] for row in earlier["frameworks"]}
+
+
+def _origin_source(source: dict, frameworks: list[str]) -> dict:
+    """Keep what a reader needs to know about the run that measured these frameworks, and nothing about the others."""
+    kept = {key: source[key] for key in ("commit", "inputs_tree") if source.get(key)}
+    kept["inputs_changed"] = bool(source.get("inputs_changed", source.get("benchmark_files_changed")))
+    # A kept framework built from this repository is still not a release.
+    checkout = {key: packages for key, packages in (source.get("from_checkout") or {}).items() if key in frameworks}
+    if checkout:
+        kept["from_checkout"] = checkout
+    return kept
+
+
+def _kept_notices(origin: dict, names: dict[str, str]) -> list[str]:
+    """Say which frameworks' results come from an earlier run, which run, and what it measured, in Markdown."""
+    listed = ", ".join(names.get(key, key) for key in origin["frameworks"])
+    source = origin["source"]
+    notice = f"{listed}: kept from run {origin['run']}"
+    if source.get("commit"):
+        notice += f", cases and tools from commit `{source['commit']}`"
+    if source.get("inputs_tree"):
+        notice += f", benchmark inputs tree `{source['inputs_tree']}`"
+    notice += " plus uncommitted changes to the benchmark" if source.get("inputs_changed") else ""
+    lines = [notice + "."]
+    for key, packages, changed in html_report.checkout_packages(source):
+        lines.append(
+            f"{names.get(key, key)}: {packages} built from this repository at commit `{source.get('commit', '')}`"
+            f"{' plus uncommitted changes to them' if changed else ''}, not a published release."
+        )
+    return lines
+
+
+def _check_complete(records: list[dict], measured: set[str], mistake_ids: set[str]) -> None:
+    """Stop when a framework this run measured lacks a mistake, which no kept report could fill in."""
+    for key in sorted(measured):
+        missing = sorted(mistake_ids - {record["mistake"] for record in records if record["framework"] == key})
+        if missing:
+            raise ConfigError(
+                f"the run measured {key} without {missing}; --keep-from keeps whole frameworks, "
+                f"so run every mistake of {key}"
+            )
+
+
+def write(run_dir: Path, output: Path, keep_from: Path | None = None) -> None:
+    """
+    Write matrix.md, results.json and report.html for one run into `output`.
+
+    With `keep_from`, an earlier report folder or its results.json, every
+    framework the run did not measure keeps its results from that report,
+    and each report names the run they come from.
+    """
     records = [json.loads(line) for line in (run_dir / "results.jsonl").read_text().splitlines() if line]
     mistakes = load_catalogue()
+    kept, origins, kept_names = [], [], {}
+    if keep_from:
+        measured = {record["framework"] for record in records}
+        mistake_ids = {mistake.id for mistake in mistakes}
+        _check_complete(records, measured, mistake_ids)
+        kept, origins, kept_names = _kept(keep_from, measured, mistake_ids)
+    records += kept
     frameworks = load_frameworks()
     present = {record["framework"] for record in records}
     keys = [key for key in ORDER if key in present] + sorted(present - set(ORDER))
     by = {(record["mistake"], record["framework"]): record for record in records}
-    names = " | ".join(frameworks[key].name for key in keys)
+    # A kept framework this checkout no longer configures keeps its earlier name.
+    framework_names = kept_names | {key: framework.name for key, framework in frameworks.items()}
+    names = " | ".join(framework_names[key] for key in keys)
     source_file = run_dir / "run.json"
     source = json.loads(source_file.read_text()) if source_file.is_file() else {}
     lines = [f"# Error-prevention results, run {run_dir.name}", ""]
@@ -186,12 +284,16 @@ def write(run_dir: Path, output: Path) -> None:
         for key, packages, changed in html_report.checkout_packages(source):
             # Such a framework is measured from unreleased sources, which the
             # reader needs before comparing it with a release.
-            name = frameworks[key].name if key in frameworks else key
+            name = framework_names.get(key, key)
             lines += [
                 f"{name}: {packages} built from this repository at commit `{source['commit']}`"
                 f"{' plus uncommitted changes to them' if changed else ''}, not a published release.",
                 "",
             ]
+    # The reader must see that the columns were not all measured in one run.
+    for origin in origins:
+        for notice in _kept_notices(origin, framework_names):
+            lines += [notice, ""]
 
     lines += ["## How each mistake ended", "", f"| Outcome | {names} |", "| --- |" + " --- |" * len(keys)]
     counts = {
@@ -227,8 +329,11 @@ def write(run_dir: Path, output: Path) -> None:
     (output / "matrix.md").write_text("\n".join(lines))
 
     titles = {mistake.id: mistake for mistake in mistakes}
+    # A kept record is already in this compact form.
     compact = [
-        {
+        record
+        if "cell" in record
+        else {
             key: record.get(key)
             for key in (
                 "framework",
@@ -264,13 +369,15 @@ def write(run_dir: Path, output: Path) -> None:
     summary = {
         "run": run_dir.name,
         "source": source,
-        "frameworks": [{"key": key, "name": frameworks[key].name} for key in keys],
+        "frameworks": [{"key": key, "name": framework_names[key]} for key in keys],
         "categories": [{"id": key, "heading": heading} for key, heading in CATEGORIES.items()],
         "buckets": [{"id": key, "label": label} for key, label in BUCKETS.items()],
         "codes": [{"code": code, "meaning": meaning} for code, meaning in CODES],
         "mistakes": [{"id": mistake.id, "title": mistake.title, "category": mistake.category} for mistake in mistakes],
         "results": compact,
     }
+    if origins:
+        summary["kept"] = origins
     (output / "results.json").write_text(json.dumps(summary, indent=2) + "\n")
     # The same data as a page that opens from disk, with no docs site to start.
     html_report.write(summary, output)

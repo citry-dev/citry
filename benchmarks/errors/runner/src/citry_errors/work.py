@@ -36,10 +36,10 @@ def local_sources(framework: Framework) -> dict[str, Path]:
     """
     Give the packages the clean app's pyproject.toml installs from a folder or file on disk, by package name.
 
-    These are uv's `path` sources, such as the Citry app's citry and
-    citry-lsp, which come from this repository rather than from PyPI. Their
-    files live outside the framework's folder, so neither the lockfile nor
-    the framework's own files change when they do.
+    These are uv's `path` sources, such as a package built from this
+    repository rather than taken from PyPI. Their files live outside the
+    framework's folder, so neither the lockfile nor the framework's own
+    files change when they do.
     """
     manifest = framework.baseline / "pyproject.toml"
     if not manifest.is_file():
@@ -139,8 +139,7 @@ def _check_lock(framework: Framework) -> None:
     silently. uv also counts the packages' development dependency groups,
     which are never installed here, so a change to those asks for a new
     lock too. uv runs in the clean app's folder, because it resolves
-    `${PROJECT_ROOT}` in the Citry app's overrides against the folder it
-    starts in.
+    `${PROJECT_ROOT}` in an app's settings against the folder it starts in.
     """
     if not local_sources(framework) or not (framework.baseline / "uv.lock").is_file():
         return
@@ -179,11 +178,12 @@ def _check_overrides(framework: Framework) -> None:
     """
     Stop when the clean app overrides a version that a package it installs from disk pins differently.
 
-    The Citry app overrides citry-core's version by hand, because this
-    repository's own settings would build citry-core from its Rust sources
-    instead. The lock records the overridden version only, so `uv lock
-    --check` cannot see citry raise its pin, and citry would run against a
-    citry-core it was not released with.
+    An app that builds a package from this repository may override the
+    version of one of its dependencies by hand, for example to take
+    citry-core from PyPI where this repository's own settings would build
+    it from its Rust sources. The lock records the overridden version only,
+    so `uv lock --check` cannot see the package raise its pin, and the
+    package would run against a dependency it was not released with.
     """
     manifest = framework.baseline / "pyproject.toml"
     if not manifest.is_file():
