@@ -12,9 +12,11 @@ description: How fast Citry and eleven other frameworks make a 1,400-entry page 
 
 ## Performance
 
-These charts show how long a page with 1,400 rendered entries takes to
-become usable in Citry and eleven other frameworks. Shorter bars are
-faster.
+Citry makes a page with 1,400 rendered entries usable in **315 ms**
+on the first load and **257 ms** on the second. On the first load,
+Nuxt, Rusty + HTMX + Alpine and Jinja + HTMX + Alpine are 10 to 15 ms
+faster, which is within the noise. On the second load only Nuxt is
+faster, by about 28 ms. Shorter bars are faster.
 
 <c-benchmark-chart
   load="first"
@@ -26,91 +28,79 @@ faster.
   title="Second load: time until usable, 1,400 entries"
 />
 
-### What the charts show
-
-- Every framework serves the same project page with 1,400 entries:
-  repeated blocks of content, each with its own data.
-- A bar runs from the moment the browser asks for the page until the
-  page's scripts respond to input and the browser has laid the page out.
-- The first chart times the first request for the page. The second
-  chart times the next request for the same page, after the server has
-  handled it once. The browser cache is empty both times.
-- Green is the server building the page. Blue is the browser loading and
-  running scripts after the page arrives. The remaining parts of each bar
-  are short: the wait for the next layout takes up to about 35 ms, and
-  the other phases a few milliseconds each.
-- The dashed line marks Citry's total.
-- "Rusty" is
-  [Django Rusty Templates](https://github.com/LilyFirefly/django-rusty-templates),
-  an experimental Rust version of Django's template engine.
-
 ### Where Citry stands
 
-- First load: Citry takes 315 ms. Nuxt, Rusty + HTMX + Alpine, and
+- **First load, 315 ms**: Nuxt, Rusty + HTMX + Alpine, and
   Jinja + HTMX + Alpine are 10 to 15 ms faster, and Tetra is 13 ms
-  slower. All four gaps are within the noise (see the end of this
-  section). Django + HTMX + Alpine and Next.js are 42 and 56 ms slower.
-- Second load: Citry takes 257 ms. Nuxt is about 28 ms faster.
+  slower, all within the noise. Django + HTMX + Alpine and Next.js are
+  42 and 56 ms slower.
+- **Second load, 257 ms**: Nuxt is about 28 ms faster.
   Rusty + HTMX + Alpine and Jinja + HTMX + Alpine are 37 to 43 ms
   slower. Next.js, Tetra, and Django + HTMX + Alpine are 67 to 85 ms
   slower.
-- Reflex, django-components, django-unicorn, FastHTML, and ReactPy are
-  slower on both loads.
-- Citry spends more time on the server than most frameworks here, and
-  the least time in the browser.
+- **Slower on both loads**: Reflex, django-components, django-unicorn,
+  FastHTML, and ReactPy.
+- **Where the time goes**: Citry spends more time on the server than
+  most frameworks here, and the least time in the browser.
+
+The less familiar names, such as Rusty, are described under
+[The frameworks](#frameworks).
+
+??? "How to read the charts"
+
+    - Every framework serves the same project page with 1,400 entries:
+      repeated blocks of content, each with its own data.
+    - A bar runs from the moment the browser asks for the page until the
+      page's scripts respond to input and the browser has laid the page
+      out.
+    - The first chart times the first request for the page. The second
+      chart times the next request for the same page, after the server
+      has handled it once. The browser cache is empty both times.
+    - Green is the server building the page. Blue is the browser loading
+      and running scripts after the page arrives. The remaining parts of
+      each bar are short: the wait for the next layout takes up to about
+      35 ms, and the other phases a few milliseconds each.
+    - The dashed line marks Citry's total.
 
 ### How we measured { #how-the-numbers-were-taken }
 
-- **When**: Citry on 2026-11-16, the other eleven frameworks on
-  2026-10-19.
-- **Which Citry**: Citry 1.0.0 and citry-core 2.1.0, both installed
-  from PyPI. The Citry app uses Citry's Vue runtime and
-  [`simple="vue"`](/performance/simple-components/). The 2026-10-19
-  run measured all twelve frameworks with Citry 0.6.0 and citry-core
-  1.8.0 from PyPI; the charts use that run only for the other eleven.
-- **Where**: every run used the same Apple M4 Mac with Chromium 151, an
-  empty browser cache, and a local connection.
-- **Same Mac, same times**: the 2026-11-16 run also measured
-  Jinja + HTMX + Alpine again, to confirm the Mac gave the same times
-  on both days. Its totals changed by 9 ms on the first load and 11 ms
-  on the second, which is within the noise, so the charts keep its
-  2026-10-19 numbers.
-- **Repeat run**: a second run on 2026-11-16 gave Citry 313 ms on the
-  first load and 249 ms on the second. The charts show the earlier run.
+Each bar is a single measurement. Jinja + HTMX + Alpine's first load
+took 295, 304 and 317 ms in three runs of the same setup, so treat a
+gap of about 20 ms or less as noise. Each framework reports its own
+server time, so the work it covers can differ a little.
 
-Each framework reports its own server time, so the work it covers can
-differ a little. Each bar is a single measurement. Jinja + HTMX +
-Alpine's first load took 295, 304 and 317 ms in three runs of the same
-setup, so treat a gap of about 20 ms or less as noise.
+??? "Dates, versions and repeat runs"
+
+    - **When**: Citry on 2026-11-16, the other eleven frameworks on
+      2026-10-19.
+    - **Which Citry**: Citry 1.0.0 and citry-core 2.1.0, both installed
+      from PyPI. The Citry app uses Citry's Vue runtime and
+      [`simple="vue"`](/performance/simple-components/). The 2026-10-19
+      run measured all twelve frameworks with Citry 0.6.0 and citry-core
+      1.8.0 from PyPI; the charts use that run only for the other eleven.
+    - **Where**: every run used the same Apple M4 Mac with Chromium 151,
+      an empty browser cache, and a local connection.
+    - **Same Mac, same times**: the 2026-11-16 run also measured
+      Jinja + HTMX + Alpine again, to confirm the Mac gave the same times
+      on both days. Its totals changed by 9 ms on the first load and
+      11 ms on the second, which is within the noise, so the charts keep
+      its 2026-10-19 numbers.
+    - **Repeat run**: a second run on 2026-11-16 gave Citry 313 ms on the
+      first load and 249 ms on the second. The charts show the earlier
+      run.
 
 ## Catching errors
 
-The earlier a mistake is reported, the less time it costs you.
+The earlier a mistake is reported, the less time it costs you. Of the
+61 mistakes that apply to Citry, it reports **54** before the app
+runs. Next.js comes next with 45 of 57, then Nuxt with 39 of 58 and
+Reflex with 38 of 54. The Django, Rusty, django-components and Jinja
+apps with HTMX and Alpine report 5 or 6.
 
 We wrote the same small app in Citry and eleven other frameworks, made
 the same 63 mistakes in each (a misspelled component name, a
 wrong-typed input, an unclosed tag, and so on), and recorded **where
-each mistake was first reported**. Rusty is the Django app with its
-templates rendered by
-[Django Rusty Templates](https://github.com/LilyFirefly/django-rusty-templates),
-an experimental Rust version of Django's template engine.
-django-components is the Django app with its page, cards, counter and
-status line rewritten as components of
-[django-components](https://github.com/django-components/django-components),
-the Django library Citry grew out of.
-[ReactPy](https://github.com/reactive-python/reactpy) lets you write
-React-style components in Python: the server runs them and sends the
-browser the page to show.
-django-unicorn is the Django app with its cards, counter, details and
-search form rewritten as components of
-[django-unicorn](https://www.django-unicorn.com/). Each click goes to
-the server, which sends back the component's new HTML.
-Tetra is the Django app with its interactive parts rewritten as
-components of [Tetra](https://www.tetraframework.com/): the server
-renders each component, and the component's Alpine code in the browser
-calls its Python methods on the server.
-[Reflex](https://reflex.dev/) compiles components written in Python into
-a React app, which sends each click to a Python backend.
+each mistake was first reported**.
 
 <c-error-benchmark-chart
   title="How the 63 mistakes ended in each framework"
@@ -118,18 +108,17 @@ a React app, which sends each click to a Python backend.
 
 ### Read the error chart { #errors-what-the-chart-shows }
 
-- **Static/IDE error** (best): the editor, a command-line check, or
-  the production build, before the app runs.
-- **Static/IDE warning**: the same, but only a warning. Easy to miss.
-- **Runtime error**: only once the app runs, from the server, an error
-  response, or the browser.
-- **Runtime warning**: the running app only prints a warning.
-- **N/A or prevented**: no equivalent in this framework, or its
-  design prevents the mistake.
-- **Missed** (worst): nothing reports it, whether or not the page
-  looks different.
-- **Number on the right**: static/IDE errors plus warnings.
-- **Dashed line**: Citry's number.
+| Outcome | Meaning |
+|---|---|
+| **Static/IDE error** (best) | The editor, a command-line check, or the production build, before the app runs. |
+| **Static/IDE warning** | The same, but only a warning. Easy to miss. |
+| **Runtime error** | Only once the app runs, from the server, an error response, or the browser. |
+| **Runtime warning** | The running app only prints a warning. |
+| **N/A or prevented** | No equivalent in this framework, or its design prevents the mistake. |
+| **Missed** (worst) | Nothing reports it, whether or not the page looks different. |
+
+The number on the right of each bar is static/IDE errors plus
+warnings. The dashed line is Citry's number.
 
 ### Where Citry stands { #errors-where-citry-stands }
 
@@ -137,19 +126,38 @@ a React app, which sends each click to a Python backend.
   measured with Citry at commit bf935bc, before the Citry 0.7.0
   release. Citry 0.6.0 catches 29 of 61 (see
   [How we measured](#errors-how-we-measured)). Two of the 63 mistakes
-  don't apply to Citry. Next.js 45 of 57, Nuxt 39 of
-  58, Reflex 38 of 54, ReactPy 24 of 56, FastHTML 20 of 48, django-unicorn 12 of 55,
-  Tetra 9 of 57, Django + HTMX + Alpine 6 of 52, Rusty + HTMX + Alpine 6 of 50,
-  django-components + HTMX + Alpine 6 of 54, Jinja + HTMX + Alpine 5
-  of 51.
-- **What Citry checks**: when you point `citry check` at your app
-  (`citry --app app.main:citry_app check`) and set the editor
-  extension's `citry.app` setting to the same app, they check each
-  template against your components, their slots and
-  events, your server events and forms, the CSS variables the server
-  sets, and the pages and files your app serves. They also run Vue's
-  compiler and HTML checks over every template.
-- **Warning only: 7**, reported before the app runs, but easy to miss:
+  don't apply to Citry.
+- **Warning only: 7**, reported before the app runs, but easy to miss.
+- **Only at runtime: 2**.
+- **Missed: 5**, nothing tells you.
+
+??? "Every framework's count before the app runs"
+
+    | Framework | Caught before the app runs |
+    |---|---|
+    | Citry | 54 of 61 |
+    | Next.js | 45 of 57 |
+    | Nuxt | 39 of 58 |
+    | Reflex | 38 of 54 |
+    | ReactPy | 24 of 56 |
+    | FastHTML | 20 of 48 |
+    | django-unicorn | 12 of 55 |
+    | Tetra | 9 of 57 |
+    | Django + HTMX + Alpine | 6 of 52 |
+    | Rusty + HTMX + Alpine | 6 of 50 |
+    | django-components + HTMX + Alpine | 6 of 54 |
+    | Jinja + HTMX + Alpine | 5 of 51 |
+
+When you point `citry check` at your app
+(`citry --app app.main:citry_app check`) and set the editor
+extension's `citry.app` setting to the same app, they check each
+template against your components, their slots and events, your server
+events and forms, the CSS variables the server sets, and the pages and
+files your app serves. They also run Vue's compiler and HTML checks
+over every template.
+
+??? "The 7 mistakes Citry reports only as warnings"
+
     - a listener with a misspelled event name: a component event such
       as `@hdie`, or a browser event such as `@clik`
     - a CSS variable whose name differs from the one the server sets
@@ -159,7 +167,9 @@ a React app, which sends each click to a Python backend.
     - the server passes browser code a value it can't receive, such as
       a path object. The warning points at the `js_data()` line that
       sends the value rather than the line that creates it
-- **Only at runtime: 2**:
+
+??? "The 2 mistakes Citry reports only at runtime"
+
     - a link that passes a word, such as `/projects/alpha`, where the
       route takes a number: FastAPI answers with a 422 validation
       error. The check knows which pages the app serves, but not the
@@ -167,7 +177,9 @@ a React app, which sends each click to a Python backend.
     - a component reads a value the page shares with `<c-provide>`
       under a misspelled key, such as `self.inject("bord")` where the
       page provides `board`: the server fails to render the page
-- **Missed: 5**, nothing tells you:
+
+??? "The 5 mistakes nothing reports in Citry"
+
     - a misspelled CSS class: the page looks wrong
     - the child's event sends a number where the parent expects text:
       clicking the child's button changes nothing
@@ -181,59 +193,79 @@ a React app, which sends each click to a Python backend.
       framework here reports this one, and in Next.js and Nuxt even
       reading a server-only value in browser code puts it in the page
       before an error appears.
-- **Why Next.js and Nuxt come next**: TypeScript checks Next.js's HTML
-  elements, attribute names and values, and event names. Its server
-  actions take typed arguments, so a wrong or missing field in the data
-  a button sends is caught too. Nuxt's template check, with its
-  `strictTemplates` setting on, reports unknown components, elements, attributes,
-  directives and component events. Both linters report a missing list
-  key, and Next.js's also warns about accessibility mistakes such as a
-  misspelled ARIA attribute.
-- **Why Reflex is close behind Nuxt**: its components are typed Python functions
-  and its state fields have types, so Pylance checks component inputs,
-  reads of state fields and event arguments, and `reflex compile` checks
-  prop values, event names and loops before the app runs.
+
+??? "Why Next.js, Nuxt and Reflex come next"
+
+    - **Next.js and Nuxt**: TypeScript checks Next.js's HTML elements,
+      attribute names and values, and event names. Its server actions
+      take typed arguments, so a wrong or missing field in the data a
+      button sends is caught too. Nuxt's template check, with its
+      `strictTemplates` setting on, reports unknown components,
+      elements, attributes, directives and component events. Both
+      linters report a missing list key, and Next.js's also warns about
+      accessibility mistakes such as a misspelled ARIA attribute.
+    - **Reflex, close behind Nuxt**: its components are typed Python
+      functions and its state fields have types, so Pylance checks
+      component inputs, reads of state fields and event arguments, and
+      `reflex compile` checks prop values, event names and loops before
+      the app runs.
 
 ### How we measured { #errors-how-we-measured }
 
-- **When**: 2026-10-21. Every framework's versions are pinned in its
-  app's lockfile; Citry's exception is below.
-- **Which Citry**: Citry and its language server, citry-lsp, built from
-  the repository at commit
-  [bf935bc](https://github.com/citry-dev/citry/tree/bf935bc77fc3e868cb7c3915035c32f0ab7147ff),
-  measured before the Citry 0.7.0 release,
-  with citry-core 1.8.0 from PyPI. The run's report names a later commit that changed only the
-  benchmark, so the Citry code is the same. Citry 0.6.0, the release
-  before that commit, reports 29 of the 61.
-- **Citry**: a FastAPI app that adds Citry's routes with
-  `citry.contrib.fastapi.mount()`, as Citry's FastAPI starter does. The
-  editor extension's language server (measured with
-  `citry check --types`) and `citry check` check it.
-- **Every Python stack** (Citry, Django, Rusty, Jinja, Tetra,
-  django-unicorn, django-components, FastHTML, ReactPy, Reflex):
-  Pylance with type checking on (measured with pyright in standard mode), and
-  ruff with its default rules.
-- **Django, Rusty, Jinja, Tetra, django-unicorn and django-components**:
-  djLint with the Django or Jinja profile, `manage.py check` for every
-  app except Jinja's, and VS Code's JavaScript syntax check for the
-  script files in every app except Jinja's and Tetra's. The Tetra app
-  writes its components' templates and scripts inside Python classes, as
-  Tetra's tutorial does, where djLint and the JavaScript check don't
-  look; its build command,
-  `manage.py tetrabuild`, reports a script's syntax error but still
-  succeeds, so that counts as a warning.
-- **Reflex**: `reflex compile --dry`, which builds every page without
-  starting the app.
-- **Next.js and Nuxt**: the editor's TypeScript checks (tsc for
-  Next.js; vue-tsc and the Vue compiler's errors for Nuxt), ESLint, and
-  the production build.
-- **The running app**: each framework's server, started as its docs
-  say, driven in Chromium through the same clicks. Server errors, error
-  responses, and browser errors and warnings are recorded.
-- **Stricter settings**: when a framework has a setting that turns on
-  a stricter check, and other frameworks here have the same kind of
-  check, the benchmark turns it on in that framework's app, so the
-  frameworks are compared like for like:
+We ran the checks on 2026-10-21. Every framework's versions are pinned
+in its app's lockfile, except Citry's, which was built from commit
+bf935bc. Each app was checked with its framework's editor and
+command-line tools, then run in Chromium through the same clicks.
+
+??? "Citry's version"
+
+    - **Which Citry**: Citry and its language server, citry-lsp, built
+      from the repository at commit
+      [bf935bc](https://github.com/citry-dev/citry/tree/bf935bc77fc3e868cb7c3915035c32f0ab7147ff),
+      measured before the Citry 0.7.0 release, with citry-core 1.8.0
+      from PyPI. The run's report names a later commit that changed
+      only the benchmark, so the Citry code is the same. Citry 0.6.0,
+      the release before that commit, reports 29 of the 61.
+
+??? "The tools run for each framework"
+
+    - **Citry**: a FastAPI app that adds Citry's routes with
+      `citry.contrib.fastapi.mount()`, as Citry's FastAPI starter does.
+      The editor extension's language server (measured with
+      `citry check --types`) and `citry check` check it.
+    - **Every Python stack** (Citry, Django, Rusty, Jinja, Tetra,
+      django-unicorn, django-components, FastHTML, ReactPy, Reflex):
+      Pylance with type checking on (measured with pyright in standard
+      mode), and ruff with its default rules.
+    - **Django, Rusty, Jinja, Tetra, django-unicorn and
+      django-components**: djLint with the Django or Jinja profile,
+      `manage.py check` for every app except Jinja's, and VS Code's
+      JavaScript syntax check for the script files in every app except
+      Jinja's and Tetra's. The Tetra app writes its components'
+      templates and scripts inside Python classes, as Tetra's tutorial
+      does, where djLint and the JavaScript check don't look; its build
+      command, `manage.py tetrabuild`, reports a script's syntax error
+      but still succeeds, so that counts as a warning.
+    - **Reflex**: `reflex compile --dry`, which builds every page
+      without starting the app.
+    - **Next.js and Nuxt**: the editor's TypeScript checks (tsc for
+      Next.js; vue-tsc and the Vue compiler's errors for Nuxt), ESLint,
+      and the production build.
+    - **The running app**: each framework's server, started as its docs
+      say, driven in Chromium through the same clicks. Server errors,
+      error responses, and browser errors and warnings are recorded.
+    - **Setup**: the project layout from each framework's docs or
+      starter, with default settings unless the
+      [benchmark notes](https://github.com/citry-dev/citry/tree/main/benchmarks/errors)
+      say otherwise.
+
+??? "Stricter settings turned on"
+
+    When a framework has a setting that turns on a stricter check, and
+    other frameworks here have the same kind of check, the benchmark
+    turns it on in that framework's app, so the frameworks are compared
+    like for like:
+
     - **Jinja**: `StrictUndefined`, so printing a name the template
       wasn't given is an error, not empty text.
     - **django-components**: Pydantic models for component inputs with
@@ -255,18 +287,26 @@ a React app, which sends each click to a Python backend.
     - **Citry, Django, Rusty, FastHTML, django-unicorn and Reflex**:
       none of their settings adds a kind of check the others make, so
       they keep their defaults.
-- **Setup**: the project layout from each framework's docs or starter,
-  with default settings unless the
-  [benchmark notes](https://github.com/citry-dev/citry/tree/main/benchmarks/errors)
-  say otherwise.
 
 ### Every mistake
 
 Each cell is a short code for where the mistake was first reported.
-Cells in the five outcomes are tinted with their chart color. On a computer, hover over a cell to see
-what the tools printed, or why the mistake doesn't apply.
+Cells in the five outcomes are tinted with their chart color. On a
+computer, hover over a cell to see what the tools printed, or why the
+mistake doesn't apply.
 
 <c-error-benchmark-table />
+
+## The frameworks { #frameworks }
+
+| Framework | What the benchmark app is |
+|---|---|
+| Rusty | The Django app with its templates rendered by [Django Rusty Templates](https://github.com/LilyFirefly/django-rusty-templates), an experimental Rust version of Django's template engine. |
+| django-components | The Django app with its page, cards, counter and status line rewritten as components of [django-components](https://github.com/django-components/django-components), the Django library Citry grew out of. |
+| ReactPy | [ReactPy](https://github.com/reactive-python/reactpy) lets you write React-style components in Python: the server runs them and sends the browser the page to show. |
+| django-unicorn | The Django app with its cards, counter, details and search form rewritten as components of [django-unicorn](https://www.django-unicorn.com/). Each click goes to the server, which sends back the component's new HTML. |
+| Tetra | The Django app with its interactive parts rewritten as components of [Tetra](https://www.tetraframework.com/): the server renders each component, and the component's Alpine code in the browser calls its Python methods on the server. |
+| Reflex | [Reflex](https://reflex.dev/) compiles components written in Python into a React app, which sends each click to a Python backend. |
 
 ## Related pages
 
