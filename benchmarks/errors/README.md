@@ -89,26 +89,37 @@ no release on PyPI, so its app's lockfile pins it to a git
 commit, and `prepare` builds its Rust extension. That needs a Rust
 compiler (https://rustup.rs/) unless uv has already built it.
 
-The Citry app measures the Citry in this repository, not a release, so a
-Citry release ships with its results already measured. Its lockfile
-installs citry and citry-lsp from `packages/py/`, built as a release
-would be, and citry-core from PyPI at the version citry pins. A change
-to citry-core's Rust code is therefore measured only once a citry-core
-release has it. Each run's `run.json` lists the packages built from the
-repository under `from_checkout`, and the report names them with the
-run's commit.
+The Citry app installs the released citry, citry-core and citry-lsp
+from PyPI, like every other app installs its framework. To measure a new
+Citry release, raise the citry and citry-lsp versions in
+`frameworks/citry/baseline/pyproject.toml` and run `uv lock` in that
+folder; citry pins the citry-core it was released with.
 
-`prepare` installs those two packages again whenever a file in their
-folders changes. Before it does, it checks two things and stops when
-either has changed: that the app's `uv.lock` still matches their
-sources, development dependency groups included, and that the
-citry-core version `frameworks/citry/baseline/pyproject.toml` installs
-is still the one citry pins. To fix either, update that file and run
-`uv lock` in `frameworks/citry/baseline/`.
+The runner can also measure a package built from this repository's
+sources. When an app's `pyproject.toml` installs a package from a
+folder of this repository (a `path` entry in `[tool.uv.sources]`, not
+an editable one), `run.json` lists it under `from_checkout`, and the
+report names it with the run's commit. `prepare` then installs that
+package again whenever a file in its folder changes, after checking
+that the app's `uv.lock` still matches its sources and that no
+`override-dependencies` pin disagrees with that package's own pins.
 
 `run` takes `--framework` and `--mistake`, each repeatable, to run part of
-the matrix, and `--skip-runtime` to run the static stages only. Installed
-environments, working copies and the raw output of every tool are kept under
+the matrix, and `--skip-runtime` to run the static stages only. When a run
+measures only some frameworks, `report --keep-from <earlier report folder>`
+takes every other framework's results from that report, and the report
+names the run each framework's results come from. It keeps whole
+frameworks, so the run must measure every mistake of each framework it
+names:
+
+```bash
+uv run --no-sync citry-errors run --framework citry
+uv run --no-sync citry-errors report \
+  ../../../.benchmarks/errors/runs/<run-id> \
+  --keep-from ../results/<earlier date> --output ../results/<date>
+```
+
+Installed environments, working copies and the raw output of every tool are kept under
 `.benchmarks/errors/` at the repository root; set `CITRY_ERRORS_CACHE` to
 keep them somewhere else. Only the compact report in `results/` is
 committed: `report.html`, a self-contained page with the chart and the full
@@ -138,8 +149,8 @@ finish in.
 output and browser check in `.benchmarks/errors/results/` (not to be
 confused with the committed `results/` report folder), and a later run
 runs only the cases whose inputs changed: the case itself, its framework's
-folder, what that framework's environment installed (for the Citry app,
-the files of citry and citry-lsp it built from this repository), the
+folder, what that framework's environment installed (and the files of
+any package it builds from this repository's sources), the
 runner code that runs the tools and the browser, the installed Playwright,
 the Node and Python versions, the operating system version, a few
 environment variables the tools read, or the cache folder's location.
@@ -170,21 +181,25 @@ run's work (8,500 of 10,000 seconds, the rest the static stages), and the
 same full run took about 38 minutes, with the same cells. A rerun with
 nothing changed repeats only the browser checks whose journey stops on an
 error page, which are never stored: 4 cases in Jinja and FastHTML, and a
-few in every other framework. It is not part of routine CI. Run it before
-each Citry release, so the release ships with its results, and when a
+few in every other framework. It is not part of routine CI. Run it after
+each Citry release, with the Citry app moved to that release, and when a
 framework's pinned versions change.
 
 ## Latest result
 
-[`results/2026-10-21/`](results/2026-10-21/) is the run published in the
-"Catching errors" section of the docs site's Benchmarks page. Open
+[`results/2026-11-16/`](results/2026-11-16/) is the report published in
+the "Catching errors" section of the docs site's Benchmarks page. Open
 `report.html` there in a browser for the chart and the full table;
 `results.json` has the first few findings behind each cell, and the
 findings that pointed away from the change without an `indirect` note.
-In this run, Citry was built from this repository's sources at the
-commit the report names, not from a release. Before the app runs, it
-reports 54 of the 61 mistakes that apply to it; Citry 0.6.0, the release
-before that commit, reported 29.
+Its Citry column comes from a run on 2026-11-16 that measured only
+Citry, installed as the 1.0.0 release from PyPI. That run took 1 minute
+19 seconds.
+Before the app runs, Citry reports 56 of the 61 mistakes that apply to
+it. The other eleven frameworks' columns are kept from the run in
+[`results/2026-10-21/`](results/2026-10-21/), whose Citry column
+measured Citry built from this repository before the 0.7.0 release
+(54 of 61).
 
 Each report starts by naming what the run scored: the commit it started
 from and the git tree of the benchmark's inputs, which are `cases/`,
@@ -327,9 +342,11 @@ writes a part of the page, not from its tools:
   fails on the missing file, and in Reflex, whose development server
   answers with the app's page and status 200.
 - **m50:** each card reads the board's name that the page shares with
-  it, and the case misspells the key or name the card reads. Citry's and
-  django-components' `inject()` raise an error for a key that no
-  component above provides, and Jinja's app turns on `StrictUndefined`,
+  it, and the case misspells the key or name the card reads. In Citry,
+  `citry check` and the editor warn that no component above the card
+  provides the misspelled key; when the page renders, `self.inject()`
+  raises an error for it. django-components' `inject()` raises
+  an error for such a key, and Jinja's app turns on `StrictUndefined`,
   so the page fails to render. Django, Rusty, Tetra and django-unicorn
   print a misspelled template variable as empty text, so the cards show
   `Board:` with no error. Nuxt's page provides the name under a string
@@ -438,8 +455,8 @@ writes a part of the page, not from its tools:
   typing, these cells read "never" and count as missed.
 
 [#207](https://github.com/citry-dev/citry/issues/207) tracks the gaps
-the first 24 mistakes found in Citry; the later gaps m30, m42, m50,
-m60 and m61 are not in it yet.
+the first 24 mistakes found in Citry; the later gaps m30, m42, m60 and
+m61 are not in it yet.
 
 Rusty's cells match Django's except four:
 
@@ -1020,9 +1037,7 @@ django-components app.
 | `build` | The production build, when the framework has one |
 
 Each baseline pins exact versions in its own lockfile, and those versions are
-part of the result. The Citry app is the exception: it installs citry and
-citry-lsp from this repository's sources, so a report names the commit it
-measured instead of a release.
+part of the result.
 
 ## What the result does not show
 

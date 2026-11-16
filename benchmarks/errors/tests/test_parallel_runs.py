@@ -430,3 +430,85 @@ def test_a_case_whose_browser_check_was_skipped_is_scored_as_a_static_error(toy:
     # Only a run with the browser check turned off has unscored cases.
     assert "Not scored" not in matrix
     assert "Not scored" not in (tmp_path / "report" / "report.html").read_text()
+
+
+def test_a_report_keeps_the_frameworks_a_run_did_not_measure_from_an_earlier_report(toy: Toy, tmp_path: Path) -> None:
+    run_dir = toy.run(jobs=2)
+    report.write(run_dir, tmp_path / "first")
+    first = json.loads((tmp_path / "first" / "results.json").read_text())
+    # An earlier report with the toy measured long ago (a cell this run cannot
+    # give) and two more frameworks, one of which it kept from a still earlier
+    # run, and one built from this repository.
+    stale = [row | {"cell": "X"} for row in first["results"]]
+    other = [row | {"framework": "other", "cell": "R"} for row in first["results"]]
+    older = [row | {"framework": "older", "cell": "M"} for row in first["results"]]
+    package = {"name": "pkg", "version": "0.1.0", "path": "packages/pkg", "tree": "t", "changed": False}
+    earlier = first | {
+        "run": "earlier-run",
+        "source": {
+            "commit": "abc123",
+            "inputs_tree": "tree1",
+            "inputs_changed": False,
+            "reused": ["toy/m01-bad"],
+            "from_checkout": {"other": [package], "toy": [package]},
+        },
+        "frameworks": [*first["frameworks"], {"key": "other", "name": "Other"}, {"key": "older", "name": "Older"}],
+        "results": stale + other + older,
+        "kept": [{"run": "oldest-run", "source": {"commit": "def456"}, "frameworks": ["older"]}],
+    }
+    (tmp_path / "earlier").mkdir()
+    (tmp_path / "earlier" / "results.json").write_text(json.dumps(earlier))
+
+    # The folder form names the report folder rather than its results.json.
+    report.write(run_dir, tmp_path / "merged", keep_from=tmp_path / "earlier")
+    merged = json.loads((tmp_path / "merged" / "results.json").read_text())
+    cells = {(row["framework"], row["mistake"]): row["cell"] for row in merged["results"]}
+    # The framework this run measured keeps this run's cells, the others keep theirs.
+    assert all(cells[("toy", row["mistake"])] == row["cell"] for row in first["results"])
+    assert all(cells[("other", row["mistake"])] == "R" for row in first["results"])
+    # Each kept group names only its own run's commit, tree and packages.
+    assert merged["kept"] == [
+        {
+            "run": "earlier-run",
+            "source": {
+                "commit": "abc123",
+                "inputs_tree": "tree1",
+                "inputs_changed": False,
+                "from_checkout": {"other": [package]},
+            },
+            "frameworks": ["other"],
+        },
+        {"run": "oldest-run", "source": {"commit": "def456", "inputs_changed": False}, "frameworks": ["older"]},
+    ]
+    matrix = (tmp_path / "merged" / "matrix.md").read_text()
+    assert (
+        "Other: kept from run earlier-run, cases and tools from commit `abc123`, benchmark inputs tree `tree1`."
+        in matrix
+    )
+    assert "Other: pkg 0.1.0 built from this repository at commit `abc123`, not a published release." in matrix
+    assert "Older: kept from run oldest-run, cases and tools from commit `def456`." in matrix
+    html = (tmp_path / "merged" / "report.html").read_text()
+    assert "kept from run oldest-run, cases and tools from commit def456" in html
+    assert "Other: pkg 0.1.0 built from this repository at commit abc123" in html
+
+    # A kept framework with no result for a catalogue mistake stops the report.
+    short = earlier | {"results": stale + other[1:] + older}
+    (tmp_path / "short.json").write_text(json.dumps(short))
+    with pytest.raises(ConfigError, match="no result for other"):
+        report.write(run_dir, tmp_path / "broken", keep_from=tmp_path / "short.json")
+
+    # A result for a mistake the catalogue does not list stops the report.
+    earlier["results"].append(other[0] | {"mistake": "m99-gone"})
+    (tmp_path / "earlier" / "results.json").write_text(json.dumps(earlier))
+    with pytest.raises(ConfigError, match="m99-gone"):
+        report.write(run_dir, tmp_path / "broken", keep_from=tmp_path / "earlier")
+
+
+def test_a_report_keeps_only_whole_frameworks_from_an_earlier_report(toy: Toy, tmp_path: Path) -> None:
+    run_dir = toy.run(jobs=2)
+    report.write(run_dir, tmp_path / "first")
+    # A run of only some of the toy's mistakes cannot be completed from a kept report.
+    lines = (run_dir / "results.jsonl").read_text().splitlines()
+    (run_dir / "results.jsonl").write_text("\n".join(lines[1:]) + "\n")
+    with pytest.raises(ConfigError, match="the run measured toy without"):
+        report.write(run_dir, tmp_path / "partial", keep_from=tmp_path / "first")

@@ -7,13 +7,10 @@ FastAPI app in app/main.py, served by uvicorn. The benchmark measures
 Citry served from FastAPI, the setup Citry's Getting Started guide also
 uses. Its routes render the pages, and `citry.contrib.fastapi.mount()`
 adds Citry's routes under /citry, as the starter and Citry's FastAPI guide
-do. citry and citry-lsp are not the PyPI releases: uv builds them from
-this repository's sources in packages/py/ and installs them the way it
-installs a release, so they include unreleased changes while still
-declaring versions 0.6.0 and 0.2.0. Each report names the commit. The
-rest comes from PyPI: citry-core 1.9.0, the version citry pins, fastapi
+do. Every Python package comes from PyPI: the Citry 1.0.0 release (citry 1.0.0,
+citry-lsp 1.0.0, and citry-core 2.1.0, the version citry pins), fastapi
 0.141.1 with starlette 1.6.0 and pydantic 2.13.4 (the versions the
-starter's lockfile has), uvicorn 0.52.4, and ty 0.0.89, the Python type
+starter's lockfile has), uvicorn 0.52.4, and ty 0.0.101, the Python type
 checker Citry runs on template expressions, which citry-lsp installs.
 They are locked in baseline/uv.lock for Python 3.12.
 
@@ -45,11 +42,10 @@ Citry's docs name messages with hyphens.
 Every component whose template reads Python values defines
 `template_data()`, as each component in the FastAPI starter does; Citry's
 Getting Started guide defines it only when a value must be computed.
-Citry 0.6.0 skipped a template's Python expressions when its component
-defined neither `template_data()` nor `TemplateData`; the Citry
-measured here checks them either way (#202). No case measures a component without the
-method; a manual check of m23's card with its `template_data()` removed
-still reported the type error.
+Citry checks a template's Python expressions whether or not its component
+defines `template_data()` or `TemplateData` (#202). No case measures a
+component without the method; a manual check on Citry 1.0.0 of m23's
+card with its `template_data()` removed still reported the type error.
 
 m15 is ported because Citry's translations are a built-in extension that
 needs nothing extra installed, as Django's are. The starter itself has no
@@ -108,8 +104,8 @@ on a framework's stricter check when other frameworks here have the same
 kind of check. Considered and left off:
 - Citry's own lint rules are all on by default: each starts as a warning
   or an error, and raising a warning to an error is not turning a check
-  on (m29, m31, m43, m45, m48 and m53 end as warnings because of such
-  rules; m41's check of `js_data()` values is always a warning).
+  on (m16, m29, m31, m43, m45, m48, m50 and m53 end as warnings because
+  of such rules; m41's check of `js_data()` values is always a warning).
 - ty's rules that are off by default. `citry check --types` honors the
   project's `[tool.ty.rules]`, but it keeps only ty's findings inside
   template expressions. One of these rules, `possibly-unresolved-reference`,
@@ -133,17 +129,13 @@ kind of check. Considered and left off:
 
 [setup]
 manifests = ["pyproject.toml", "uv.lock", ".python-version", "package.json", "package-lock.json"]
-# uv runs in the clean app's folder, not in the copy of the manifests, because
-# the lockfile names citry and citry-lsp by paths relative to that folder
-# (see baseline/pyproject.toml); UV_PROJECT_ENVIRONMENT still installs into
-# the shared environment. uv builds a package from a folder again only when
-# that folder's pyproject.toml, setup.py or setup.cfg changes, so
-# --reinstall-package builds both from their current sources each time this
-# step runs. The runner runs this step again whenever their sources change.
+# UV_PROJECT_ENVIRONMENT installs into the shared environment. Every Python
+# package, citry, citry-core and citry-lsp among them, comes from PyPI at the
+# version baseline/uv.lock names.
 command = [
   "sh", "-c",
   """UV_PROJECT_ENVIRONMENT='{venv}' uv sync --directory '{framework}/baseline' --frozen --no-install-project \
-  --python 3.12 --reinstall-package citry --reinstall-package citry-lsp && npm ci --no-audit --no-fund""",
+  --python 3.12 && npm ci --no-audit --no-fund""",
 ]
 
 [[stages]]

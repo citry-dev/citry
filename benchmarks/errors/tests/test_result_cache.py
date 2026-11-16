@@ -11,9 +11,8 @@ import threading
 from typing import TYPE_CHECKING
 
 import pytest
-import tomllib
 from citry_errors import cache, cli, parallel, report, work
-from citry_errors.config import BENCH_ROOT, REPO_ROOT, ConfigError, Framework, load_framework, load_frameworks
+from citry_errors.config import ConfigError, Framework, load_framework, load_frameworks
 from citry_errors.execute import StageOutput, run_stages
 from citry_errors.runtime import JourneyRecord, Observation
 from conftest import MISTAKES
@@ -456,16 +455,3 @@ def test_a_run_and_its_report_name_the_packages_installed_from_this_repository(t
     assert "Toy: my-pkg 1.0.0 built from this repository at commit" in matrix
     assert "plus uncommitted changes to them, not a published release." in matrix
     assert "Toy: my-pkg 1.0.0 built from this repository" in (tmp_path / "report" / "report.html").read_text()
-
-
-def test_the_citry_app_takes_citry_core_at_the_version_citry_pins() -> None:
-    # The Citry app overrides citry-core's version by hand (see its
-    # pyproject.toml); a release that moves citry's pin must move it too, or
-    # the benchmark would run citry against a citry-core it was not built for.
-    def pin(requirements: list[str]) -> str:
-        [found] = [requirement for requirement in requirements if requirement.startswith("citry-core==")]
-        return found
-
-    app = tomllib.loads((BENCH_ROOT / "frameworks" / "citry" / "baseline" / "pyproject.toml").read_text())
-    citry = tomllib.loads((REPO_ROOT / "packages" / "py" / "citry" / "pyproject.toml").read_text())
-    assert pin(app["tool"]["uv"]["override-dependencies"]) == pin(citry["project"]["dependencies"])
