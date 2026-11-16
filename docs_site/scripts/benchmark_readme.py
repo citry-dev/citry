@@ -101,6 +101,7 @@ SPEED_LOAD = "second"
 SPEED_VERSION_NOTES = {
     "composed-70d4a8802900": "Citry 0.6.0, one run per framework.",
     "composed-be3f44cc4b6e": "Citry 0.7.0, measured before its release, one run per framework.",
+    "composed-955d152d8132": "Citry 1.0.0, one run per framework.",
 }
 
 # A file name records the chart, the benchmark run it shows, the first

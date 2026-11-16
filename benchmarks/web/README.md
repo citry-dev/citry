@@ -16,7 +16,7 @@ payload sizes.
 
 | App | Rendering and updates |
 | --- | --- |
-| [Citry](apps/citry/README.md) | Citry 0.6.0: server HTML from Citry's Vue renderer, hydrated by Vue at every board size, and signed HTTP server events |
+| [Citry](apps/citry/README.md) | Citry 1.0.0: server HTML from Citry's Vue renderer, hydrated by Vue at every board size, and signed HTTP server events |
 | [Django + HTMX + Alpine](apps/django_htmx_alpine/README.md) | Django templates and HTTP fragment replacement |
 | [Django Rusty Templates + HTMX + Alpine](apps/django_rusty_templates/README.md) | Experimental Rust-backed Django template backend and HTTP fragment replacement |
 | [FastHTML](apps/fasthtml/README.md) | Python FastTags and HTMX updates |
@@ -48,14 +48,14 @@ an error.
 
 ## Which Citry the Citry app measures
 
-The Citry app pins and locks the published `citry` 0.6.0 and `citry-core`
-1.8.0 from PyPI, so every profile without a `[local_wheels]` table
-measures that release. To measure an
-unreleased change instead, see
-[Test Citry with wheels you build](#test-citry-with-wheels-you-build).
-The docs page's Citry numbers come from such wheels, built before the
-Citry 0.7.0 release; see
+The Citry app pins and locks the published `citry` 1.0.0 and `citry-core`
+2.1.0 from PyPI, so every profile without a `[local_wheels]` table
+measures that release. Running `release-0.6.0` again measures Citry 1.0.0,
+although the 2026-10-19 run measured Citry 0.6.0.
+The docs page's Citry numbers come from the `release-1.0.0-citry` run; see
 [Update the numbers on the docs page](#update-the-numbers-on-the-docs-page).
+To measure an unreleased change instead, see
+[Test Citry with wheels you build](#test-citry-with-wheels-you-build).
 
 ## Before you start
 
@@ -178,6 +178,7 @@ Profiles live in [`profiles/`](profiles/). Pass the file name without
 | `cohort-100x` | the fourteen cohort apps | 1,400 | Opt-in large board |
 | `release-0.6.0` | the fourteen cohort apps | 14, 140, 1,400 | The `cohort` settings plus the 1,400-output board the docs page shows; run once for the Citry 0.6.0 release |
 | `release-0.7.0-citry` | Citry, Jinja + HTMX + Alpine | 14, 140, 1,400 | The `release-0.6.0` settings with Citry from wheels built before the Citry 0.7.0 release; Jinja + HTMX + Alpine runs again to check that the machine still gives the same times |
+| `release-1.0.0-citry` | Citry, Jinja + HTMX + Alpine | 14, 140, 1,400 | The `release-0.6.0` settings for two apps: Citry at the release its lockfile pins (1.0.0 for the docs page), and Jinja + HTMX + Alpine, which runs again to check that the machine still gives the same times |
 | `citry-local-wheels` | Citry | 14, 140, 1,400 | Citry from wheels you build; for testing before a release |
 | `nuxt-csr` | Nuxt CSR control | 14, 140 | The client-rendered control on its own |
 | `nuxt-ssr-csr` | Nuxt, Nuxt CSR control | 140, 1,400 | Server-rendered and client-rendered Nuxt side by side |
@@ -189,17 +190,16 @@ requests do not render the measured page.
 ### Test Citry with wheels you build
 
 A profile can replace the `citry` and `citry-core` packages of the Citry app
-with wheels built from this repository, to measure a change before it is
-released. The numbers describe the source you built. Use it to test a
-change, or to measure a release before it is published, as the docs page's
-Citry 0.7.0 numbers were. The profile names the wheels in a `[local_wheels]`
-table, relative to the repository root. `citry-local-wheels` is set up for
-the 0.6.0 wheels:
+with wheels built from this repository. Use this to test a change before it
+is released, or to measure a release before it is published. The numbers
+describe the source you built. The profile names the wheels in a
+`[local_wheels]` table, relative to the repository root.
+`citry-local-wheels` names these wheels:
 
 ```toml
 [local_wheels]
-citry = ".benchmarks/wheels/citry-0.6.0/citry-0.6.0-py3-none-any.whl"
-citry-core = ".benchmarks/wheels/citry-0.6.0/citry_core-1.8.0-cp312-cp312-macosx_11_0_arm64.whl"
+citry = ".benchmarks/wheels/citry-local/citry-1.0.0-py3-none-any.whl"
+citry-core = ".benchmarks/wheels/citry-local/citry_core-2.1.0-cp312-cp312-macosx_11_0_arm64.whl"
 ```
 
 Build both wheels into exactly those paths before `prepare`. The
@@ -208,19 +208,30 @@ Build both wheels into exactly those paths before `prepare`. The
 frees. From the repository root:
 
 ```bash
+# Start empty, so a wheel from an older build is never measured.
+rm -rf .benchmarks/wheels/citry-local
 # citry-core compiles against ruff's Python parser, a Git submodule.
 git submodule update --init --depth 1 third_party/rust/ruff
-mkdir -p .benchmarks/wheels/citry-0.6.0
+mkdir -p .benchmarks/wheels/citry-local
 uv build --wheel packages/py/citry \
-  --out-dir .benchmarks/wheels/citry-0.6.0
+  --out-dir .benchmarks/wheels/citry-local
 cd packages/py/citry_core
+# Use the maturin version that this package's pyproject.toml pins.
 CARGO_TARGET_DIR=../../../.benchmarks/cargo-target \
-  uvx --from maturin==1.15.0 maturin build --profile release-wheel \
+  uvx --from maturin==1.16.0 maturin build --profile release-wheel \
   --interpreter "$(uv python find 3.12.13)" \
-  --out ../../../.benchmarks/wheels/citry-0.6.0
+  --out ../../../.benchmarks/wheels/citry-local
 cd ../../..
 rm -rf .benchmarks/cargo-target
 ```
+
+Each wheel's file name holds the version that its package's
+`pyproject.toml` has when you build it: `packages/py/citry/pyproject.toml`
+for `citry`, `packages/py/citry_core/pyproject.toml` for `citry-core`.
+Unreleased source keeps the released version number until someone changes
+it, so these names do not mean the PyPI release is measured. After you
+change either version, rebuild the wheels and edit the names in
+`profiles/citry-local-wheels.toml` to match.
 
 Loading a profile fails while a named wheel is missing. The runner hashes the
 wheel bytes into the build identity and installs them only into the Citry
@@ -239,20 +250,21 @@ charts from
 the time until the 1,400-output page is ready for input, first and second
 load, for Citry and eleven other frameworks.
 
-The numbers there now come from two composed reports, measured on the
+The numbers there come from two composed reports, measured on the
 same Mac:
 
-- **Citry**: `composed-be3f44cc4b6e`, built on 2026-10-23 from the
-  `release-0.7.0-citry` qualify run `20261023T115304Z-71ac7f66` and the
-  measurement run (`citry-bench run`) `20261023T115712Z-411919bf`. Citry
-  and citry-core were wheels built from commit `3f1333792`, measured
-  before the Citry 0.7.0 release. The wheels carry the version numbers that
-  commit had, `citry` 0.6.0 and `citry-core` 1.9.0. The data file's
-  `citry_build.source_had_uncommitted_changes` is `true` only because the
-  new profile file was not committed yet when the runs started; nothing
-  else in the checkout differed from that commit. A second measurement
-  run, `20261023T120134Z-9b07f5dc`, gave Citry totals within 1 ms of the
-  first.
+- **Citry**: `composed-955d152d8132`, built on 2026-11-16 from the
+  `release-1.0.0-citry` qualify run `20261116T001725Z-7b46bf4c` and the
+  measurement run (`citry-bench run`) `20261116T011517Z-1cbd8678`. The
+  Citry app installed `citry` 1.0.0 and `citry-core` 2.1.0 from PyPI
+  through its lockfile. The runner recorded commit `b42fab48a` with no
+  uncommitted changes; that commit holds the same benchmark sources as the
+  change that published these numbers. A second measurement run,
+  `20261116T011906Z-d5feba9f`, gave Citry totals of 312.9 ms on the first
+  load and 249.0 ms on the second, against 314.6 and 257.3 ms in the run
+  the data file uses. Jinja + HTMX + Alpine's first load took 295.3 ms in
+  the first run and 316.6 ms in the second, so a single measurement
+  varies by about 20 ms.
 - **The other eleven frameworks**: `composed-70d4a8802900`, built on
   2026-10-19 from the `release-0.6.0` qualify run
   `20261019T210740Z-2b5cd077` and the measurement run
@@ -262,9 +274,9 @@ same Mac:
   local commit has the same benchmark sources as the change that published
   these numbers.
 
-The `release-0.7.0-citry` run also measured Jinja + HTMX + Alpine again,
+The `release-1.0.0-citry` run also measured Jinja + HTMX + Alpine again,
 to check that the Mac gave the same times on both days. Its totals moved
-from 304.2 to 298.3 ms on the first load and from 299.8 to 312.6 ms on the
+from 304.2 to 295.3 ms on the first load and from 299.8 to 310.9 ms on the
 second, within the noise of a single measurement, so the data file keeps
 that framework's 2026-10-19 numbers with the other ten.
 
@@ -294,14 +306,17 @@ passed observation per framework and page load at 1,400 outputs, which the
 `release-0.6.0` profile gives. It rewrites the JSON file; update the prose
 on the Benchmarks page to match the new numbers in the same change.
 
-To measure only Citry again, as for Citry 0.7.0:
+To measure only Citry again, as for Citry 1.0.0:
 
-1. Build the wheels as in
+1. Choose the Citry release to measure. For a published release,
+   change the pins in `apps/citry/pyproject.toml` and relock, as
+   `apps/citry/README.md` shows. For an unpublished one, build wheels as
+   in
    [Test Citry with wheels you build](#test-citry-with-wheels-you-build).
-2. Copy `release-0.7.0-citry.toml` under a new name, point its
-   `[local_wheels]` table at your wheels, and add the new name to the
-   list of profiles allowed to name local wheels in
-   `tests/test_runner.py`.
+2. Copy `release-1.0.0-citry.toml` under a new name and change its
+   `name` field to match. With wheels, also point its `[local_wheels]`
+   table at them and add the new name to the list of profiles allowed to
+   name local wheels in `tests/test_runner.py`.
 3. Run the `prepare`, `qualify`, `run` and `compose` commands above with
    the new profile name, and give `compose` a new `--output` folder.
 4. Publish only Citry's numbers from that folder:
@@ -310,6 +325,12 @@ To measure only Citry again, as for Citry 0.7.0:
    uv run --no-sync python -m docs_site.scripts.benchmark_data \
      .benchmarks/reports/<folder> --only citry
    ```
+
+5. Update every place that names the Citry version in the same change:
+   the app table above, `apps/citry/README.md`, `SPEED_VERSION_NOTES` in
+   `docs_site/scripts/benchmark_readme.py`, the Benchmarks page, and the
+   README chart, which `python -m docs_site.scripts.benchmark_images
+   speed` redraws.
 
 With `--only`, the docs script works like this:
 
@@ -328,8 +349,9 @@ With `--only`, the docs script works like this:
 - **What it cannot check**: the data file records nothing else about how
   the numbers were taken. So run on the same machine and change only the
   profile's name, apps and `[local_wheels]` table. A test in
-  `tests/test_runner.py` checks that every release profile with local
-  wheels keeps the other `release-0.6.0` settings.
+  `tests/test_runner.py` checks that every other release profile has
+  the same settings as `release-0.6.0`, apart from its name, apps and
+  wheels.
 
 ## What the runner measures
 

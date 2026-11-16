@@ -18,6 +18,13 @@ compression = "identity"
 seed = 1729
 publication = false
 
+# The runner installs these two wheels in place of the citry and
+# citry-core versions that the Citry app's uv.lock pins. Each wheel
+# name holds the version in packages/py/citry/pyproject.toml or
+# packages/py/citry_core/pyproject.toml. After either version changes,
+# rebuild and edit the names; a name with no file stops the runner with
+# "Invalid local wheel". Build steps: benchmarks/web/README.md,
+# "Test Citry with wheels you build".
 [local_wheels]
-citry = ".benchmarks/wheels/citry-0.6.0/citry-0.6.0-py3-none-any.whl"
-citry-core = ".benchmarks/wheels/citry-0.6.0/citry_core-1.8.0-cp312-cp312-macosx_11_0_arm64.whl"
+citry = ".benchmarks/wheels/citry-local/citry-1.0.0-py3-none-any.whl"
+citry-core = ".benchmarks/wheels/citry-local/citry_core-2.1.0-cp312-cp312-macosx_11_0_arm64.whl"

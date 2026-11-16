@@ -2,7 +2,7 @@
 
 All notable changes to `citry-lsp` are documented here.
 
-## [1.0.0] - 2026-11-15
+## [1.0.0] - 2026-11-16
 
 ### Changed
 

@@ -1,0 +1,7 @@
+
+.orchid-stepper {
+  --cui-stepper-active-color: #7f56d9;
+  --cui-stepper-complete-color: #039855;
+  --cui-stepper-radius: 1.25rem;
+}
+.orchid-stepper [data-citry-ui-part="label"] { letter-spacing: 0.02em; }

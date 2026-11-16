@@ -1,0 +1,1 @@
+:where(.date-picker-demo-grid){display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:1.25rem}:where(.date-picker-demo-grid article){display:grid;align-content:start;gap:.75rem}:where(.date-picker-demo-grid h3){margin:0}

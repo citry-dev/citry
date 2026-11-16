@@ -1,0 +1,16 @@
+try {
+(function() {
+
+__citryRuntime.registerTypeOptions.bind(null, "ScrollAreaLifecycle_499eaf", "9959821b899b4823b4aae23ecee26ed4ba922af73216d1e628e6280f4dc7145e")({
+  data() {
+    return {
+      mounted:true,lastOffset:0,direction:'ltr'
+    };
+  },
+});
+
+})();
+__citryRuntime.finishScript("b801ad2a345a018843dabb263d5a1bf4b3f0caa09413070687a4bb306ed9cca5");
+} catch (error) {
+__citryRuntime.finishScript("b801ad2a345a018843dabb263d5a1bf4b3f0caa09413070687a4bb306ed9cca5", error);
+}

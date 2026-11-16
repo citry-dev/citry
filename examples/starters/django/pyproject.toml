@@ -4,13 +4,13 @@ version = "0.1.0"
 description = "Run the Citry Project Explorer with Django"
 requires-python = ">=3.11,<4"
 dependencies = [
-  "citry>=0.6.0",
+  "citry>=1.0.0,<2",
   "django>=5.2,<7",
 ]
 
 [dependency-groups]
 dev = [
-  "citry-lsp>=0.2,<0.3",
+  "citry-lsp>=1.0.0,<2",
   "pytest>=9.0,<10",
 ]
 
