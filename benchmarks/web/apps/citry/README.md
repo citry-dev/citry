@@ -1,6 +1,6 @@
 # Citry
 
-This app serves the canonical project board with Citry 0.6.0 and its default
+This app serves the canonical project board with Citry 1.0.0 and its default
 Vue renderer. It uses ordinary components, Citry's default engine settings
 and no browser startup flags. Actions travel through Citry's normal signed,
 CSRF-protected Events POST route. For timing only, a small middleware in
@@ -44,8 +44,8 @@ phases as unclassified rather than presenting the script load as browser time.
 
 ## Which Citry it installs
 
-`pyproject.toml` pins `citry==0.6.0` and `citry-core==1.8.0`, the release that
-ships the Vue renderer this app uses.
+`pyproject.toml` pins `citry==1.0.0` and `citry-core==2.1.0`, the PyPI
+release the app is measured with.
 
 `uv.lock` resolves both packages, like every other dependency, from PyPI.
 To move the app to a newer release, change the pins and relock from this
