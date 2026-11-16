@@ -1,0 +1,14 @@
+
+:where(.image-alt) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 1rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+:where(.image-alt article) { display: grid; gap: 0.5rem; align-content: start; }
+:where(.image-alt h3, .image-alt p, .image-alt figure) { margin: 0; }
+:where(.image-alt [data-citry-ui-part="image-root"]) { inline-size: 100%; }
+:where(.image-alt a:focus-visible) { outline: 3px solid Highlight; outline-offset: 3px; }
+:where(.image-alt table) { border-collapse: collapse; font-size: 0.8rem; }
+:where(.image-alt th, .image-alt td) { border: 1px solid GrayText; padding: 0.25rem; }

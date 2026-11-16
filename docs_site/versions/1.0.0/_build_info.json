@@ -1,0 +1,24 @@
+{
+  "version": "1.0.0",
+  "source_sha": "6bb73d82f64aed959cc4d2517eecedc593d6eebf",
+  "source_tag": "1.0.0",
+  "built_at": "2026-11-16T00:15:05.600779+00:00",
+  "builder_version": "1.1.0",
+  "site_routes": [
+    "/",
+    "/blog/",
+    "/blog/*",
+    "/community/*",
+    "/community/ai-bot-policy/",
+    "/community/code-of-conduct/",
+    "/community/contributing/",
+    "/community/development/",
+    "/community/extensions/",
+    "/community/help/",
+    "/community/license/",
+    "/community/people/",
+    "/community/ui-libraries/",
+    "/playground/",
+    "/playground/*"
+  ]
+}

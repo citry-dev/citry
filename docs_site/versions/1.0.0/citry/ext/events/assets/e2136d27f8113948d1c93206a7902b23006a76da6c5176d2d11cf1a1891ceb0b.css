@@ -1,0 +1,20 @@
+
+:where(.forest-guide) {
+  display: grid;
+  gap: 1rem;
+  max-width: 46rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.forest-guide h2, .forest-guide p) {
+  margin: 0;
+}
+
+:where(.forest-guide header > p) {
+  color: light-dark(#2f6b45, #86d29e);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
