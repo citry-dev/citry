@@ -1,20 +1,18 @@
 {
   "generated_by": "docs_site/scripts/benchmark_data.py",
   "source": {
-    "report_id": "composed-be3f44cc4b6e",
+    "report_id": "composed-955d152d8132",
     "report_status": "composed",
-    "composed_at": "2026-10-23T12:01:08.284960+00:00",
+    "composed_at": "2026-11-16T01:18:23.856616+00:00",
     "recomposed_at": null,
-    "citry_report_id": "composed-be3f44cc4b6e",
-    "citry_configuration": "The Citry app benchmarks/web/apps/citry with default settings, running citry 0.6.0 and citry-core 1.9.0 installed from wheels built locally (citry-0.6.0-py3-none-any.whl, citry_core-1.9.0-cp312-cp312-macosx_11_0_arm64.whl).",
+    "citry_report_id": "composed-955d152d8132",
+    "citry_configuration": "The Citry app benchmarks/web/apps/citry with default settings, running citry 1.0.0 and citry-core 2.1.0 installed from the lockfile.",
     "scenario": "project_board (canonical-project-v1)",
     "outputs": 1400,
     "observations_per_framework_and_load": 1,
     "citry_build": {
-      "citry": "citry-0.6.0-py3-none-any.whl",
-      "citry-core": "citry_core-1.9.0-cp312-cp312-macosx_11_0_arm64.whl",
-      "source_commit": "3f13337924674a65f82ed9eac2dfa7e01142a57d",
-      "source_had_uncommitted_changes": true
+      "source_commit": "b42fab48aa23ed90f6b4168515b4643b9132bf53",
+      "source_had_uncommitted_changes": false
     },
     "host": {
       "machine": "arm64",
@@ -56,16 +54,16 @@
           "key": "citry",
           "name": "Citry",
           "group": null,
-          "total_ms": 295.8,
+          "total_ms": 314.6,
           "phases_ms": {
-            "browser_before": 0.7,
-            "server": 107.9,
-            "exchange_residual": 0.7,
-            "response_receive": 7.6,
-            "browser_after": 161.7,
-            "layout_wait": 17.2
+            "browser_before": 0.5,
+            "server": 123.0,
+            "exchange_residual": 0.9,
+            "response_receive": 7.7,
+            "browser_after": 166.4,
+            "layout_wait": 16.1
           },
-          "measured_in_run": "20261023T115712Z-411919bf",
+          "measured_in_run": "20261116T011517Z-1cbd8678",
           "retained": false
         },
         {
@@ -254,16 +252,16 @@
           "key": "citry",
           "name": "Citry",
           "group": null,
-          "total_ms": 252.6,
+          "total_ms": 257.3,
           "phases_ms": {
             "browser_before": 0.6,
-            "server": 65.3,
-            "exchange_residual": 0.8,
-            "response_receive": 7.6,
-            "browser_after": 161.0,
+            "server": 71.4,
+            "exchange_residual": 1.2,
+            "response_receive": 7.4,
+            "browser_after": 159.4,
             "layout_wait": 17.3
           },
-          "measured_in_run": "20261023T115712Z-411919bf",
+          "measured_in_run": "20261116T011517Z-1cbd8678",
           "retained": false
         },
         {

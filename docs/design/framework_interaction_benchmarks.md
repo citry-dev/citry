@@ -586,7 +586,7 @@ project-board model and semantic assertions: Citry, Django + HTMX + Alpine,
 Django Rusty Templates + HTMX + Alpine, FastHTML, Tetra, django-unicorn,
 ReactPy, Reflex, Jinja + HTMX + Alpine, django-components + HTMX + Alpine,
 Python API + Vue, Python API + React, Next.js and Nuxt. The Citry app uses
-Citry 0.6.0 and its default Vue renderer. Twelve
+Citry 1.0.0 and its default Vue renderer. Twelve
 use HTTP update paths; ReactPy uses a persistent WebSocket and Reflex uses its
 native Socket.IO event protocol.
 The Django Rusty Templates adapter pins unreleased experimental package
@@ -727,7 +727,7 @@ Memory measurement uses the same frozen applications and canonical scenarios,
 but runs separately from latency timing. Sampling process memory or querying
 heap state must not change the published latency observations.
 
-The final cohort contains the Citry 0.6.0 app and every other maintained
+The final cohort contains the Citry 1.0.0 app and every other maintained
 framework app: Django + HTMX + Alpine, Django
 Rusty Templates + HTMX + Alpine, FastHTML,
 Tetra, django-unicorn, ReactPy, Reflex, Jinja + HTMX + Alpine,

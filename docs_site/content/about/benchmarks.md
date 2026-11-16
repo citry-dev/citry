@@ -46,13 +46,13 @@ faster.
 
 ### Where Citry stands
 
-- First load: Citry takes 296 ms. Nuxt, Rusty + HTMX + Alpine, and
-  Jinja + HTMX + Alpine are 3 to 8 ms slower, which is within the
-  noise. Tetra, Django + HTMX + Alpine, and Next.js are 30 to 75 ms
-  slower.
-- Second load: Citry takes 253 ms. Nuxt is about 23 ms faster.
-  Rusty + HTMX + Alpine and Jinja + HTMX + Alpine are 40 to 50 ms
-  slower. Next.js, Tetra, and Django + HTMX + Alpine are 70 to 90 ms
+- First load: Citry takes 315 ms. Nuxt, Rusty + HTMX + Alpine, and
+  Jinja + HTMX + Alpine are 10 to 15 ms faster, and Tetra is 13 ms
+  slower. All four gaps are within the noise (see the end of this
+  section). Django + HTMX + Alpine and Next.js are 42 and 56 ms slower.
+- Second load: Citry takes 257 ms. Nuxt is about 28 ms faster.
+  Rusty + HTMX + Alpine and Jinja + HTMX + Alpine are 37 to 43 ms
+  slower. Next.js, Tetra, and Django + HTMX + Alpine are 67 to 85 ms
   slower.
 - Reflex, django-components, django-unicorn, FastHTML, and ReactPy are
   slower on both loads.
@@ -61,26 +61,27 @@ faster.
 
 ### How we measured { #how-the-numbers-were-taken }
 
-- **When**: Citry on 2026-10-23, the other eleven frameworks on
+- **When**: Citry on 2026-11-16, the other eleven frameworks on
   2026-10-19.
-- **Which Citry**: Citry 0.7.0 before its release, built with
-  citry-core 1.9.0 from the repository at commit
-  [3f13337](https://github.com/citry-dev/citry/tree/3f13337924674a65f82ed9eac2dfa7e01142a57d).
-  The Citry app uses Citry's Vue runtime and
+- **Which Citry**: Citry 1.0.0 and citry-core 2.1.0, both installed
+  from PyPI. The Citry app uses Citry's Vue runtime and
   [`simple="vue"`](/performance/simple-components/). The 2026-10-19
   run measured all twelve frameworks with Citry 0.6.0 and citry-core
   1.8.0 from PyPI; the charts use that run only for the other eleven.
-- **Where**: both runs used the same Apple M4 Mac with Chromium 151, an
+- **Where**: every run used the same Apple M4 Mac with Chromium 151, an
   empty browser cache, and a local connection.
-- **Same Mac, same times**: the 2026-10-23 run also measured
+- **Same Mac, same times**: the 2026-11-16 run also measured
   Jinja + HTMX + Alpine again, to confirm the Mac gave the same times
-  on both days. Its totals changed by 6 ms on the first load and 13 ms
+  on both days. Its totals changed by 9 ms on the first load and 11 ms
   on the second, which is within the noise, so the charts keep its
   2026-10-19 numbers.
+- **Repeat run**: a second run on 2026-11-16 gave Citry 313 ms on the
+  first load and 249 ms on the second. The charts show the earlier run.
 
 Each framework reports its own server time, so the work it covers can
-differ a little. Each bar is a single measurement, so treat a gap of a
-few tens of milliseconds as noise.
+differ a little. Each bar is a single measurement. Jinja + HTMX +
+Alpine's first load took 295, 304 and 317 ms in three runs of the same
+setup, so treat a gap of about 20 ms or less as noise.
 
 ## Catching errors
 

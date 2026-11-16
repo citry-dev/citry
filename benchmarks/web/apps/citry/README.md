@@ -44,8 +44,9 @@ phases as unclassified rather than presenting the script load as browser time.
 
 ## Which Citry it installs
 
-`pyproject.toml` pins `citry==1.0.0` and `citry-core==2.1.0`, the PyPI
-release the app is measured with.
+`pyproject.toml` pins `citry==1.0.0` and `citry-core==2.1.0`. Unless a
+profile names local wheels, every measurement of this app uses those PyPI
+releases.
 
 `uv.lock` resolves both packages, like every other dependency, from PyPI.
 To move the app to a newer release, change the pins and relock from this
