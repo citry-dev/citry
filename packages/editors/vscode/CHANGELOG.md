@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- The built-in JavaScript and CSS formatter now uses Prettier 3.10.1,
+  which formats some comments and parenthesized `yield` and `throw`
+  expressions differently.
+
 ## 1.0.0 - 2026-11-16
 
 - The extension is now stable: its settings and commands keep working in

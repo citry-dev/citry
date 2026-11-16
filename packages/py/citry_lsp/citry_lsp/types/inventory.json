@@ -74,23 +74,23 @@
     },
     {
       "name": "@babel/types",
-      "version": "7.29.8",
+      "version": "7.29.14",
       "files": [
         "LICENSE",
         "lib/index.d.ts",
         "package.json"
       ],
-      "sha256": "25b2317b0cb160f7b20ce3ff7bed61fdf81e1aa5e5da190614bd6743178507eb"
+      "sha256": "914223a83b143e019fc90ef0b296c57c15e0b2be58e96c1d605c0609ca44fe5a"
     },
     {
       "name": "@babel/parser",
-      "version": "7.29.9",
+      "version": "7.29.14",
       "files": [
         "LICENSE",
         "package.json",
         "typings/babel-parser.d.ts"
       ],
-      "sha256": "92236f8c4f6e795755d459811e1a0218648c025eb2a77031e55da0bfa2af72c0"
+      "sha256": "7e09c46daa0e5a19cc1ccb8c8ac6df2b63909b1b79283fb02d364dcbe3d8ed43"
     },
     {
       "name": "csstype",
