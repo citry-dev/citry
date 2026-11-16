@@ -101,12 +101,11 @@ the same 63 mistakes in each (a misspelled component name, a
 wrong-typed input, an unclosed tag, and so on), and recorded **where
 each mistake was first reported**.
 
-Citry reports **54** of the 61 mistakes that apply to it before the
-app runs, in the editor or a command-line check (measured on a Citry
-build from before the 0.7.0 release). Next.js comes next with 45 of
-57, then Nuxt with 39 of 58 and Reflex with 38 of 54. The Django,
-Rusty, django-components and Jinja apps with HTMX and Alpine report 5
-or 6. Each count leaves out the mistakes that don't apply to that
+Citry 1.0.0 reports **56** of the 61 mistakes that apply to it before
+the app runs, in the editor or a command-line check. Next.js comes
+next with 45 of 57, then Nuxt with 39 of 58 and Reflex with 38 of 54.
+The Django, Rusty, django-components and Jinja apps with HTMX and
+Alpine report 5 or 6. Each count leaves out the mistakes that don't apply to that
 framework.
 
 <c-error-benchmark-chart
@@ -129,15 +128,14 @@ warnings. The dashed line is Citry's number.
 
 ### Where Citry stands { #errors-where-citry-stands }
 
-- **Before the app runs: 54 of 61** (47 errors, 7 warnings),
-  measured with Citry at commit bf935bc, before the Citry 0.7.0
-  release. Citry 0.6.0 catches 29 of 61 (see
+- **Before the app runs: 56 of 61** (47 errors, 9 warnings),
+  measured on the Citry 1.0.0 release (see
   [How we measured](#errors-how-we-measured)). Two of the 63 mistakes
   don't apply to Citry.
-- **Warning only: 7** of those 54, reported before the app runs, but
+- **Warning only: 9** of those 56, reported before the app runs, but
   easy to miss.
-- **Only at runtime: 2**.
-- **Missed: 5**, nothing tells you.
+- **Only at runtime: 1**.
+- **Missed: 4**, nothing tells you.
 - **What Citry checks**: when you point `citry check` at your app
   (`citry --app app.main:citry_app check`) and set the editor
   extension's `citry.app` setting to the same app, `citry check` and
@@ -153,7 +151,7 @@ under [Error benchmark apps](#frameworks).
 
     | Framework | Caught before the app runs |
     |---|---|
-    | Citry | 54 of 61 |
+    | Citry | 56 of 61 |
     | Next.js | 45 of 57 |
     | Nuxt | 39 of 58 |
     | Reflex | 38 of 54 |
@@ -166,8 +164,14 @@ under [Error benchmark apps](#frameworks).
     | django-components + HTMX + Alpine | 6 of 54 |
     | Jinja + HTMX + Alpine | 5 of 51 |
 
-??? "The 7 mistakes Citry reports only as warnings"
+??? "The 9 mistakes Citry reports only as warnings"
 
+    - a misspelled CSS class: the warning suggests the class the
+      component's CSS styles
+    - a component reads a value the page shares with `<c-provide>`
+      under a misspelled key, such as `self.inject("bord")` where the
+      page provides `board`: the warning says the page would fail to
+      render
     - a listener with a misspelled event name: a component event such
       as `@hdie`, or a browser event such as `@clik`
     - a CSS variable whose name differs from the one the server sets
@@ -178,19 +182,15 @@ under [Error benchmark apps](#frameworks).
       a path object. The warning points at the `js_data()` line that
       sends the value rather than the line that creates it
 
-??? "The 2 mistakes Citry reports only at runtime"
+??? "The mistake Citry reports only at runtime"
 
-    - a link that passes a word, such as `/projects/alpha`, where the
-      route takes a number: FastAPI answers with a 422 validation
-      error. The check knows which pages the app serves, but not the
-      type of a page's parameters
-    - a component reads a value the page shares with `<c-provide>`
-      under a misspelled key, such as `self.inject("bord")` where the
-      page provides `board`: the server fails to render the page
+    A link that passes a word, such as `/projects/alpha`, where the
+    route takes a number: FastAPI answers with a 422 validation error.
+    The check knows which pages the app serves, but not the type of a
+    page's parameters.
 
-??? "The 5 mistakes Citry misses"
+??? "The 4 mistakes Citry misses"
 
-    - a misspelled CSS class: the page looks wrong
     - the child's event sends a number where the parent expects text:
       clicking the child's button changes nothing
     - a handler that takes more arguments than the event sends: the
@@ -222,20 +222,24 @@ under [Error benchmark apps](#frameworks).
 
 ### How we measured { #errors-how-we-measured }
 
-We ran the checks on 2026-10-21. Every framework's versions are pinned
-in its app's lockfile, except Citry and its language server, which
-were built from commit bf935bc. Each app was checked with editor and command-line tools,
+Citry was measured on 2026-11-16 and the other eleven frameworks on
+2026-10-21. Every framework's versions are pinned in its app's
+lockfile. Each app was checked with editor and command-line tools,
 then run in Chromium through the same clicks.
 
-??? "Citry's exact build"
+??? "Dates and versions"
 
-    Citry and its language server, citry-lsp, were built from the
-    repository at commit
-    [bf935bc](https://github.com/citry-dev/citry/tree/bf935bc77fc3e868cb7c3915035c32f0ab7147ff),
-    measured before the Citry 0.7.0 release, with citry-core 1.8.0
-    from PyPI. The run's report names a later commit that changed only
-    the benchmark, so the Citry code is the same. Citry 0.6.0, the
-    release before that commit, reports 29 of the 61.
+    - **When**: Citry on 2026-11-16, the other eleven frameworks on
+      2026-10-21.
+    - **Which Citry**: Citry 1.0.0, citry-lsp 1.0.0 (the editor
+      extension's language server) and citry-core 2.1.0, all installed
+      from PyPI. The 2026-10-21 run measured all twelve frameworks,
+      with Citry built from the repository before the 0.7.0 release;
+      the chart uses that run only for the other eleven.
+    - **The other eleven**: their cases and tools have not changed
+      since the 2026-10-21 run, apart from a newer certificate bundle
+      (certifi) in the ReactPy and Reflex apps, so the chart keeps
+      their results.
 
 ??? "The tools run for each framework"
 

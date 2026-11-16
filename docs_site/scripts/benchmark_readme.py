@@ -88,6 +88,7 @@ ERRORS_HINT = "More green = earlier feedback = better"
 # version.
 VERSION_NOTES = {
     "20261021T182412Z": "Citry 0.7.0, measured before its release.",
+    "20261116T192936Z": "Citry 1.0.0.",
 }
 
 # The speed chart shows the second page load: the first one includes work a

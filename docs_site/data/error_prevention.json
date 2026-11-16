@@ -1,6 +1,6 @@
 {
   "generated_by": "docs_site/scripts/error_benchmark_data.py",
-  "run": "20261021T182412Z",
+  "run": "20261116T192936Z",
   "frameworks": [
     {
       "key": "citry",
@@ -562,7 +562,7 @@
       "cell": "E",
       "reason": null,
       "evidence": [
-        "Citry language server (citry check --types): citry.python.unresolved-attribute Object of type `Owner` has no attribute `nmae`"
+        "Citry language server (citry check --types): citry.python.missing-attribute Object of type `Owner` has no attribute `nmae`"
       ]
     },
     {
@@ -650,10 +650,13 @@
       "framework": "citry",
       "mistake": "m16-css-class",
       "status": "ported",
-      "bucket": "missed",
-      "cell": "M",
+      "bucket": "static-warning",
+      "cell": "Ew",
       "reason": null,
-      "evidence": []
+      "evidence": [
+        "Citry language server (citry check --types): citry.css.misspelled-class No CSS that Citry reads styles the class 'bord'. Did you mean 'board', from this component's CSS?",
+        "citry check: citry.css.misspelled-class No CSS that Citry reads styles the class 'bord'. Did you mean 'board', from this component's CSS?"
+      ]
     },
     {
       "framework": "citry",
@@ -688,8 +691,8 @@
       "cell": "E",
       "reason": null,
       "evidence": [
-        "Citry language server (citry check --types): citry.vue.invalid-expression The Vue expression in 'v-if' is not valid JavaScript, so Vue cannot compile this template.",
-        "citry check: citry.vue.invalid-expression The Vue expression in 'v-if' is not valid JavaScript, so Vue cannot compile this template."
+        "Citry language server (citry check --types): citry.vue.invalid-expression The Vue expression in 'v-if' is not valid JavaScript (Unexpected token), so Vue cannot compile this template.",
+        "citry check: citry.vue.invalid-expression The Vue expression in 'v-if' is not valid JavaScript (Unexpected token), so Vue cannot compile this template."
       ]
     },
     {
@@ -884,7 +887,7 @@
       "cell": "E",
       "reason": null,
       "evidence": [
-        "Citry language server (citry check --types): citry.python.unresolved-attribute Object of type `FooterData` has no attribute `titel`"
+        "Citry language server (citry check --types): citry.python.missing-attribute Object of type `FooterData` has no attribute `titel`"
       ]
     },
     {
@@ -966,8 +969,8 @@
       "cell": "Ew",
       "reason": null,
       "evidence": [
-        "Citry language server (citry check --types): citry.css.misspelled-variable Nothing sets --acent, so the browser ignores this declaration. Did you mean --accent, from css_data()?",
-        "citry check: citry.css.misspelled-variable Nothing sets --acent, so the browser ignores this declaration. Did you mean --accent, from css_data()?"
+        "Citry language server (citry check --types): citry.css.misspelled-variable Nothing sets --acent, so this property gets its initial or inherited value. Did you mean --accent, from css_data()?",
+        "citry check: citry.css.misspelled-variable Nothing sets --acent, so this property gets its initial or inherited value. Did you mean --accent, from css_data()?"
       ]
     },
     {
@@ -978,7 +981,9 @@
       "cell": "E",
       "reason": null,
       "evidence": [
+        "Citry language server (citry check --types): citry.browser.missing-form-field Server event 'search' requires field 'q', but no control in this form has that name, so the server rejects every submit.",
         "Citry language server (citry check --types): citry.browser.unknown-form-field The form sends field 'qeury', which server event 'search' does not declare, so the server rejects the submit.",
+        "citry check: citry.browser.missing-form-field Server event 'search' requires field 'q', but no control in this form has that name, so the server rejects every submit.",
         "citry check: citry.browser.unknown-form-field The form sends field 'qeury', which server event 'search' does not declare, so the server rejects the submit."
       ]
     },
@@ -1049,10 +1054,12 @@
       "framework": "citry",
       "mistake": "m50-shared-value-name",
       "status": "ported",
-      "bucket": "runtime-error",
-      "cell": "R",
+      "bucket": "static-warning",
+      "cell": "Ew",
       "reason": null,
       "evidence": [
+        "Citry language server (citry check --types): citry.template.unknown-inject-key No component above Card provides 'bord', so self.inject('bord') raises KeyError when the page renders. Did you mean 'board'?",
+        "citry check: citry.template.unknown-inject-key No component above Card provides 'bord', so self.inject('bord') raises KeyError when the page renders. Did you mean 'board'?",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",

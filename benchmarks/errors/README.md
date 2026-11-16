@@ -194,7 +194,7 @@ the "Catching errors" section of the docs site's Benchmarks page. Open
 findings that pointed away from the change without an `indirect` note.
 Its Citry column comes from a run on 2026-11-16 that measured only
 Citry, installed as the 1.0.0 release from PyPI. That run took 1 minute
-45 seconds.
+19 seconds.
 Before the app runs, Citry reports 56 of the 61 mistakes that apply to
 it. The other eleven frameworks' columns are kept from the run in
 [`results/2026-10-21/`](results/2026-10-21/), whose Citry column
