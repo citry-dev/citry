@@ -562,15 +562,14 @@ def test_release_profile_is_the_cohort_plus_the_docs_page_board_size():
 
 
 def test_release_rerun_profiles_keep_the_release_settings_of_the_numbers_they_join():
-    # A release profile with local wheels measures some apps again, and the
-    # docs page shows those numbers beside other apps' numbers from
-    # release-0.6.0. The docs data script cannot check most settings, so only
-    # the fields compose lets differ may differ. A copy of such a profile is
-    # checked here too.
+    # Every later release profile measures some apps again, and the docs page
+    # shows those numbers beside other apps' numbers from release-0.6.0. The
+    # docs data script cannot check most settings, so only the fields compose
+    # lets differ may differ. A copy of such a profile is checked here too.
     release = tomllib.loads((config.WEB / "profiles/release-0.6.0.toml").read_text())
     reruns = sorted((config.WEB / "profiles").glob("release-*.toml"))
-    reruns = [path for path in reruns if "local_wheels" in tomllib.loads(path.read_text())]
-    assert reruns, "no release profile with local wheels found"
+    reruns = [path for path in reruns if path.stem != "release-0.6.0"]
+    assert reruns, "no release rerun profile found"
     per_run = compose.PER_RUN_FIELDS
     for path in reruns:
         rerun = tomllib.loads(path.read_text())

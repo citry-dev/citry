@@ -83,7 +83,7 @@ run of either benchmark: "Citry catches more errors than other Python
 frameworks" rests on the error counts, the speed chart's title types the
 1,400 entries, and the heading "Python at JavaScript speed" rests on
 Citry's first and second load both landing among Next.js's and Nuxt's
-(faster than Next.js on both, behind Nuxt only on the second load).
+(faster than Next.js on both, behind Nuxt on both).
 -->
 
 <div class="landing-benchmarks" id="benchmarks" markdown="1">
