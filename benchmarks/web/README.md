@@ -194,12 +194,12 @@ with wheels built from this repository. Use this to test a change before it
 is released, or to measure a release before it is published. The numbers
 describe the source you built. The profile names the wheels in a
 `[local_wheels]` table, relative to the repository root.
-`citry-local-wheels` is set up for the 0.6.0 wheels:
+`citry-local-wheels` names these wheels:
 
 ```toml
 [local_wheels]
-citry = ".benchmarks/wheels/citry-0.6.0/citry-0.6.0-py3-none-any.whl"
-citry-core = ".benchmarks/wheels/citry-0.6.0/citry_core-1.8.0-cp312-cp312-macosx_11_0_arm64.whl"
+citry = ".benchmarks/wheels/citry-local/citry-1.0.0-py3-none-any.whl"
+citry-core = ".benchmarks/wheels/citry-local/citry_core-2.1.0-cp312-cp312-macosx_11_0_arm64.whl"
 ```
 
 Build both wheels into exactly those paths before `prepare`. The
@@ -208,19 +208,30 @@ Build both wheels into exactly those paths before `prepare`. The
 frees. From the repository root:
 
 ```bash
+# Start empty, so a wheel from an older build is never measured.
+rm -rf .benchmarks/wheels/citry-local
 # citry-core compiles against ruff's Python parser, a Git submodule.
 git submodule update --init --depth 1 third_party/rust/ruff
-mkdir -p .benchmarks/wheels/citry-0.6.0
+mkdir -p .benchmarks/wheels/citry-local
 uv build --wheel packages/py/citry \
-  --out-dir .benchmarks/wheels/citry-0.6.0
+  --out-dir .benchmarks/wheels/citry-local
 cd packages/py/citry_core
+# Use the maturin version that this package's pyproject.toml pins.
 CARGO_TARGET_DIR=../../../.benchmarks/cargo-target \
-  uvx --from maturin==1.15.0 maturin build --profile release-wheel \
+  uvx --from maturin==1.16.0 maturin build --profile release-wheel \
   --interpreter "$(uv python find 3.12.13)" \
-  --out ../../../.benchmarks/wheels/citry-0.6.0
+  --out ../../../.benchmarks/wheels/citry-local
 cd ../../..
 rm -rf .benchmarks/cargo-target
 ```
+
+Each wheel's file name holds the version that its package's
+`pyproject.toml` has when you build it: `packages/py/citry/pyproject.toml`
+for `citry`, `packages/py/citry_core/pyproject.toml` for `citry-core`.
+Unreleased source keeps the released version number until someone changes
+it, so these names do not mean the PyPI release is measured. After you
+change either version, rebuild the wheels and edit the names in
+`profiles/citry-local-wheels.toml` to match.
 
 Loading a profile fails while a named wheel is missing. The runner hashes the
 wheel bytes into the build identity and installs them only into the Citry
