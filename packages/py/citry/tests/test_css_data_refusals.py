@@ -845,7 +845,9 @@ def _stored_entry(class_id: str, source: str | None, content: str) -> str:
 
 
 def _source_and_hash(data: dict[str, object]) -> tuple[str, str]:
-    # The same canonical JSON and hash a render writes for these values.
+    # The same canonical JSON and hash a render writes for these values, for
+    # an engine with a configured cache and no secret, which names
+    # stylesheets without a key (see `_css_data_keys`).
     source = json.dumps(data, allow_nan=False, separators=(",", ":"))
     return source, hashlib.sha256(source.encode()).hexdigest()[:32]
 
@@ -972,4 +974,5 @@ def test_a_render_cache_entry_with_a_stylesheet_from_an_earlier_version_is_refus
     earlier_value = json.dumps(Style(kind="variables", content=content, origin_class_id="w").to_json())
     wire = {"hash": variables_hash, "source": source, "value": earlier_value}
     with pytest.raises(CacheArtifactError, match="canonical source"):
-        _capture_from_wire(wire, path="artifact.css", class_id="w")
+        # A configured cache and no secret: the name is the plain hash `_source_and_hash` computes.
+        _capture_from_wire(wire, path="artifact.css", class_id="w", citry=Citry(cache=InMemoryCache()))

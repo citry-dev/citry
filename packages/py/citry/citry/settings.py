@@ -834,7 +834,17 @@ class CitrySettings:
             one-element list. ``None`` (the default) means no
             secret is set. Django projects can reuse ``SECRET_KEY``
             and any ``SECRET_KEY_FALLBACKS`` by passing
-            ``citry.contrib.django.secret()``.
+            ``citry.contrib.django.secret()``. Citry also uses it to make
+            the key for the URLs of the stylesheets that ``css_data()``
+            produces, so nobody can work out such a URL from a guessed
+            value. Set a secret whenever ``cache`` is set and
+            ``css_data()`` returns values that differ between visitors;
+            without one, Citry logs a warning the first time it builds
+            such a URL. When old and new workers run at the same time
+            during a deploy, add a new secret as the second entry first,
+            and move it to the front in a later deploy: a worker that
+            does not hold a secret yet refuses the State and stylesheet
+            URLs made with it.
         event_result_resolvers: Experimental. Result resolvers for the Events
             extension.
             When an event handler returns a value, citry converts it into the

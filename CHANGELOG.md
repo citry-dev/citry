@@ -24,6 +24,35 @@
   with a `<base>` tag now loads from the page's own folder. Write such a
   URL from the site root, such as `Script(url="/app/static/app.js")`, so
   it loads from the same place on every page.
+- Each `css_data()` stylesheet gets a new URL, and a cached component
+  render that includes one is rendered again the next time it is used.
+  A page that a visitor opened before the upgrade shows the component
+  without those values until it is reloaded.
+- If you use a shared cache, such as Redis or memcached, delete the
+  keys that earlier releases wrote for `css_data()` and `js_data()`
+  once every worker runs this release. They are the keys that match
+  `citry:*:css:*` or `citry:*:js:*` and do not contain `:component:`,
+  and every key that starts with `citry:vue-style:`.
+  Until you delete them, someone could still confirm a guessed value
+  from how long its 404 takes: once per value, and on every request for
+  a component class you renamed or removed since.
+  Deleting them also removes stylesheets that this release wrote, so a
+  page opened before then may show components without their
+  `css_data()` values until it is reloaded. Clearing the whole cache
+  also works, but it also drops the State that Citry keeps in the cache.
+- Workers that share a cache must all set `secret`, or all leave it
+  unset. While a deploy moves workers from 1.0.0, or from no `secret`
+  to a `secret`, pages that the older workers render may show
+  components without their `css_data()` values until the deploy ends.
+- If a CDN or shared proxy sits in front of Citry, purge its copies of
+  `/cache/` and `/ext/events/assets/`.
+- If your app sets `cache` but not `secret`, set `secret` when
+  `css_data()` returns values that differ between visitors. Citry logs
+  a warning in that setup.
+- To rotate `secret` while old and new workers run at the same time,
+  deploy the new secret as the second entry first, and move it to the
+  front in a later deploy. A worker that does not hold the new secret
+  yet refuses the State and stylesheet URLs made with it.
 
 ### Fixes
 
@@ -61,6 +90,13 @@
   stylesheets that Citry's browser code adds to the page, or the Citry
   script that a fragment adds, to another site, even when the page's
   CSP has no `base-uri`.
+- Security: someone who guesses a `css_data()` value can no longer
+  confirm it by requesting the stylesheet URL that value would produce.
+  Citry now builds that URL from the values and a key. An app that sets
+  `cache` needs `secret` set as well for this.
+- Security: Citry no longer serves a `js_data()` script that an earlier
+  release left in a shared cache. With `secret` set, it also no longer
+  serves a `css_data()` stylesheet left there.
 - A malformed State token, or a malformed `cache/` or `asset/` URL,
   now gets a 403 or 404 instead of a server error when Citry's cache
   is a Django memcached backend.

@@ -109,6 +109,17 @@ keys = [
 citry_app = Citry(secret=[key for key in keys if key])
 ```
 
+When old and new workers run at the same time during a deploy, rotate in
+two steps. First deploy the new secret as the second entry, so every
+worker can verify values signed with it. Then, in a later deploy, move it
+to the front. A worker that does not hold the new secret yet treats State
+signed with it as out of date, so the browser reports an out-of-date
+page, and it answers 404 for the URL of a `css_data()` stylesheet (the
+CSS Citry builds from a component's `css_data()` values) made with it.
+In Django, add the new key to `SECRET_KEY_FALLBACKS` first. In the later
+deploy, make it `SECRET_KEY` and move the old key into
+`SECRET_KEY_FALLBACKS`.
+
 [Web frameworks](/advanced/web-frameworks/) shows how to mount Citry in other
 frameworks.
 

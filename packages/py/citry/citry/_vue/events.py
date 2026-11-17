@@ -26,7 +26,12 @@ from citry.citry import Citry
 from citry.citry_element import CitryElement
 from citry.component import Component, ComponentMeta
 from citry.component_registry import NotRegistered
-from citry.ext.dependencies.scripts import uses_component
+from citry.ext.dependencies.scripts import (
+    check_css_data_stylesheet_copy,
+    delete_leftover_entry,
+    even_css_data_copy_refusal_cost,
+    uses_component,
+)
 from citry.ext.dependencies.types import _script_type_should_wrap
 from citry.ext.events.emission import EXTRA_KEY, EventInstanceEntry, build_events_manifest
 from citry_core.template_parser import HtmlAttrKind, ParseOptions, TemplateElement, parse_template
@@ -423,6 +428,11 @@ def _load_asset(citry: Citry, kind: str, digest: str) -> bytes | None:
     key = _asset_cache_key(kind, digest)
     cached = citry.cache.get(key)
     if cached is None:
+        # Refusing a stored copy of a `css_data()` stylesheet takes more
+        # cache work (below), so a miss does the same work: a guessed URL
+        # then takes as long whether or not a copy is stored.
+        if kind == "style":
+            even_css_data_copy_refusal_cost(citry)
         return None
     content = cached.encode()
     # A shared backend is outside this process's control. Serve only bytes
@@ -434,6 +444,17 @@ def _load_asset(citry: Citry, kind: str, digest: str) -> bytes | None:
         citry.cache.delete(key)
         _forget_stored_key(citry, key)
         return None
+    # An earlier release may have left a `css_data()` stylesheet here under a
+    # name made without a key, which anyone who guesses its values can
+    # compute. This engine serves it only when its own `cache/` route
+    # would, and deletes it once no stored values are left under its name.
+    # Every refusal does the same cache work as a miss above.
+    if kind == "style":
+        verdict = check_css_data_stylesheet_copy(citry, cached)
+        if verdict == "delete":
+            delete_leftover_entry(citry, key)
+        if verdict != "serve":
+            return None
     _remember_locally(citry, kind, digest, content)
     return content
 

@@ -244,6 +244,17 @@ text.
     A value wrapped in [`Secret`][citry.Secret] raises `ValueError` when
     the component renders, even when the component has no CSS.
 
+Citry builds the stylesheet's URL from the values and a key, so nobody
+can work out the URL from a value they guess and learn whether some
+visitor's page used it. The key comes from the [`secret`][citry.CitrySettings.secret]
+setting, or, without one, is made at random when the process starts.
+With a configured [`cache`](/performance/cache-backends/) and no
+`secret`, workers have no key they all share, so anyone can work out the
+URL from a guessed value, and Citry logs a warning. If you set `cache`,
+also set `secret` when `css_data()` returns values that differ between
+visitors, such as a progress percentage. Workers that share a cache must
+all set `secret`, or all leave it unset.
+
 ## Name CSS classes
 
 Component CSS is not scoped to the component. Citry adds the rules to the

@@ -19,6 +19,10 @@ Keys follow django-components' scheme with a citry prefix::
     citry:<class_id>:css:component:<hash>  one content-addressed CSS version
     citry:<class_id>:css:<hash>      a generated css_data() variables stylesheet
 
+Citry writes no ``js_data()`` entry; those values go into the page itself.
+This module never serves a ``citry:<class_id>:js:<hash>`` entry (see
+``get_script``).
+
 The ``css_data()`` stylesheets go to ``Citry.cache`` only when a cache is
 configured. Without one, each page puts its own into this process's store of
 page files as it is written, which ``CitrySettings.vue_asset_max_bytes``
@@ -30,12 +34,16 @@ Design: docs/design/dependencies.md section 4.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import re
+import secrets
 import time
 from dataclasses import dataclass
+from functools import lru_cache
 from hashlib import md5, sha256
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
+from weakref import WeakSet
 
 from citry._class_introspection import _safe_class_text
 from citry.cache import _forget_stored_key, _remember_confirmed, _store_if_missing, _store_unless_matched
@@ -43,6 +51,7 @@ from citry.constness import _unwrap_const_markers, const_value
 from citry.ext.dependencies.types import Script, ScriptType, Style
 from citry.secret import Secret
 from citry.util.css import SECRET_IN_CSS_DATA_ADVICE, serialize_css_var_value, validate_css_var_name
+from citry.util.logger import logger
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -487,6 +496,99 @@ class _ComponentScriptCapture:
 
 _COMPONENT_SCRIPT_CAPTURE = "_citry_component_script_capture"
 
+# A fixed label that turns each secret into the key that names `css_data()`
+# stylesheets. It differs from the State token label, so the two keys differ.
+# As for State tokens, the label is the HMAC key and the secret is the
+# message: the secret is often shared with other code (Django's
+# `SECRET_KEY`, for one), and code that returns HMAC-SHA256 of any text
+# under the raw secret must not be able to hand out this key.
+_CSS_DATA_KEY_LABEL = b"citry.dependencies.css-data-name"
+# An engine with no secret and no configured cache uses this random key,
+# made once per process: its stylesheets never leave this process, so no
+# other worker has to compute the same names. Engines in one process share
+# it, so they write the same page for the same values.
+_PROCESS_CSS_DATA_KEY = secrets.token_bytes(32)
+# Engines already warned that they name `css_data()` stylesheets without a
+# key, so each engine logs the warning once rather than on every render.
+_WARNED_UNKEYED_ENGINES: WeakSet[Citry] = WeakSet()
+
+
+@lru_cache(maxsize=16)
+def _css_data_key(secret: str) -> bytes:
+    """Return the key that names ``css_data()`` stylesheets for one ``secret`` entry."""
+    # Kept per entry, because every render with css_data() needs it and a
+    # deployment has only one secret plus a few rotation entries.
+    return hmac.new(_CSS_DATA_KEY_LABEL, secret.encode("utf-8"), sha256).digest()
+
+
+def _css_data_keys(citry: Citry) -> tuple[bytes | None, ...]:
+    """
+    Return the keys that name this engine's ``css_data()`` stylesheets, the one for new stylesheets first.
+
+    Citry names a stylesheet's URL with a hash of its values. Without a key,
+    anyone could hash a guessed value, request that URL, and learn from the
+    answer whether some visitor's page used the value. With a key, only the
+    server can name a stylesheet.
+
+    Each entry of the ``secret`` setting gives one key, so a URL named
+    before a key rotation still resolves while the old secret stays listed.
+    With no secret, an engine that keeps its stylesheets in this process
+    uses a random key made once per process. ``None`` means no key: an
+    engine with a configured cache and no secret, whose workers have no
+    shared key to agree on.
+    """
+    configured = citry.settings.secret
+    if configured:
+        return tuple(_css_data_key(entry) for entry in configured)
+    # _vue.events imports this module, so importing it here at load time
+    # would be circular.
+    from citry._vue.events import keeps_assets_in_process_only  # noqa: PLC0415
+
+    if not keeps_assets_in_process_only(citry):
+        return (None,)
+    return (_PROCESS_CSS_DATA_KEY,)
+
+
+def _css_data_hash(key: bytes | None, source_json: str) -> str:
+    """Return the name of the stylesheet built from ``source_json``: 32 hex characters of its keyed hash."""
+    data = source_json.encode()
+    digest = sha256(data) if key is None else hmac.new(key, data, sha256)
+    return digest.hexdigest()[:32]
+
+
+def _new_css_data_key(citry: Citry) -> bytes | None:
+    """Return the key that names this engine's new ``css_data()`` stylesheets, warning once when there is none."""
+    key = _css_data_keys(citry)[0]
+    if key is None and citry not in _WARNED_UNKEYED_ENGINES:
+        # A deployed app does not read the docs again, so the log is where an
+        # app with a configured cache and no secret learns about the gap.
+        _WARNED_UNKEYED_ENGINES.add(citry)
+        logger.warning(
+            "Citry has a configured cache but no secret, so it names css_data() stylesheets with a plain"
+            " hash of their values. Anyone who guesses a css_data() value can then work out its stylesheet"
+            " URL and learn from the answer whether some visitor's page used that value. Set the secret"
+            " setting (citry.contrib.django.secret() in a Django project) when css_data() returns values"
+            " that differ between visitors."
+        )
+    return key
+
+
+def _css_data_key_for(citry: Citry, source_json: str, variables_hash: str) -> tuple[bool, bytes | None]:
+    """
+    Find the key of this engine that hashes ``source_json`` to ``variables_hash``.
+
+    Returns ``(True, key)``, or ``(False, None)`` when no key does.
+    """
+    # A name is hex. `compare_digest` raises for text that is not ASCII,
+    # which a render cache entry could hold, so such a name simply fails.
+    if not variables_hash.isascii():
+        return False, None
+    for key in _css_data_keys(citry):
+        # The name comes from the request, so compare without leaking how much of it matched.
+        if hmac.compare_digest(_css_data_hash(key, source_json), variables_hash):
+            return True, key
+    return False, None
+
 
 def gen_cache_key(class_id: str, script_type: ScriptType, variables_hash: str | None = None) -> str:
     """The cache key for one component script (see the module docstring for the scheme)."""
@@ -694,38 +796,194 @@ def get_cached_component_script(
 
 
 def get_script(
-    script_type: ScriptType, comp_cls: type[Component], variables_hash: str | None = None
+    script_type: ScriptType,
+    comp_cls: type[Component],
+    variables_hash: str | None = None,
+    *,
+    even_refusal_cost: bool = False,
 ) -> Script | Style | None:
     """
     Read one cached object, validating class-level content against the current class.
 
     A ``css_data()`` stylesheet is built again from its stored values with
-    the current check (see ``_rebuild_css_data_stylesheet``).
+    the current check (see ``_rebuild_css_data_stylesheet``). A ``js_data()``
+    script is never served, because Citry writes those values only into the
+    page. ``even_refusal_cost`` is for a route that answers a request: it
+    makes every refused ``css_data()`` name cost the same cache work (see
+    ``_read_css_data_stylesheet``).
     """
     if variables_hash is None:
         class_cached = _cache_component_script(script_type, comp_cls)
         return None if class_cached is None else class_cached[0]
+    # A `citry:<class_id>:js:<hash>` entry can only come from an earlier
+    # release (0.1.0 to 0.5.1 wrote one for every js_data() result, with no
+    # expiry), and anyone who guesses a js_data() value can compute its
+    # name, so a variables hash for JavaScript always misses.
+    if script_type == "js":
+        return None
+    return _read_css_data_stylesheet(comp_cls, variables_hash, even_refusal_cost=even_refusal_cost)[0]
+
+
+# A key no Citry release writes. A refused name that has no leftover entry
+# to delete reads this key instead, so every refused name makes the same
+# number of cache calls, and takes about the same time, whatever the cache
+# holds. A read, not a delete: a delete is a write, and on some backends
+# (SQLite under `DiskCache`) every write takes a lock that all processes
+# share, so a stream of 404s would slow every worker down.
+_UNUSED_CSS_DATA_KEY = f"{_CACHE_PREFIX}:css-data-miss"
+
+
+def delete_leftover_entry(citry: Citry, key: str) -> None:
+    """Delete a cache entry that only an earlier release writes, keeping the request's answer a 404 if that fails."""
+    # This runs while answering a request that already gets a 404. A backend
+    # that refuses writes (a read-only replica, say) must not turn that
+    # answer into a 500; the entry is then refused again on the next request.
+    try:
+        citry.cache.delete(key)
+    except Exception:  # noqa: BLE001 - any backend error; the answer stays 404
+        # Debug, not warning: a request can trigger this, so it must not flood the log.
+        logger.debug("Citry could not delete a cache entry that an earlier release left.", exc_info=True)
+    _forget_stored_key(citry, key)
+
+
+def _read_css_data_stylesheet(
+    comp_cls: type[Component], variables_hash: str, *, even_refusal_cost: bool
+) -> tuple[Style | None, bool]:
+    """
+    Read one ``css_data()`` stylesheet, deleting an entry under its name that an earlier release left.
+
+    Returns ``(stylesheet, gone)``. ``stylesheet`` is ``None`` when this
+    engine would not serve the name. ``gone`` is ``True`` when no entry is
+    left under the name: none was stored, or this call deleted one.
+
+    A request can choose any name, and a refused leftover takes one cache
+    delete that a miss does not. With ``even_refusal_cost``, every other
+    refusal from a shared cache makes one more read instead, so each
+    refusal makes two cache calls and the response time does not tell a
+    leftover from a miss.
+    """
     # _vue.events imports this module, so importing it here at load time
     # would be circular.
     from citry._vue.events import css_data_stylesheet, keeps_assets_in_process_only  # noqa: PLC0415
 
     citry = comp_cls.citry
-    key = gen_cache_key(comp_cls.class_id, script_type, variables_hash)
+    key = gen_cache_key(comp_cls.class_id, "css", variables_hash)
     # Without a configured cache, css_data() stylesheets live only in this
-    # process's store of page files; with one, the backend holds them.
+    # process's store of page files, which no other release can write.
     if keeps_assets_in_process_only(citry):
-        serialized = css_data_stylesheet(citry, key) if script_type == "css" else None
-    else:
-        serialized = citry.cache.get(key)
-    if serialized is None:
+        serialized = css_data_stylesheet(citry, key)
+        if serialized is None:
+            return None, True
+        return _rebuild_css_data_stylesheet(citry, comp_cls.class_id, variables_hash, _json_or_none(serialized)), False
+    serialized = citry.cache.get(key)
+    data = None if serialized is None else _json_or_none(serialized)
+    rebuilt = (
+        None if serialized is None else _rebuild_css_data_stylesheet(citry, comp_cls.class_id, variables_hash, data)
+    )
+    if rebuilt is not None:
+        return rebuilt, False
+    if serialized is not None and _left_by_an_earlier_release(citry, variables_hash, data):
+        # Deleting a refused leftover means the next request for the same
+        # name is a plain miss. A worker of the earlier release that still
+        # links it writes it again on its next render.
+        delete_leftover_entry(citry, key)
+        return None, True
+    if even_refusal_cost:
+        citry.cache.get(_UNUSED_CSS_DATA_KEY)
+    return None, serialized is None
+
+
+def _json_or_none(serialized: str) -> object:
+    """Parse a stored entry, or return ``None`` for one that an older release wrote as plain text."""
+    try:
+        return json.loads(serialized)
+    except ValueError:
         return None
-    data = json.loads(serialized)
-    if script_type == "js":
-        return Script.from_json(data)
-    return _rebuild_css_data_stylesheet(comp_cls.class_id, variables_hash, data)
 
 
-def _rebuild_css_data_stylesheet(class_id: str, variables_hash: str, data: object) -> Style | None:
+def _left_by_an_earlier_release(citry: Citry, variables_hash: str, data: object) -> bool:
+    """Return whether a refused ``css_data()`` entry can only have been written by an earlier release."""
+    # 0.1.0 and 0.2.0 stored only the text, and an entry that is not JSON
+    # comes from no release this one can read.
+    if type(data) is not dict or type(data.get("source")) is not str:
+        return True
+    # A name that is the plain hash of its values was made without a key.
+    # An engine that names its stylesheets without a key accepts such a
+    # name, so for that engine it is not a leftover. A name made under
+    # another key, such as a secret this worker does not hold yet, stays.
+    return None not in _css_data_keys(citry) and hmac.compare_digest(
+        _css_data_hash(None, data["source"]), variables_hash
+    )
+
+
+# How every `css_data()` stylesheet Citry has written since 0.6.0 begins:
+# the class id in a comment, then the rule for the stylesheet's marker.
+_CSS_DATA_STYLESHEET_HEAD = re.compile(r"/\* ([^\s*]+) \*/\n\[data-ccss-([0-9a-f]{1,64})\] \{\n")
+
+
+def even_css_data_copy_refusal_cost(citry: Citry) -> None:
+    """
+    Do the cache work that refusing a stored copy of a ``css_data()`` stylesheet does.
+
+    Refusing a copy makes three cache calls after reading the copy: it
+    reads the copy's ``css_data()`` entry, then deletes leftovers or reads
+    an unused key. A request that found no copy calls this, so its 404
+    makes as many cache calls as a refusal.
+    """
+    for _ in range(3):
+        citry.cache.get(_UNUSED_CSS_DATA_KEY)
+
+
+def check_css_data_stylesheet_copy(citry: Citry, text: str) -> Literal["serve", "refuse", "delete"]:
+    """
+    Decide whether a stylesheet read from a shared cache may be served as a Vue page file.
+
+    On an interactive page, a ``css_data()`` stylesheet is also published
+    as a Vue page file, at a URL named by the sha256 of its bytes. A shared
+    cache can still hold such a file that an earlier release wrote under a
+    name made without a key, and anyone who guesses its values can compute
+    that URL. Such a file is served only when the ``cache/`` route would
+    serve the same bytes, so both URLs apply the same check.
+
+    Returns ``"serve"`` for those bytes, and for any stylesheet that is not
+    a ``css_data()`` stylesheet. Returns ``"delete"`` when no ``css_data()``
+    entry is left under the stylesheet's name, so the caller deletes the
+    copy too, with ``delete_leftover_entry``. Returns ``"refuse"``
+    otherwise, after reading an unused key, so a refusal makes as many
+    cache calls as a miss (see ``even_css_data_copy_refusal_cost``).
+    """
+    match = _CSS_DATA_STYLESHEET_HEAD.match(text)
+    if match is None:
+        return "serve"
+    class_id, variables_hash = match.groups()
+    # The `cache/` route answers 404 for a class this engine does not know.
+    # The copy stays, because a worker that knows the class, such as one
+    # already running the next deploy, may link it.
+    try:
+        comp_cls = citry.get_component_by_class_id(class_id)
+    except KeyError:
+        even_css_data_copy_refusal_cost(citry)
+        return "refuse"
+    current, gone = _read_css_data_stylesheet(comp_cls, variables_hash, even_refusal_cost=True)
+    if current is not None and current.content == text:
+        return "serve"
+    # With no entry left under its name, the copy cannot be served again
+    # until a render writes both back, so it goes too. When the entry was
+    # only evicted, a worker whose page links the copy writes it back on a
+    # render once its recheck interval
+    # (`citry.cache._STORED_KEY_RECHECK_SECONDS`) has passed.
+    if gone:
+        return "delete"
+    # A refused name has already made its extra call in the read above; a
+    # stylesheet rebuilt with other bytes, such as one another release
+    # wrote, has not. The caller makes no delete, so its call is made here.
+    if current is not None:
+        citry.cache.get(_UNUSED_CSS_DATA_KEY)
+    citry.cache.get(_UNUSED_CSS_DATA_KEY)
+    return "refuse"
+
+
+def _rebuild_css_data_stylesheet(citry: Citry, class_id: str, variables_hash: str, data: object) -> Style | None:
     """
     Build a stored ``css_data()`` stylesheet again from its stored values, or return None when that is not possible.
 
@@ -741,13 +999,16 @@ def _rebuild_css_data_stylesheet(class_id: str, variables_hash: str, data: objec
     # An earlier version stored only the text, so there is nothing to build from.
     if type(data) is not dict or type(data.get("source")) is not str:
         return None
+    # The URL names the values it was made for; an entry for other values is
+    # not this stylesheet, and neither is one named under a key this engine
+    # does not hold.
+    found, key = _css_data_key_for(citry, data["source"], variables_hash)
+    if not found:
+        return None
     # A value the current check refuses must not reach the browser.
     try:
-        rebuilt = _css_vars_capture(class_id, data["source"])
+        rebuilt = _css_vars_capture(class_id, data["source"], key)
     except (TypeError, ValueError):
-        return None
-    # The URL names the values it was made for; an entry for other values is not this stylesheet.
-    if rebuilt.variables_hash != variables_hash:
         return None
     return Style.from_json(json.loads(rebuilt.cache_value))
 
@@ -778,13 +1039,12 @@ def _json_default(value: object) -> object:
     return unwrapped
 
 
-def _hash_vars(data: Mapping[str, object]) -> tuple[str, str]:
+def _vars_json(data: Mapping[str, object]) -> str:
     """
-    Hash one ``js_data()``/``css_data()`` result.
+    Write one ``css_data()`` result as the canonical JSON text that names its stylesheet.
 
-    Returns ``(json_text, hash)``. The hash keys the generated variables
-    script: identical data, however many instances or renders produce it,
-    shares one cached script, and the browser receives it once.
+    Identical data, however many instances or renders produce it, gives the
+    same text, so it shares one stylesheet and the browser receives it once.
     """
     for name in data:
         if type(name) is not str:
@@ -796,7 +1056,7 @@ def _hash_vars(data: Mapping[str, object]) -> tuple[str, str]:
         default=_json_default,
         separators=(",", ":"),
     )
-    return json_text, sha256(json_text.encode()).hexdigest()[:32]
+    return json_text
 
 
 def _canonical_variables_json(source_json: str) -> dict[str, object]:
@@ -826,9 +1086,11 @@ def _canonical_variables_json(source_json: str) -> dict[str, object]:
     return data
 
 
-def _css_vars_capture(class_id: str, source_json: str) -> _VariablesScriptCapture:
+def _css_vars_capture(class_id: str, source_json: str, key: bytes | None) -> _VariablesScriptCapture:
     data = _canonical_variables_json(source_json)
-    variables_hash = sha256(source_json.encode()).hexdigest()[:32]
+    # `key` comes from `_css_data_keys`, so an outsider cannot compute this
+    # name from a guessed value.
+    variables_hash = _css_data_hash(key, source_json)
     lines: list[str] = []
     for name, value in data.items():
         try:
@@ -951,8 +1213,9 @@ def _cache_component_css_vars_capture(
         except (TypeError, ValueError) as error:
             msg = f"Component {comp_cls.class_id!r} css_data() entry {name!r} cannot be emitted: {error}"
             raise ValueError(msg) from error
-    source_json, _variables_hash = _hash_vars(css_data)
-    capture = _css_vars_capture(comp_cls.class_id, source_json)
+    source_json = _vars_json(css_data)
+    # New stylesheets are named with the first key, which follows the first `secret` entry.
+    capture = _css_vars_capture(comp_cls.class_id, source_json, _new_css_data_key(comp_cls.citry))
     _store_css_data_stylesheet(comp_cls.citry, comp_cls.class_id, capture)
     return capture
 

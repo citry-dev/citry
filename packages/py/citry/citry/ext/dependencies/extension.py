@@ -22,6 +22,7 @@ from citry.assets import HasHtml, dedupe, module_dir, resolve_asset_file
 from citry.ext.dependencies.emission import EXTRA_KEY, emit_dependencies
 from citry.ext.dependencies.scripts import (
     _cache_component_css_vars_capture,
+    _css_data_key_for,
     _css_vars_capture,
     _reject_secret_css_data,
     _VariablesScriptCapture,
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
 
     from citry._javascript_policy import _JavascriptPolicy
     from citry._serialization_security import _ScriptSecurityMaterializer
+    from citry.citry import Citry
     from citry.component import Component
     from citry.settings import SecurityCspMode, SecurityJavascriptMode
     from citry.util.routing import URLRoute
@@ -307,7 +309,7 @@ class DependenciesExtension(Extension):
                 component_class = ctx.citry.get_component_by_class_id(class_id)
             except KeyError as err:
                 raise CacheArtifactError(f"{path}.class_id has no current registered component.") from err
-            css_capture = _capture_from_wire(item["css"], path=f"{path}.css", class_id=class_id)
+            css_capture = _capture_from_wire(item["css"], path=f"{path}.css", class_id=class_id, citry=ctx.citry)
             if css_capture is not None and not has_component_asset("css", component_class):
                 raise CacheArtifactError(f"{path}.css is incompatible with the current component CSS.")
             if css_capture is not None:
@@ -700,6 +702,7 @@ def _capture_from_wire(
     *,
     path: str,
     class_id: str,
+    citry: Citry,
 ) -> _VariablesScriptCapture | None:
     from citry.ext.cache.errors import CacheArtifactError  # noqa: PLC0415
 
@@ -711,8 +714,13 @@ def _capture_from_wire(
     if any(type(raw[field]) is not str for field in ("hash", "source", "value")):
         raise CacheArtifactError(f"{path} fields must be exact strings.")
     source = cast("str", raw["source"])
+    # A render cached before a key change names its stylesheet under a key
+    # this engine no longer holds, so it is refused and rendered again.
+    found, key = _css_data_key_for(citry, source, cast("str", raw["hash"]))
+    if not found:
+        raise CacheArtifactError(f"{path} does not match its canonical source value.")
     try:
-        rebuilt = _css_vars_capture(class_id, source)
+        rebuilt = _css_vars_capture(class_id, source, key)
     except (TypeError, ValueError) as err:
         raise CacheArtifactError(f"{path}.source is invalid: {err}") from err
     if rebuilt.variables_hash != raw["hash"] or rebuilt.cache_value != raw["value"]:

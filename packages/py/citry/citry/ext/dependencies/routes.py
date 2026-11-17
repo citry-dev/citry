@@ -5,7 +5,7 @@ Four endpoints, mounted at the root of the citry prefix (built-in
 extensions own their paths directly; see ``ExtensionManager.urls``)::
 
     <prefix>/cache/{class_id}.{script_type}                  legacy/current class JS or CSS
-    <prefix>/cache/{class_id}.{hash}.{script_type}           a class version or variables script
+    <prefix>/cache/{class_id}.{hash}.{script_type}           a class version, or a css_data() stylesheet
     <prefix>/asset/{file_name}                               a served Dependencies file (local_files="serve")
     <prefix>/citry.{digest}.js                               Citry's Vue browser runtime, named by its hash
     <prefix>/citry.js                                        the same runtime at a stable URL
@@ -13,7 +13,7 @@ extensions own their paths directly; see ``ExtensionManager.urls``)::
 These are what HTML fragments fetch: a fragment carries URLs instead of
 inlined tags, so the same component used by many fragments is downloaded
 once. Class-level scripts repopulate the cache on a miss (they can always be
-rebuilt from the class); variables scripts cannot, which is why multi-worker
+rebuilt from the class); css_data() stylesheets cannot, which is why multi-worker
 deployments that use fragments need a shared cache backend
 (docs/design/dependencies.md sections 4.3 and 8.3).
 
@@ -142,9 +142,10 @@ def dependency_routes(citry: Citry) -> list[URLRoute]:
             # Class-level scripts repopulate the cache on a miss.
             script = get_component_script(script_type, comp_cls)  # type: ignore[arg-type]
         else:
-            # Hashed URLs cover immutable class versions and per-render
-            # variables. Check the class-version namespace first; variables
-            # retain their existing key scheme and fallback.
+            # Hashed URLs cover immutable class versions and `css_data()`
+            # stylesheets. Check the class-version namespace first; a
+            # JavaScript hash that names no class version always misses
+            # (see `get_script`).
             script = get_cached_component_script(citry, class_id, script_type, vars_hash)  # type: ignore[arg-type]
             content_addressed = script is not None
             if script is None:
@@ -153,7 +154,9 @@ def dependency_routes(citry: Citry) -> list[URLRoute]:
                     script = get_cached_component_script(citry, class_id, script_type, vars_hash)  # type: ignore[arg-type]
                     content_addressed = script is not None
                 else:
-                    script = get_script(script_type, comp_cls, vars_hash)  # type: ignore[arg-type]
+                    # A guessed `css_data()` name must take as long to refuse
+                    # whatever the cache holds (see `get_script`).
+                    script = get_script(script_type, comp_cls, vars_hash, even_refusal_cost=True)  # type: ignore[arg-type]
         if script is None or script.content is None:
             # A later request may find the file (another worker stores it),
             # so neither the browser nor a CDN may keep this answer.
