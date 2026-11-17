@@ -2520,6 +2520,13 @@ class TestEmbeddedDataUrlDocuments:
     _SVG = "%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cscript%3Erun()%3C/script%3E%3C/svg%3E"
     _SCRIPT = "%3Cscript%3Erun()%3C/script%3E"
     _UNREAD_DOCUMENTS = [
+        # WebKit renders a type it cannot display as HTML.
+        f'<iframe src="data:image/svg,{_SVG}"></iframe>',
+        f'<iframe src="data:font/woff,{_SCRIPT}"></iframe>',
+        f'<iframe src="data:application/octet-stream,{_SCRIPT}"></iframe>',
+        f'<embed src="data:video/mp4,{_SCRIPT}">',
+        f'<object data="data:application/pdf,{_SCRIPT}"></object>',
+        f'<object type="text/html" data="data:font/woff,{_SCRIPT}"></object>',
         f'<iframe src="data:image/svg+xml,{_SVG}"></iframe>',
         f'<object data="data:image/svg+xml,{_SVG}"></object>',
         f'<embed src="data:image/svg+xml,{_SVG}">',
@@ -2577,13 +2584,14 @@ class TestEmbeddedDataUrlDocuments:
         f'<meta name="refresh" content="0;url=data:text/xml,{_SVG}">',
     ]
     _NOT_DOCUMENTS = [
-        # Shown as text, an image, media, or a download.
-        f'<iframe src="data:image/svg,{_SVG}"></iframe>',
+        # Shown as text or an image by every browser.
         f'<iframe src="data:text/plain,{_SVG}"></iframe>',
         f'<iframe src="data:,{_SVG}"></iframe>',
         f'<iframe src="data:image/png,{_SCRIPT}"></iframe>',
-        f'<embed src="data:video/mp4,{_SCRIPT}">',
-        f'<object data="data:application/pdf,{_SCRIPT}"></object>',
+        f'<object data="data:image/gif,{_SCRIPT}"></object>',
+        # A download link downloads the file of any of the documented types.
+        f'<a download href="data:application/octet-stream,{_SCRIPT}">x</a>',
+        f'<a download="f.pdf" href="data:application/pdf,{_SCRIPT}">x</a>',
         # An image runs no script.
         f'<img src="data:image/svg+xml,{_SVG}">',
         # HTML without a script.

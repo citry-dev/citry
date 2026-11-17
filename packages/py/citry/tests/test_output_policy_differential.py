@@ -54,7 +54,7 @@ COMPONENT_CLASSES = {"known": "Known", "other": "Other", "": "Empty"}
 _TAGS = [
     "a", "area", "meta", "iframe", "frame", "object", "embed", "form", "button", "input", "select", "textarea",
     "div", "span", "section", "svg", "math", "title", "noscript", "template", "table", "p", "script", "style", "link",
-    "x-\u00e9l\u00e9ment", "D\u0130V",
+    "x-\u00e9l\u00e9ment", "D\u0130V", "mi",
 ]  # fmt: skip
 _SCRIPT_TYPES = [
     None, "", "module", "Module ;x", "module;x", " text/javascript ", "TEXT/JavaScript", "application/json",
@@ -87,6 +87,8 @@ _PLAIN = [
     "id",
     "class",
     "type",
+    "download",
+    "DOWNLOAD",
     "media",
     "rel",
     "\u00e9t\u00e9",
@@ -234,6 +236,10 @@ def _data_url(rng: random.Random, document: str) -> str:
         "data:audio/x+xml", "data:font/", "data:text/html;base64;charset=x",
         # Tabs and line breaks anywhere in the URL, and `base64` after spaces.
         "da\tta:text/html", "data:text/ht\nml", "data:text/html; ", "data:text/html;\r",
+        # Types a frame shows as text or an image, a download type, and the
+        # same types with a control character the browser keeps in the type.
+        "data:image/gif", "data:image/x-icon", "data:application/octet-stream", "data:image/png ",
+        "data:image/png\x0c", "data:\x0ctext/plain", "data:image/jpeg\x0b;x", "data:text/css\x7f",
     ])  # fmt: skip
     roll = rng.random()
     if roll < 0.4:
@@ -254,6 +260,11 @@ def _data_url(rng: random.Random, document: str) -> str:
         return f"{header}{marker},{encoded}"
     if roll < 0.5:
         return f"{header}{rng.choice(['', ';base64'])}"
+    if roll < 0.55:
+        # Chromium keeps a tab or line break in a `data:` URL, where it can
+        # separate a tag's name from its attributes; other browsers drop it.
+        gap = rng.choice(["\n", "\t", "\r\n"])
+        return f"{header},{quote(document, safe='<>=/ ').replace(' ', gap)}"
     if roll < 0.6:
         # Bytes outside plain ASCII, and the four ASCII bytes an encoding
         # changes, mark a document the check does not read. `%81%40` is
@@ -322,6 +333,12 @@ def _value(rng: random.Random, name: str, tag: str) -> str:
             return _data_url(rng, _document(rng, 0))
         return rng.choice(["/next", "", "#", "https://example.com/?a=1&b=2", "&#x6A;"])
     if lowered == "type":
+        if tag in {"object", "embed"} and roll < 0.7:
+            # The type an `<object>` or `<embed>` declares for its URL.
+            return rng.choice([
+                "text/html", "TEXT/HTML", " text/html ", "text/html;charset=x", "image/png", "text/plain",
+                "image/svg+xml", "application/pdf", "application/x-foo", "", "image/png\x0c", "text/html\t",
+            ])  # fmt: skip
         return rng.choice(["button", "submit", "SUBMIT", "reset", "text", "", "Button", "image", "module"])
     if roll < 0.3:
         return "".join(rng.choice([*_REFERENCES, "x", " ", "\u017f", "\U0001f600", "\x00"]) for _ in range(3))
@@ -331,12 +348,13 @@ def _value(rng: random.Random, name: str, tag: str) -> str:
 _DOCUMENT_ATTRIBUTE = {
     "iframe": ["src", "srcdoc"],
     "frame": ["src"],
-    "object": ["data"],
-    "embed": ["src"],
+    "object": ["data", "data", "type"],
+    "embed": ["src", "src", "type"],
     "meta": ["http-equiv", "content"],
 }
-# Tags whose link or form URL the browser can open as a document in a frame.
-_LINK_TAGS = {"a", "area", "form", "button", "input"}
+# Tags whose link or form URL the browser can open as a document in a frame,
+# MathML elements included.
+_LINK_TAGS = {"a", "area", "form", "button", "input", "math", "mi"}
 
 
 def _attribute(rng: random.Random, tag: str, marker: bool) -> str:

@@ -53,16 +53,28 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
     `object data`, `embed src` (`loads_document_url`), a link or form URL
     or the value of an SVG animation of a link (`opens_document_url`), and
     a `<meta http-equiv="refresh">` (`meta_refreshes`, `refresh_data_url`).
+    A link includes `href` on a MathML element (`follows_mathml_href`),
+    which WebKit and Firefox open on a click.
     `attribute_document_requires_javascript` routes each attribute to it,
     at the top level and inside embedded documents. A `text/html` document
-    is read as the browser reads the URL: tabs and line breaks dropped,
-    `; base64` accepted, and any payload that is not plain ASCII, or that
-    holds 0x00, 0x0E, 0x0F, or 0x1B, counted as running code
-    (`payload_may_hide_markup`). A type in
-    `is_inert_media_type` (text, images, media, fonts, PDF, downloads) runs
-    nothing. Every other type, SVG and the other XML types included, counts
-    as running code without being read. The Python reference keeps a
-    matching copy.
+    is read twice: with tabs and line breaks dropped, as Firefox and WebKit
+    drop them, and with them kept, as Chromium keeps them in a `data:` URL
+    (`chromium_data_url_document`). Both readings accept `; base64` and
+    count any payload that is not plain ASCII, or that holds 0x00, 0x0E,
+    0x0F, or 0x1B, as running code (`payload_may_hide_markup`). Which
+    other types run nothing depends on how the URL is opened
+    (`DataUrlCarrier`): in a frame, or a link, form or refresh a frame
+    opens, only the types in `shows_in_every_frame`
+    (plain text, CSS, CSV, JSON, PNG, GIF, JPEG, BMP, ICO), because WebKit
+    renders a type it cannot display as HTML; from an HTML `<a download>`
+    or `<area download>` link (`downloads`), the wider
+    `is_inert_media_type` list; and on an `<object>` or `<embed>` whose
+    `type` names another type (`declared_type_may_run`), every type counts
+    as running code. Only spaces are trimmed around a type
+    (`trim_data_url_type`), because a browser keeps any other control
+    character in the type. A type outside its carrier's list, SVG and the
+    other XML types included, counts as running code without being read.
+    The Python reference keeps a matching copy.
   - `may_be_skipped_by_browser` is the one rule for a character a browser
     might skip in a `<script type>` or a refresh `content`: anything but
     printable ASCII. Browsers differ here, so `script_type_is_executable`
@@ -85,14 +97,23 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
     check once per reading, at the top level and in embedded documents, so
     code any reading finds counts. Its doc comment lists what adds a
     reading: the text `<select` or `<frameset`, a `<noscript>` that may
-    hold a tag (Chromium reads
-    `template.innerHTML` with scripting off, see `noscript_as_markup`), an
+    hold a tag (Chromium and WebKit read `template.innerHTML` with
+    scripting off, see `noscript_as_markup`; a `<form>` or `</form>` there
+    adds the same reading with Chromium's body form rules, see
+    `body_form_rules`), an
     end tag `EndTagRule` changes, a `<table>` start tag inside an open `<p>`
-    (the one step quirks mode changes), and a table part that html5ever
-    ignored. A page with none of these gets one reading. html5ever 0.29.0
-    keeps its old `<select>` rule and has neither browser's own end-tag
-    rule, so `feed` changes the tags it hands over and `VisibleNames`
-    changes the names `elem_name` gives. For markup that goes into another
+    (the one step quirks mode changes), a table part that html5ever
+    ignored, any `</form>` (WebKit 27.2 closes every element opened inside
+    the form at `</form>` in `template.innerHTML`, as the standard does
+    inside a `<template>`), and a `</form>` inside a `<template>` the page
+    writes (Chromium 159 follows its own rule there, see `FormEndRule` and
+    `feed_form_end_tag`). A page with none of these gets one reading.
+    The sink counts open templates (`templates_open`) and finds the
+    newest open element (`current_node`) so a `</form>` rarely needs a
+    full read of the open elements. html5ever 0.29.0 keeps its old
+    `<select>` rule and has neither browser's own end-tag rule, so `feed`
+    changes the tags it hands over and `VisibleNames` changes the names
+    `elem_name` gives. For markup that goes into another
     page, `tree_builder_for` feeds the tags of an empty host page first, and
     the `<noscript>` reading turns html5ever's scripting option off. Only this
     check departs from html5ever: `scan_output_html` and the page parses

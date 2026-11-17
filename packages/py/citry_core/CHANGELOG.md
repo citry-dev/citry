@@ -1,5 +1,27 @@
 # Release notes
 
+## Unreleased
+
+### Fixed
+
+- Security: the output checks now find a script hidden behind a
+  `</form>` that a browser reads differently: WebKit when a script sets
+  the HTML of a `<template>`, Chromium in the same case when the
+  `</form>` sits in a `<noscript>`, and Chromium inside a `<template>`
+  written in the page. When they read a page as the contents of a
+  `<template>`, they also let `</template>` close an SVG or MathML
+  `template` element, as every browser does.
+- Security: the JavaScript output check counts a `data:` document as
+  running code unless every browser shows its type as text or an image,
+  because WebKit renders a type it cannot display as HTML. It trims only
+  spaces around the type, as browsers do, so a type written with a
+  control character, such as a form feed, counts as one WebKit cannot
+  display. It also reads `href` on a MathML element as a link, and reads
+  an HTML `data:` document twice, with its tabs and line breaks as
+  Chromium keeps them and without them as Firefox and WebKit drop them.
+  A download link (`<a download>`) still allows text, images, audio,
+  video, fonts, PDF and `application/octet-stream`.
+
 ## v2.1.0
 
 ### Changed

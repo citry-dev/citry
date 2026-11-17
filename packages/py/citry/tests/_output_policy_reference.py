@@ -572,7 +572,14 @@ class ReferenceJavascriptPolicy(_JavascriptPolicy):
                         key=self._site_key(own_instance, ("javascript-url", tag, name, start)),
                     )
                 if _attribute_document_requires_javascript(
-                    tag, name, decoded, animates_href=animates_href, refreshes=refreshes, depth=0
+                    tag,
+                    name,
+                    decoded,
+                    animates_href=animates_href,
+                    refreshes=refreshes,
+                    downloads=_downloads(tag, attrs),
+                    declared_type_may_run=_declared_type_may_run(tag, attrs),
+                    depth=0,
                 ):
                     inner_value = attr.inner_value
                     start = attr.key.end_index if inner_value is None else inner_value.start_index
@@ -893,6 +900,45 @@ _OPENED_URL_ATTRIBUTES = {
     ("button", "formaction"),
     ("input", "formaction"),
 }
+# WebKit and Firefox follow `href` on any MathML element like a link's. Rust
+# also knows which tags made MathML elements; this copy cannot tell, so it
+# counts these names alone, which Rust counts too.
+_MATHML_ELEMENT_NAMES = frozenset(
+    {
+        "math",
+        "maction",
+        "annotation",
+        "annotation-xml",
+        "menclose",
+        "merror",
+        "mfenced",
+        "mfrac",
+        "mi",
+        "mmultiscripts",
+        "mn",
+        "mo",
+        "mover",
+        "mpadded",
+        "mphantom",
+        "mprescripts",
+        "mroot",
+        "mrow",
+        "ms",
+        "mspace",
+        "msqrt",
+        "mstyle",
+        "msub",
+        "msubsup",
+        "msup",
+        "mtable",
+        "mtd",
+        "mtext",
+        "mtr",
+        "munder",
+        "munderover",
+        "semantics",
+    }
+)
 
 
 def _meta_refreshes(tag: str, attrs: tuple[OutputAttr, ...]) -> bool:
@@ -911,7 +957,17 @@ def _refresh_data_url(content: str) -> str | None:
     # Every gap skips any character a browser may skip, more than any one
     # browser does. `_payload_may_hide_markup` refuses a document whose
     # bytes could spell such a character in another encoding.
-    content = content.translate({0x09: None, 0x0A: None, 0x0D: None})
+    # Firefox and WebKit drop tabs and line breaks from the URL, so `da\tta:`
+    # still starts one; Chromium keeps them in a `data:` URL, which
+    # `_refresh_data_url_as_written` reads.
+    return _refresh_url_in(content.translate({0x09: None, 0x0A: None, 0x0D: None}))
+
+
+def _refresh_data_url_as_written(content: str) -> str | None:
+    return _refresh_url_in(content)
+
+
+def _refresh_url_in(content: str) -> str | None:
     rest = _skip_may_be_skipped(_skip_may_be_skipped(content).lstrip("0123456789."))
     rest = rest.removeprefix(";") if rest.startswith(";") else rest.removeprefix(",")
     rest = _skip_may_be_skipped(rest)
@@ -934,34 +990,96 @@ def _opens_document_url(tag: str, name: str, *, animates_href: bool) -> bool:
     return (
         (tag, name) in _DOCUMENT_URL_ATTRIBUTES
         or (tag, name) in _OPENED_URL_ATTRIBUTES
+        or (name == "href" and tag in _MATHML_ELEMENT_NAMES)
         or (animates_href and name in _ANIMATION_VALUE_ATTRIBUTES)
     )
 
 
+def _downloads(tag: str, attrs: tuple[OutputAttr, ...]) -> bool:
+    # A download link downloads a `data:` URL of any type, also into a
+    # frame. Rust counts only an HTML `<a>` (WebKit opens an SVG one), so
+    # this copy, which cannot tell them apart, reports at most what Rust does.
+    return tag in {"a", "area"} and any(attr.key.content.translate(_ASCII_LOWER) == "download" for attr in attrs)
+
+
+def _declared_type_may_run(tag: str, attrs: tuple[OutputAttr, ...]) -> bool:
+    # WebKit renders a `data:` document as HTML under `type="text/html"`
+    # when it cannot show the URL's own type; a declared type it was not
+    # tried with counts as running code.
+    if tag not in {"object", "embed"}:
+        return False
+    first = next((attr for attr in attrs if attr.key.content.translate(_ASCII_LOWER) == "type"), None)
+    if first is None:
+        return False
+    essence = _decoded_attr(first).translate(_ASCII_LOWER).partition(";")[0].strip(" ")
+    return essence != "text/html" and essence not in _SHOWN_IN_EVERY_FRAME_MEDIA_TYPES
+
+
 def _attribute_document_requires_javascript(
-    tag: str, name: str, value: str, *, animates_href: bool, refreshes: bool, depth: int
+    tag: str,
+    name: str,
+    value: str,
+    *,
+    animates_href: bool,
+    refreshes: bool,
+    downloads: bool,
+    declared_type_may_run: bool,
+    depth: int,
 ) -> bool:
     if tag == "iframe" and name == "srcdoc":
         return _html_document_requires_javascript(value, depth=depth)
     if refreshes and name == "content":
-        url = _refresh_data_url(value)
-        return url is not None and _data_url_requires_javascript(url, depth=depth)
+        return any(
+            url is not None and _data_url_requires_javascript(url, carrier="frame", depth=depth)
+            for url in (_refresh_data_url(value), _refresh_data_url_as_written(value))
+        )
     if not _opens_document_url(tag, name, animates_href=animates_href):
         return False
     # The browser splits an animation's `values` on `;` and sets each item.
     if animates_href and name == "values":
-        return any(_data_url_requires_javascript(item, depth=depth) for item in value.split(";"))
-    return _data_url_requires_javascript(value, depth=depth)
+        return any(_data_url_requires_javascript(item, carrier="frame", depth=depth) for item in value.split(";"))
+    carrier: _DataUrlCarrier = "frame"
+    if downloads and name == "href":
+        carrier = "download"
+    elif declared_type_may_run and (tag, name) in _DOCUMENT_URL_ATTRIBUTES:
+        carrier = "declared-type"
+    return _data_url_requires_javascript(value, carrier=carrier, depth=depth)
 
 
-def _data_url_requires_javascript(value: str, *, depth: int) -> bool:
+def _data_url_requires_javascript(value: str, *, carrier: _DataUrlCarrier, depth: int) -> bool:
     # A document the check does not read counts as running code: an XML
     # document, which the HTML scanner reads wrongly, or a type a browser may
     # read as HTML on its own.
-    decoded = _decode_data_url_document(value)
-    if decoded is _DataUrlDocument.UNREAD:
-        return True
-    return decoded is not None and _html_document_requires_javascript(decoded, depth=depth)
+    # Firefox and WebKit drop tabs and line breaks from the URL; Chromium
+    # keeps them in the document, so code either document holds counts.
+    for decoded in (_decode_data_url_document(value, carrier), _chromium_data_url_document(value)):
+        if decoded is _DataUrlDocument.UNREAD:
+            return True
+        if decoded is not None and _html_document_requires_javascript(decoded, depth=depth):
+            return True
+    return False
+
+
+def _chromium_data_url_document(value: str) -> str | Literal[_DataUrlDocument.UNREAD] | None:
+    # Chromium keeps tabs and line breaks in a URL that starts with `data:`.
+    # They make a type it does not know, and its base64 decoder skips them,
+    # so only a raw `text/html` payload reads differently.
+    value = value.lstrip(_LEADING_URL_SPACE)
+    if value[:5].translate(_ASCII_LOWER) != "data:" or not any(c in value for c in "\t\n\r"):
+        return None
+    header, separator, payload = value.partition(",")
+    header = header.translate(_ASCII_LOWER).removeprefix("data:")
+    if (
+        not separator
+        or header.partition(";")[0].strip(" ") != "text/html"
+        or _data_url_is_base64(header)
+        or not any(c in payload for c in "\t\n\r")
+    ):
+        return None
+    body = unquote_to_bytes(payload)
+    if _payload_may_hide_markup(body):
+        return _DataUrlDocument.UNREAD
+    return body.decode("ascii")
 
 
 class _DataUrlDocument(Enum):
@@ -970,6 +1088,28 @@ class _DataUrlDocument(Enum):
     UNREAD = "unread"
 
 
+# How the browser opens a `data:` URL: in a frame (or a link, form or
+# refresh a frame opens), as a download, or in an `<object>`/`<embed>` whose
+# declared type may make WebKit render it as HTML.
+_DataUrlCarrier = Literal["frame", "download", "declared-type"]
+
+# The types every browser shows as text or an image in a frame. WebKit renders
+# a type it cannot show as HTML, so this lists only what every build decodes.
+_SHOWN_IN_EVERY_FRAME_MEDIA_TYPES = {
+    "",
+    "text/plain",
+    "text/css",
+    "text/csv",
+    "application/json",
+    "image/png",
+    "image/gif",
+    "image/jpeg",
+    "image/bmp",
+    "image/x-icon",
+    "image/vnd.microsoft.icon",
+}
+
+# The types a download link may give a `data:` URL.
 _INERT_MEDIA_TYPES = {
     "",
     "text/plain",
@@ -982,7 +1122,7 @@ _INERT_MEDIA_TYPES = {
 
 
 def _is_inert_media_type(media_type: str) -> bool:
-    """Whether the browser shows this lowercased media type as text, an image, media, a font, or a download."""
+    """Whether a download link may give a `data:` URL this lowercased media type."""
     kind, _slash, subtype = media_type.partition("/")
     return media_type in _INERT_MEDIA_TYPES or (
         kind in {"image", "audio", "video", "font"} and bool(subtype) and not subtype.endswith("+xml")
@@ -1005,17 +1145,28 @@ def _payload_may_hide_markup(body: bytes) -> bool:
     return not body.isascii() or any(byte in body for byte in (b"\x00", b"\x0e", b"\x0f", b"\x1b"))
 
 
-def _decode_data_url_document(value: str) -> str | Literal[_DataUrlDocument.UNREAD] | None:
-    # The browser drops tabs and line breaks anywhere in a URL.
+def _decode_data_url_document(value: str, carrier: _DataUrlCarrier) -> str | Literal[_DataUrlDocument.UNREAD] | None:
+    # Firefox and WebKit drop tabs and line breaks anywhere in a URL;
+    # `_chromium_data_url_document` reads them kept.
     value = value.lstrip(_LEADING_URL_SPACE).translate({0x09: None, 0x0A: None, 0x0D: None})
     header, separator, payload = value.partition(",")
     folded_header = header.translate(_ASCII_LOWER)
     if not separator or not folded_header.startswith("data:"):
         return None
+    # A declared type WebKit was not tried with may make it read any payload.
+    if carrier == "declared-type":
+        return _DataUrlDocument.UNREAD
     header = folded_header.removeprefix("data:")
-    media_type = header.partition(";")[0].strip(" \t\n\r\f")
+    # Browsers trim only spaces around the type; the URL parser writes any
+    # other control character as a `%` escape, which gives a type WebKit
+    # does not know, and WebKit renders such a document as HTML.
+    media_type = header.partition(";")[0].strip(" ")
     if media_type != "text/html":
-        return None if _is_inert_media_type(media_type) else _DataUrlDocument.UNREAD
+        if carrier == "download":
+            runs_nothing = _is_inert_media_type(media_type)
+        else:
+            runs_nothing = media_type in _SHOWN_IN_EVERY_FRAME_MEDIA_TYPES
+        return None if runs_nothing else _DataUrlDocument.UNREAD
     try:
         body = (
             _decode_strict_base64(unquote_to_bytes(payload))
@@ -1068,8 +1219,17 @@ def _parsed_document_requires_javascript(template: OutputTemplate, *, depth: int
                 _is_url_value(tag, name, animates_href) and _javascript_url_value(name, value)
             ):
                 return True
+            # Inside an embedded document Rust does not know an HTML `<a>`
+            # from an SVG one, so it counts no download there.
             if _attribute_document_requires_javascript(
-                tag, name, value, animates_href=animates_href, refreshes=refreshes, depth=depth + 1
+                tag,
+                name,
+                value,
+                animates_href=animates_href,
+                refreshes=refreshes,
+                downloads=False,
+                declared_type_may_run=_declared_type_may_run(tag, attrs),
+                depth=depth + 1,
             ):
                 return True
         body = getattr(node, "body", None)

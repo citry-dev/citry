@@ -88,6 +88,11 @@
 - `Citry(sandbox_expressions=...)` accepts only `True` or `False`. A
   value such as `1`, `"yes"` or `None` now raises `TypeError` when the
   app is built.
+- With `security_javascript="forbid"`, a page that embeds a `data:`
+  document whose type is not plain text, CSS, CSV, JSON, or a PNG, GIF,
+  JPEG, BMP or ICO image now raises. This covers a PDF, a WebP image or
+  an MP4 file in a frame, `<object>` or `<embed>`. Serve such a file
+  from a URL instead.
 
 ### Fixes
 
@@ -162,6 +167,25 @@
   does.
   Citry used to serve it with only a warning, including a `javascript:`
   link built from request data or an `onclick` written in the template.
+- Security: the output checks (`security_javascript` and
+  `security_csp`) now find a script hidden behind a `</form>` that
+  Chromium or WebKit reads differently. Chromium differs inside a
+  `<template>` written in the page, including a declarative shadow root,
+  which shows when the page loads. When a script sets the HTML of a
+  `<template>`, as the security docs recommend for inserting a fragment,
+  WebKit differs, and so does Chromium for a `</form>` inside a
+  `<noscript>`. A page that passed before can now raise.
+- Security: `security_javascript` now counts a `data:` URL that a frame,
+  link, form or refresh opens as running code unless its type is plain
+  text, CSS, CSV, JSON, or a PNG, GIF, JPEG, BMP or ICO image. WebKit,
+  the engine Safari uses, shows a `data:` document as HTML when it cannot
+  display the type, such as a font, `application/octet-stream`, or a
+  listed type written with a control character such as a form feed. The
+  check also reads the `href` of a MathML element, which WebKit and
+  Firefox open like a link's, and reads an HTML `data:` URL with its tabs
+  and line breaks kept, as Chromium reads it, as well as without them.
+  A download link (`<a download>`) still allows text, images, audio,
+  video, fonts, PDF and `application/octet-stream`.
 - Security: `Citry(...)` now raises `TypeError` when
   `sandbox_expressions` is not `True` or `False`. Such a value, like
   `None` from an unset environment variable, `""` or `0`, used to turn

@@ -48,6 +48,10 @@ pub struct OutputTag {
     pub element_end: usize,
     pub element_end_start: usize,
     pub attributes: Vec<OutputAttribute>,
+    /// The tag made a MathML element (see [`TagContext::made_mathml_element`]).
+    /// Only a scan that follows a browser's tree, such as the output check's,
+    /// fills this in; any other scan leaves it `false`.
+    pub made_mathml_element: bool,
 }
 
 /// The tree-building rules that browsers differ on, which a page scan can
@@ -67,6 +71,9 @@ pub(crate) struct BrowserRules {
     pub(crate) keep_select_tags: bool,
     /// How end tags that browsers disagree on behave inside SVG and MathML.
     pub(crate) end_tags: EndTagRule,
+    /// What a `</form>` does while a `<template>` written in the page is
+    /// open.
+    pub(crate) form_end_in_template: FormEndRule,
     /// Where the browser puts the page's markup: a document of its own, the
     /// body of another page, or a `<template>`.
     pub(crate) placement: Placement,
@@ -74,12 +81,22 @@ pub(crate) struct BrowserRules {
     /// picks, standards mode, or quirks mode.
     pub(crate) mode: Mode,
     /// Read the contents of `<noscript>` as markup, as a parser does when
-    /// scripting is off. Chromium 156 parses `template.innerHTML` that way,
-    /// so the elements inside a `<noscript>` are real elements there, and
-    /// they load and run once Vue moves the template's nodes into the page.
-    /// Everywhere else the check reads `<noscript>` contents as text, as a
-    /// page with scripting on does.
+    /// scripting is off. Chromium 159 and WebKit 27.2 parse
+    /// `template.innerHTML` that way, so the elements inside a `<noscript>`
+    /// are real elements there, and they load and run once Vue moves the
+    /// template's nodes into the page. Everywhere else the check reads
+    /// `<noscript>` contents as text, as a page with scripting on does.
     pub(crate) noscript_as_markup: bool,
+    /// Follow a body's `<form>` and `</form>` rules in a template reading:
+    /// the template the reading puts the page in does not count as open for
+    /// those two tags (see [`FedTag::BodyFormRules`]), so `</form>` takes out
+    /// only the form and a nested `<form>` makes nothing. Chromium 159 builds
+    /// `template.innerHTML` this way, because the template it parses into is
+    /// not on the stack of open elements; WebKit 27.2 does not. Only the
+    /// `<noscript>` reading adds this rule (see
+    /// [`ScanResult::body_form_rules_matter`]); for the other template
+    /// readings the body reading covers Chromium's form rules.
+    pub(crate) body_form_rules: bool,
 }
 
 /// Where the browser puts the markup a scan reads.
@@ -110,11 +127,21 @@ pub(crate) enum Placement {
     /// The markup is the contents of a `<template>`, as Citry's browser
     /// runtime (through Vue) builds an opaque HTML block in the browser
     /// (`template.innerHTML`, then the template's nodes move into the page).
-    /// Read the same way otherwise, it differs from [`Placement::Body`] only
-    /// at a table part such as `<tr>` that a body ignores, because a template
-    /// can start the table rules there.
-    /// Chromium also reads `<noscript>` contents there as markup (see
-    /// [`BrowserRules::noscript_as_markup`]).
+    /// Read the same way otherwise, it differs from [`Placement::Body`] at a
+    /// table part such as `<tr>` that a body ignores, because a template can
+    /// start the table rules there, and at a `</form>`: a body takes only the
+    /// form out of the open elements, while this reading closes every element
+    /// opened after it, as WebKit 27.2 does in `template.innerHTML`. Chromium
+    /// 159 and Firefox 159 follow the body's `</form>` rule there, which the
+    /// body reading covers. Chromium and WebKit also read `<noscript>`
+    /// contents there as markup, and that reading adds one with the body's
+    /// form rules for Chromium (see [`BrowserRules::body_form_rules`]).
+    /// Inside a `<template>` the page itself writes, Chromium follows yet
+    /// another rule (see [`FormEndRule`]). The template this reading puts
+    /// the markup in is not one the page wrote, so a `</template>` that
+    /// would close it is dropped, as a real `template.innerHTML` drops it;
+    /// inside SVG or MathML the same end tag closes a foreign `template`
+    /// element instead, as in every browser.
     Template,
 }
 
@@ -205,6 +232,24 @@ pub(crate) enum EndTagRule {
     Chromium,
 }
 
+/// What a `</form>` does while a `<template>` that the page writes is open,
+/// including a declarative shadow root (`<template shadowrootmode>`), whose
+/// contents the browser parses the same way and shows on page load.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) enum FormEndRule {
+    /// The HTML standard's rule, which html5ever, Firefox 159 and WebKit 27.2
+    /// follow: when a form is in scope, every element opened after it closes
+    /// with it.
+    #[default]
+    Standard,
+    /// Chromium 159 takes the steps of any other end tag instead: it looks
+    /// down from the newest open element and drops the tag at the first
+    /// special element, such as a `<div>`, `<p>` or `<li>`, before it reaches
+    /// the form. So `<template><form><div><svg></form>` leaves the `<svg>`
+    /// open, and a later `<title>` there holds HTML.
+    Chromium,
+}
+
 /// The readings of `input` to start with, before a scan has seen it: `base`,
 /// and the same with [`BrowserRules::keep_select_tags`] when the page holds
 /// the text `<select` anywhere, in any case. Only a `<select>` start tag can
@@ -242,8 +287,16 @@ pub(crate) struct ScanResult {
     /// The scan ended in quirks mode.
     pub(crate) quirks: bool,
     /// html5ever ignored a table part such as `<tr>` or `<td>` outside any
-    /// table, which a `<template>` builds (see [`Placement::Template`]).
+    /// table, which a `<template>` builds, or met a `</form>`, which closes
+    /// more elements inside a `<template>` (see [`Placement::Template`]).
     pub(crate) template_matters: bool,
+    /// A `</form>` came while a `<template>` written in the page was open,
+    /// where Chromium follows its own rule (see [`FormEndRule`]).
+    pub(crate) form_end_rule_matters: bool,
+    /// A `<form>` or `</form>` came in a template reading with
+    /// `<noscript>` read as markup, where Chromium and WebKit follow
+    /// different form rules (see [`BrowserRules::body_form_rules`]).
+    pub(crate) body_form_rules_matter: bool,
     /// The tags where browsers may build a different tree, in page order.
     pub(crate) differences: Vec<ParserDifference>,
 }
@@ -268,6 +321,22 @@ pub(crate) struct TagContext {
 }
 
 impl TagContext {
+    /// Whether the start tag made an HTML element, not an SVG or MathML one
+    /// of the same name. A start tag that made no element answers `false`.
+    pub(crate) fn made_html_element(&self) -> bool {
+        self.element
+            .as_ref()
+            .is_some_and(|element| matches!(&element.data, NodeData::Element { name, .. } if name.ns == ns!(html)))
+    }
+
+    /// Whether the start tag made a MathML element. WebKit and Firefox follow
+    /// `href` on any MathML element like a link's on a click.
+    pub(crate) fn made_mathml_element(&self) -> bool {
+        self.element
+            .as_ref()
+            .is_some_and(|element| matches!(&element.data, NodeData::Element { name, .. } if name.ns == ns!(mathml)))
+    }
+
     /// Whether a `<form>` owns the element, as the browser decides it for an
     /// element the parser creates, so a submit button or field can submit
     /// that form without JavaScript.
@@ -415,6 +484,10 @@ pub(crate) struct TrackingSink {
     // See `ScanResult::mode_matters` and `ScanResult::template_matters`.
     mode_matters: Cell<bool>,
     template_matters: Cell<bool>,
+    // See `ScanResult::form_end_rule_matters`.
+    form_end_rule_matters: Cell<bool>,
+    // See `ScanResult::body_form_rules_matter`.
+    body_form_rules_matter: Cell<bool>,
     // How many formatting elements with the same name and attributes have
     // been made, by a hash of both. The standard keeps at most three equal
     // copies on the list of formatting elements, so it takes an open one off
@@ -427,6 +500,17 @@ pub(crate) struct TrackingSink {
     // their memory is reused.
     first_seen: RefCell<HashMap<usize, usize, BuildPointerHasher>>,
     spare_reports: RefCell<Vec<Handle>>,
+    // How many HTML `template` elements are open, or `None` when that is not
+    // known, so a `</form>` reads the open elements only when it must (see
+    // `feed_form_end_tag`). Only a `</template>` the tree builder takes
+    // closes a template, so the count goes unknown at each one and is read
+    // again at the next `</form>`; each template the parser makes adds one.
+    templates_open: Cell<Option<usize>>,
+    // The element `current_node` caught html5ever asking about.
+    current_node: RefCell<Option<Handle>>,
+    // The `<template>` a template reading puts the page in (see
+    // `tree_builder_for`), so `FedTag::BodyFormRules` can hide it.
+    wrapper: RefCell<Option<Handle>>,
 }
 
 /// A tag where browsers may build a different tree from the one the scan
@@ -609,6 +693,15 @@ enum FedTag {
     ExactEndTag { capitals: bool },
     /// A `<li>`, `<dd>` or `<dt>` start tag.
     ListItem,
+    /// No tag: [`current_node`] asks html5ever for the name of the newest
+    /// open element to learn which element that is.
+    FindCurrentNode,
+    /// A `<form>` or `</form>` in a reading of Chromium's
+    /// `template.innerHTML` (see [`BrowserRules::body_form_rules`]): the
+    /// template the reading puts the page in is called `marquee`, which
+    /// ends the same scopes but is no template, so html5ever takes the
+    /// body's rules for the tag. Templates the page wrote keep their name.
+    BodyFormRules,
     #[default]
     Other,
 }
@@ -663,12 +756,33 @@ impl TrackingSink {
     /// [`VisibleNames`]).
     #[inline(never)]
     fn renamed<'a>(&'a self, target: &'a Handle, name: ExpandedName<'a>) -> ExpandedName<'a> {
-        let holds_html = self.feeding.get() == FedTag::ListItem
+        if self.feeding.get() == FedTag::FindCurrentNode {
+            *self.current_node.borrow_mut() = Some(target.clone());
+            return name;
+        }
+        let mut feeding = self.feeding.get();
+        if feeding == FedTag::BodyFormRules {
+            let is_wrapper = self
+                .wrapper
+                .borrow()
+                .as_ref()
+                .is_some_and(|wrapper| Rc::ptr_eq(wrapper, target));
+            if is_wrapper {
+                return ExpandedName {
+                    ns: name.ns,
+                    local: &self.names.marquee,
+                };
+            }
+            // Every other element keeps the name any tag without a rule of
+            // its own sees, such as `applet` for a `select`.
+            feeding = FedTag::Other;
+        }
+        let holds_html = feeding == FedTag::ListItem
             && (self.dom.is_mathml_annotation_xml_integration_point(target)
                 || (is_foreign_special(&name) && name.local.as_ref() != "annotation-xml"));
         let local = self
             .names
-            .visible_name(self.rules, self.feeding.get(), &name, holds_html);
+            .visible_name(self.rules, feeding, &name, holds_html);
         match local {
             // The name stands for an HTML element, so the namespace must too.
             Some(local) if holds_html => ExpandedName {
@@ -761,6 +875,10 @@ impl TreeSink for TrackingSink {
         }
         let element = self.dom.create_element(name, attrs, flags);
         if template {
+            // html5ever opens every HTML template it makes.
+            if let Some(open) = self.templates_open.get() {
+                self.templates_open.set(Some(open + 1));
+            }
             // The parser puts a template's children in a separate fragment
             // that has no parent. Pointing the fragment at its template lets
             // the walk up from an element inside a `<template>` reach the
@@ -933,14 +1051,25 @@ impl ScannerSink for TreeBuilder<Handle, TrackingSink> {
         let is_start = tag.kind == TagKind::StartTag;
         let keep_select_tags = self.sink.rules.keep_select_tags;
         note_parser_difference(self, &tag);
+        // A `</template>` may close a template, so the count of open
+        // templates is read again when it is next needed. The count goes
+        // unknown even when the branch below drops the tag, which costs one
+        // more read at the next `</form>` and never a wrong answer.
+        if !is_start && tag.name.as_ref() == "template" {
+            self.sink.templates_open.set(None);
+        }
         match tag.name.as_ref() {
             // The template this scan reads the page in is not the page's, so
             // a `</template>` must not close it. A real `template.innerHTML`
             // ignores this end tag, because its context element is not open.
+            // Inside SVG or MathML the tag first closes a foreign element
+            // named `template`, as in every browser, and then it never
+            // reaches the wrapper.
             "template"
                 if !is_start
                     && self.sink.rules.placement == Placement::Template
-                    && open_templates(self) <= 1 =>
+                    && open_templates(self) <= 1
+                    && !closes_foreign_element(self, "template") =>
             {
                 TokenSinkResult::Continue
             }
@@ -966,6 +1095,38 @@ impl ScannerSink for TreeBuilder<Handle, TrackingSink> {
                 }
                 result
             }
+            // Chromium builds `template.innerHTML` with a body's form rules,
+            // and WebKit with a template's, which this reading follows unless
+            // told otherwise. With `<noscript>` read as markup, only this
+            // reading's partner with body form rules follows Chromium here;
+            // without it, the body reading does, apart from a table part
+            // that only a template builds.
+            "form"
+                if self.sink.rules.placement == Placement::Template
+                    && self.sink.rules.noscript_as_markup
+                    && !self.sink.rules.body_form_rules =>
+            {
+                self.sink.body_form_rules_matter.set(true);
+                if is_start {
+                    hand_over(self, Token::TagToken(tag))
+                } else {
+                    feed_form_end_tag(self, tag)
+                }
+            }
+            "form"
+                if self.sink.rules.placement == Placement::Template
+                    && self.sink.rules.body_form_rules =>
+            {
+                let feeding = self.sink.feeding.replace(FedTag::BodyFormRules);
+                let result = if is_start {
+                    hand_over(self, Token::TagToken(tag))
+                } else {
+                    feed_form_end_tag(self, tag)
+                };
+                self.sink.feeding.set(feeding);
+                result
+            }
+            "form" if !is_start => feed_form_end_tag(self, tag),
             "p" | "br" if !is_start => feed_stray_end_tag(self, tag),
             // The HTML standard has `</select>` close the `select` element
             // when it is in scope, and do nothing otherwise.
@@ -1158,6 +1319,35 @@ fn quirks_list_differs(doctype: &Doctype) -> bool {
             && doctype.system_id.as_deref() == Some(""))
 }
 
+/// Whether an end tag named `tag` closes an SVG or MathML element by the
+/// HTML standard's rule for end tags in foreign content: walking down from
+/// the newest open element, it meets a foreign element with that name, in
+/// any case, before any HTML element. Only then do the browser and
+/// html5ever skip the insertion mode's rules for the tag.
+fn closes_foreign_element(builder: &TreeBuilder<Handle, TrackingSink>, tag: &str) -> bool {
+    // Most end tags arrive outside SVG and MathML, where the walk would stop
+    // at once, so the open elements are read only inside them.
+    builder.adjusted_current_node_present_but_not_in_html_namespace()
+        && foreign_element_closes(held_elements(builder).open(), tag)
+}
+
+/// The walk of [`closes_foreign_element`] over the open elements, outermost
+/// first.
+fn foreign_element_closes(open: &[Handle], tag: &str) -> bool {
+    for node in open.iter().rev() {
+        let NodeData::Element { name, .. } = &node.data else {
+            continue;
+        };
+        if name.ns == ns!(html) {
+            return false;
+        }
+        if name.local.as_ref().eq_ignore_ascii_case(tag) {
+            return true;
+        }
+    }
+    false
+}
+
 /// How many HTML `template` elements are open.
 fn open_templates(builder: &TreeBuilder<Handle, TrackingSink>) -> usize {
     held_elements(builder)
@@ -1234,6 +1424,10 @@ fn tree_builder_for(rules: BrowserRules) -> TreeBuilder<Handle, TrackingSink> {
     for token in host {
         // None of these tags asks the tokenizer to change state.
         let _ = builder.process_token(token, 1);
+    }
+    if rules.placement == Placement::Template {
+        // The last element the host tags made is the template.
+        *builder.sink.wrapper.borrow_mut() = builder.sink.last_created.borrow().clone();
     }
     builder
 }
@@ -1525,6 +1719,167 @@ fn list_item_search_passes_search(open: &[Handle], tag: &str) -> bool {
         }
     }
     false
+}
+
+/// Hand a `</form>` to html5ever, or drop it as Chromium does inside a
+/// `<template>`, and note the readings it calls for.
+fn feed_form_end_tag(
+    builder: &TreeBuilder<Handle, TrackingSink>,
+    tag: Tag,
+) -> TokenSinkResult<Handle> {
+    let sink = &builder.sink;
+    // Outside a `<template>`, `</form>` takes only the form out of the open
+    // elements, and the elements opened inside it stay open. WebKit 27.2
+    // builds `template.innerHTML` as if the template were open, so there
+    // every element opened after the form closes with it. Which elements
+    // differ depends on the forms the template has open, which can differ
+    // from the body's (a nested `<form>` counts only inside a template), so
+    // every `</form>` asks for the template reading rather than a guess at
+    // when the two differ.
+    if sink.rules.placement != Placement::Template {
+        sink.template_matters.set(true);
+    }
+    // The template a template reading puts the page in is not one the page
+    // wrote: Chromium builds `template.innerHTML` with the body's rule.
+    let own_template = usize::from(sink.rules.placement == Placement::Template);
+    // Tests build with debug assertions, so every test page checks the count
+    // against the open elements.
+    #[cfg(debug_assertions)]
+    if let Some(known) = sink.templates_open.get() {
+        let read = held_elements(builder)
+            .open()
+            .iter()
+            .filter(|node| html_element_named(node, "template"))
+            .count();
+        assert_eq!(known, read, "the count of open templates drifted");
+    }
+    // Reading the open elements costs a pass over everything the tree
+    // builder holds, so it happens only when the count of open templates is
+    // unknown, or when Chromium's rule needs the elements themselves.
+    let open = match sink.templates_open.get() {
+        Some(open) if open <= own_template => return hand_over(builder, Token::TagToken(tag)),
+        Some(_) if sink.rules.form_end_in_template == FormEndRule::Standard => {
+            sink.form_end_rule_matters.set(true);
+            return hand_over(builder, Token::TagToken(tag));
+        }
+        // Chromium's rule usually decides at the newest open element, which
+        // costs nothing to find.
+        Some(_) => match current_node(builder).and_then(|node| chromium_decides_at(&node)) {
+            Some(ignores) => {
+                sink.form_end_rule_matters.set(true);
+                if ignores {
+                    return TokenSinkResult::Continue;
+                }
+                return hand_over(builder, Token::TagToken(tag));
+            }
+            None => held_elements(builder),
+        },
+        None => held_elements(builder),
+    };
+    let templates = open
+        .open()
+        .iter()
+        .filter(|node| html_element_named(node, "template"))
+        .count();
+    sink.templates_open.set(Some(templates));
+    if templates > own_template {
+        sink.form_end_rule_matters.set(true);
+        if sink.rules.form_end_in_template == FormEndRule::Chromium
+            && chromium_ignores_form_end(open.open())
+        {
+            return TokenSinkResult::Continue;
+        }
+    }
+    hand_over(builder, Token::TagToken(tag))
+}
+
+/// Whether Chromium 159 drops a `</form>` that comes while a `<template>` is
+/// open (see [`FormEndRule::Chromium`]). When it does not, it closes the
+/// newest open form and everything opened after it, which is what html5ever
+/// does there too, so the caller then hands the tag over.
+fn chromium_ignores_form_end(open: &[Handle]) -> bool {
+    let names = || {
+        open.iter().rev().filter_map(|node| match &node.data {
+            NodeData::Element { name, .. } => Some(name),
+            _ => None,
+        })
+    };
+    // Inside SVG or MathML the tag first closes a foreign element named
+    // `form`, and html5ever does the same.
+    if foreign_element_closes(open, "form") {
+        return false;
+    }
+    for name in names() {
+        if name.ns != ns!(html) {
+            // An SVG or MathML element that holds HTML is special.
+            if is_foreign_special(&name.expanded()) {
+                return true;
+            }
+            continue;
+        }
+        let local = name.local.as_ref();
+        if local == "form" {
+            return false;
+        }
+        // Chromium 159 counts `search` and `isindex` as ordinary elements
+        // here (both close the form in a probe), and html5ever's list holds
+        // `isindex` but not `search`. A `<select>` read as an `applet` (see
+        // `VisibleNames`) is special either way.
+        if local != "isindex" && is_html5ever_special(local) {
+            return true;
+        }
+    }
+    true
+}
+
+/// What [`chromium_ignores_form_end`] answers when `node` is the newest open
+/// element, or `None` when the answer depends on the elements below it.
+/// At an HTML element the walk stops at once when it is a `form` or a
+/// special element; past any other element it goes on.
+fn chromium_decides_at(node: &Handle) -> Option<bool> {
+    let NodeData::Element { name, .. } = &node.data else {
+        return None;
+    };
+    if name.ns != ns!(html) {
+        return None;
+    }
+    let local = name.local.as_ref();
+    if local == "form" {
+        Some(false)
+    } else if local != "isindex" && is_html5ever_special(local) {
+        Some(true)
+    } else {
+        None
+    }
+}
+
+/// The newest open element, found without reading every element html5ever
+/// holds. html5ever 0.29.0 shows no open element, but
+/// `adjusted_current_node_present_but_not_in_html_namespace` asks the sink
+/// for the name of exactly that element (the adjusted current node, which
+/// is the current node outside a fragment parse, and the output check never
+/// parses a fragment), so the sink catches the handle it asks about.
+fn current_node(builder: &TreeBuilder<Handle, TrackingSink>) -> Option<Handle> {
+    let sink = &builder.sink;
+    let feeding = sink.feeding.replace(FedTag::FindCurrentNode);
+    let _ = builder.adjusted_current_node_present_but_not_in_html_namespace();
+    sink.feeding.set(feeding);
+    let node = sink.current_node.borrow_mut().take();
+    // Tests and debug builds check the handle against a full read.
+    #[cfg(debug_assertions)]
+    {
+        let held = held_elements(builder);
+        let newest = held.open().last();
+        assert!(
+            match (&node, newest) {
+                (Some(node), Some(newest)) => Rc::ptr_eq(node, newest),
+                (None, None) => true,
+                _ => false,
+            },
+            "the newest open element differs from a full read"
+        );
+    }
+    node
 }
 
 /// Whether a `<thead>` is open with no `<table>`, `<tbody>` or `<tfoot>`
@@ -2452,6 +2807,7 @@ impl<S: ScannerSink> Callback<Infallible, usize> for ScannerCallback<'_, S> {
                     element_end: span.end,
                     element_end_start: span.end,
                     attributes: Vec::new(),
+                    made_mathml_element: false,
                 });
             }
             CallbackEvent::AttributeName { name } => {
@@ -2534,9 +2890,9 @@ impl<S: ScannerSink> Callback<Infallible, usize> for ScannerCallback<'_, S> {
                     self.sink.begin_start_tag();
                     self.sink.note_tag_end(span.end);
                     self.sink_token(Token::TagToken(tag));
-                    // Only the observer reads the context, so a scan without
-                    // one skips the lookup.
-                    if self.observer.is_some() {
+                    // The observer and the kept tag's namespace read the
+                    // context, so a scan that does neither skips the lookup.
+                    if self.observer.is_some() || self.current_fact.is_some() {
                         context = self.sink.tag_context(&name);
                     }
                     // The tree builder asks the tokenizer to change state
@@ -2555,6 +2911,7 @@ impl<S: ScannerSink> Callback<Infallible, usize> for ScannerCallback<'_, S> {
                 }
                 if let Some(mut fact) = self.current_fact.take() {
                     fact.end = span.end;
+                    fact.made_mathml_element = context.made_mathml_element();
                     repair_attribute_value_spans(self.input, &mut fact);
                     let raw = matches!(fact.name.as_str(), "script" | "style");
                     let keep = raw || self.observer.is_none();
@@ -2850,6 +3207,8 @@ fn scan_with_builder(
         mode_matters: sink.mode_matters.get(),
         quirks: sink.quirks.get(),
         template_matters: sink.template_matters.get(),
+        form_end_rule_matters: sink.form_end_rule_matters.get(),
+        body_form_rules_matter: sink.body_form_rules_matter.get(),
         differences: sink.differences.take(),
     })
 }
@@ -3068,8 +3427,8 @@ fn is_html_space(value: u8) -> bool {
 mod tests {
     use super::{
         browser_rules_for, scan_output_html, scan_output_html_under, tree_builder_for,
-        validate_html_fragment_boundary, BrowserRules, EndTagRule, Handle, HtmlLimits, Mode,
-        NodeData, Placement, ScannerCallback, ScannerEmitter,
+        validate_html_fragment_boundary, BrowserRules, EndTagRule, FormEndRule, Handle, HtmlLimits,
+        Mode, NodeData, Placement, ScannerCallback, ScannerEmitter,
     };
     use html5gum::emitters::callback::CallbackEmitter;
 
@@ -3928,6 +4287,10 @@ mod tests {
             placement: Placement::Template,
             ..body
         };
+        let chromium_form = BrowserRules {
+            form_end_in_template: FormEndRule::Chromium,
+            ..BrowserRules::default()
+        };
         for (input, rules, expected) in [
             (
                 "<frameset><textarea>x</textarea>",
@@ -3959,6 +4322,72 @@ mod tests {
             // A `</template>` in the page cannot close the template it is
             // read in.
             ("</template><b>x</b>", template, r#"(template(b"x"))"#),
+            // Outside a template `</form>` leaves the `<svg>` open, so the
+            // `<noembed>` is an SVG element; inside one it closes the
+            // `<svg>`, and the `<noembed>` holds text (WebKit 27.2 builds
+            // `template.innerHTML` this way).
+            (
+                "<form><svg></form><noembed><x>y</x></noembed>",
+                body,
+                r#"(form(svg:svg(svg:noembed(svg:x"y"))))"#,
+            ),
+            (
+                "<form><svg></form><noembed><x>y</x></noembed>",
+                template,
+                r#"(template(form(svg:svg))(noembed"<x>y</x>"))"#,
+            ),
+            // Inside SVG or MathML, `</template>` closes the foreign
+            // `template` element in every browser, so the `</form>` after it
+            // closes the `<math>` in this reading too (WebKit 27.2 builds
+            // `template.innerHTML` this way).
+            (
+                "<form><math><template><form></template></form><style><b>x</b></style>",
+                template,
+                r#"(template(form(math:math(math:template(math:form))))(style"<b>x</b>"))"#,
+            ),
+            (
+                "<form><svg><g><TEMPLATE><g></TEMPLATE></form><style><b>x</b></style>",
+                template,
+                r#"(template(form(svg:svg(svg:g(svg:template(svg:g)))))(style"<b>x</b>"))"#,
+            ),
+            // Chromium's `template.innerHTML` reading (with `<noscript>` read
+            // as markup) follows a body's form rules: `</form>` takes out only
+            // the form, and a nested `<form>` makes nothing. WebKit's keeps
+            // the template's rule.
+            (
+                "<form><svg></form><title><b>x</b></title>",
+                BrowserRules {
+                    noscript_as_markup: true,
+                    body_form_rules: true,
+                    ..template
+                },
+                r#"(template(form(svg:svg(svg:title(b"x")))))"#,
+            ),
+            (
+                "<form><svg></form><title><b>x</b></title>",
+                BrowserRules {
+                    noscript_as_markup: true,
+                    ..template
+                },
+                r#"(template(form(svg:svg))(title"<b>x</b>"))"#,
+            ),
+            (
+                "<form><form><b>x</b></form><p>y",
+                BrowserRules {
+                    noscript_as_markup: true,
+                    body_form_rules: true,
+                    ..template
+                },
+                r#"(template(form(b"x"))(p"y"))"#,
+            ),
+            // Away from a foreign `template`, the tag still never closes the
+            // template the reading puts the page in.
+            (
+                "<svg></template><g>",
+                template,
+                "(template(svg:svg(svg:g)))",
+            ),
+            ("<b></template><i>", template, "(template(b(i)))"),
             ("<p><table></table>", body, "(p)(table)"),
             (
                 "<p><table></table>",
@@ -3967,6 +4396,48 @@ mod tests {
                     ..body
                 },
                 "(p(table))",
+            ),
+            // Inside a `<template>` the page writes, the standard's
+            // `</form>` closes the `<svg>`, so `<title>` holds text.
+            // Chromium drops the tag at the `<div>`, so the `<svg>` stays
+            // open and its `<title>` holds HTML.
+            (
+                "<body><template><form><div><svg></form><title><b>x</b></title></template>",
+                BrowserRules::default(),
+                r#"(template(form(div(svg:svg)))(title"<b>x</b>"))"#,
+            ),
+            (
+                "<body><template><form><div><svg></form><title><b>x</b></title></template>",
+                chromium_form,
+                r#"(template(form(div(svg:svg(svg:title(b"x"))))))"#,
+            ),
+            // With no special element between, Chromium closes the form too.
+            (
+                "<body><template><form><b><svg></form><title><b>x</b></title></template>",
+                chromium_form,
+                r#"(template(form(b(svg:svg)))(title"<b>x</b>"))"#,
+            ),
+            // Chromium follows the rule even where the template is out of
+            // scope, behind an SVG `<foreignObject>` or a `<td>`.
+            (
+                "<body><template><svg><foreignObject><form><svg></form><title>x</title></template>",
+                chromium_form,
+                r#"(template(svg:svg(svg:foreignObject(form(svg:svg))(title"x"))))"#,
+            ),
+            (
+                "<body><template><tr><td><form><div><svg></form><title>x</title></template>",
+                chromium_form,
+                r#"(template(tr(td(form(div(svg:svg(svg:title"x")))))))"#,
+            ),
+            // The template a template reading puts the page in is not the
+            // page's own, so the rule does not apply to it.
+            (
+                "<form><div><svg></form><title>x</title>",
+                BrowserRules {
+                    form_end_in_template: FormEndRule::Chromium,
+                    ..template
+                },
+                r#"(template(form(div(svg:svg)))(title"x"))"#,
             ),
         ] {
             assert_eq!(tree_under(input, rules), expected, "{input} {rules:?}");
@@ -3990,16 +4461,65 @@ mod tests {
         ] {
             assert!(!scan(input).mode_matters, "{input}");
         }
-        for input in ["<tr>", "<p><td>", "<select><td>"] {
+        for input in [
+            "<tr>",
+            "<p><td>",
+            "<select><td>",
+            // Every `</form>`, because a template may hold forms the body
+            // does not (see `feed_form_end_tag`).
+            "<form><svg></form>",
+            "<form></form>",
+            "<form><form></form><svg></form>",
+            "<table><form></table><form><svg></form>",
+            "<svg></form>",
+        ] {
             assert!(scan(input).template_matters, "{input}");
         }
         for input in [
             "<table><tr><td>x</table>",
             "<template><tr></template>",
             "<svg><tr>",
+            "<form>",
         ] {
             assert!(!scan(input).template_matters, "{input}");
         }
+        // Only a `</form>` inside a `<template>` the page writes asks for
+        // Chromium's reading of it.
+        for input in [
+            "<body><template><form></form></template>",
+            "<div><template shadowrootmode=open><form><div></form></template></div>",
+            "<body><template><svg><foreignObject></form>",
+        ] {
+            assert!(scan(input).form_end_rule_matters, "{input}");
+        }
+        for input in ["<form></form>", "<body><template></template></form>"] {
+            assert!(!scan(input).form_end_rule_matters, "{input}");
+        }
+        let in_template = BrowserRules {
+            placement: Placement::Template,
+            mode: Mode::Standards,
+            ..BrowserRules::default()
+        };
+        let scan_in_template = |input| scan_output_html_under(input, in_template, None).unwrap();
+        assert!(!scan_in_template("<form><div></form>").form_end_rule_matters);
+        assert!(scan_in_template("<template><form><div></form>").form_end_rule_matters);
+        // Only a template reading with `<noscript>` read as markup asks for
+        // the reading with a body's form rules.
+        let scan_noscript = |input| {
+            scan_output_html_under(
+                input,
+                BrowserRules {
+                    placement: Placement::Template,
+                    noscript_as_markup: true,
+                    ..BrowserRules::default()
+                },
+                None,
+            )
+            .unwrap()
+        };
+        assert!(scan_noscript("<noscript><form></noscript>").body_form_rules_matter);
+        assert!(!scan_noscript("<noscript><p>x</noscript>").body_form_rules_matter);
+        assert!(!scan_in_template("<form></form>").body_form_rules_matter);
         assert!(scan("").quirks && !scan("<!DOCTYPE html>").quirks);
     }
 

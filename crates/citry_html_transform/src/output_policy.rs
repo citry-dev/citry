@@ -29,7 +29,7 @@ use html5ever::data::NAMED_ENTITIES;
 use crate::html_limits::{HtmlLimits, HtmlTooLarge};
 use crate::output_scanner::{
     browser_rules_for, scan_output_html_under, scan_output_html_with, BrowserRules, EndTagRule,
-    Mode, OutputAttribute, OutputTag, Placement, ScanResult, TagContext,
+    FormEndRule, Mode, OutputAttribute, OutputTag, Placement, ScanResult, TagContext,
 };
 use crate::url_scheme::url_scheme_is;
 
@@ -276,6 +276,10 @@ struct ReadingNeeds {
     quirks: bool,
     /// See [`ScanResult::template_matters`].
     template_matters: bool,
+    /// See [`ScanResult::form_end_rule_matters`].
+    form_end_rule_matters: bool,
+    /// See [`ScanResult::body_form_rules_matter`].
+    body_form_rules_matter: bool,
 }
 
 impl ReadingNeeds {
@@ -285,6 +289,8 @@ impl ReadingNeeds {
             mode_matters: scan.mode_matters,
             quirks: scan.quirks,
             template_matters: scan.template_matters,
+            form_end_rule_matters: scan.form_end_rule_matters,
+            body_form_rules_matter: scan.body_form_rules_matter,
         }
     }
 }
@@ -308,16 +314,23 @@ impl ReadingNeeds {
 ///   mode;
 /// - for a page, a `<noscript>` that may hold a tag adds a reading of the
 ///   markup inside a `<template>` with `<noscript>` contents read as
-///   markup, as Chromium builds an opaque HTML block for Vue (see
-///   [`BrowserRules::noscript_as_markup`] and [`noscript_may_hold_markup`]);
+///   markup, as Chromium and WebKit build an opaque HTML block for Vue (see
+///   [`BrowserRules::noscript_as_markup`] and [`noscript_may_hold_markup`]).
+///   A `<form>` or `</form>` in that reading adds the same reading with a
+///   body's form rules, which Chromium follows there (see
+///   [`BrowserRules::body_form_rules`]);
 /// - after a reading, `read` says what it met. An end tag that
 ///   [`EndTagRule`] changes adds the readings of the two browsers that
 ///   differ from the standard. A `<table>` start tag inside an open `<p>`
 ///   adds the reading in the other mode: for a page, its markup in the body
 ///   of a page in that mode, and for a `srcdoc` document, the document in
 ///   the mode its doctype picks as Chromium reads it. A table part such as
-///   `<tr>` that html5ever ignored adds, for a page, the reading of its
-///   markup inside a `<template>`.
+///   `<tr>` that html5ever ignored, or any `</form>`, adds, for a page, the
+///   reading of its markup inside a `<template>`, where WebKit closes more
+///   elements at a `</form>` (see [`Placement::Template`]). A `</form>` while
+///   a `<template>` the page wrote is open adds the same reading with
+///   Chromium's rule for it (see [`FormEndRule`]), for every kind of
+///   document, since Chromium loads each of them.
 ///
 /// A page that holds none of these gets one reading.
 fn for_each_reading<E>(
@@ -396,6 +409,18 @@ fn for_each_reading<E>(
             more.push(BrowserRules {
                 placement: Placement::Template,
                 mode,
+                ..rules
+            });
+        }
+        if needs.body_form_rules_matter && !rules.body_form_rules {
+            more.push(BrowserRules {
+                body_form_rules: true,
+                ..rules
+            });
+        }
+        if needs.form_end_rule_matters && rules.form_end_in_template == FormEndRule::Standard {
+            more.push(BrowserRules {
+                form_end_in_template: FormEndRule::Chromium,
                 ..rules
             });
         }
@@ -674,6 +699,11 @@ impl CheckState<'_, '_> {
         let facts = DocumentFacts {
             animates_href,
             refreshes: javascript.is_some() && meta_refreshes(name, &tag.attributes),
+            // WebKit ignores `download` on an SVG `<a>`, so only an HTML
+            // link counts as a download.
+            downloads: context.made_html_element() && downloads(name, &tag.attributes),
+            declared_type_may_run: declared_type_may_run(name, &tag.attributes),
+            follows_href: follows_mathml_href(name, context.made_mathml_element()),
         };
         for attr in &tag.attributes {
             let attr_name = ascii_lower(&attr.name);
@@ -1297,15 +1327,127 @@ struct DocumentFacts {
     /// The tag is a `<meta http-equiv="refresh">`, whose `content` names a
     /// URL the browser opens ([`meta_refreshes`]).
     refreshes: bool,
+    /// The tag is an HTML `<a>` or `<area>` with a `download` attribute, so
+    /// its `href` downloads the file instead of opening it ([`downloads`]).
+    downloads: bool,
+    /// The tag is an `<object>` or `<embed>` whose `type` attribute names a
+    /// type WebKit may render as HTML ([`declared_type_may_run`]).
+    declared_type_may_run: bool,
+    /// The tag may be a MathML element, whose `href` opens like a link's
+    /// ([`follows_mathml_href`]).
+    follows_href: bool,
 }
 
 impl DocumentFacts {
-    fn of(tag: &str, attributes: &[OutputAttribute]) -> Self {
+    /// The facts for a tag inside an embedded document, where the check does
+    /// not know whether an `<a>` is an HTML or an SVG element, so it counts
+    /// none as a download.
+    fn of(tag: &OutputTag, name: &str) -> Self {
         Self {
-            animates_href: animation_sets_href(tag, attributes),
-            refreshes: meta_refreshes(tag, attributes),
+            animates_href: animation_sets_href(name, &tag.attributes),
+            refreshes: meta_refreshes(name, &tag.attributes),
+            downloads: false,
+            declared_type_may_run: declared_type_may_run(name, &tag.attributes),
+            follows_href: follows_mathml_href(name, tag.made_mathml_element),
         }
     }
+}
+
+/// Whether the browser follows `href` on this tag like a link's: the tag
+/// made a MathML element, or it has a MathML element's name. WebKit 27.2
+/// and Firefox 159 open the `href` of any MathML element on a click, in the
+/// element's own frame (Chromium 159 does not), and they ignore
+/// `xlink:href` there, as they ignore `href` on SVG elements other than
+/// `<a>`. The names count in any namespace because the Python reference
+/// copy of this check cannot tell namespaces apart and counts the names
+/// alone, and this check must report at least what that copy reports.
+fn follows_mathml_href(name: &str, made_mathml_element: bool) -> bool {
+    made_mathml_element
+        || matches!(
+            name,
+            "math"
+                | "maction"
+                | "annotation"
+                | "annotation-xml"
+                | "menclose"
+                | "merror"
+                | "mfenced"
+                | "mfrac"
+                | "mi"
+                | "mmultiscripts"
+                | "mn"
+                | "mo"
+                | "mover"
+                | "mpadded"
+                | "mphantom"
+                | "mprescripts"
+                | "mroot"
+                | "mrow"
+                | "ms"
+                | "mspace"
+                | "msqrt"
+                | "mstyle"
+                | "msub"
+                | "msubsup"
+                | "msup"
+                | "mtable"
+                | "mtd"
+                | "mtext"
+                | "mtr"
+                | "munder"
+                | "munderover"
+                | "semantics"
+        )
+}
+
+/// Whether a tag is an `<a>` or `<area>` with a `download` attribute. Chromium
+/// 159, Firefox 159 and WebKit 27.2 download a `data:` URL such a link opens,
+/// of any type and also when it targets a frame, and run nothing. The caller
+/// checks that the tag made an HTML element: WebKit opens the URL of an SVG
+/// `<a download>` in the frame.
+fn downloads(tag: &str, attributes: &[OutputAttribute]) -> bool {
+    matches!(tag, "a" | "area")
+        && attributes
+            .iter()
+            .any(|attr| attr.name.eq_ignore_ascii_case("download"))
+}
+
+/// Whether a tag is an `<object>` or `<embed>` whose first `type` attribute
+/// names a type other than HTML or one [`shows_in_every_frame`] accepts.
+/// WebKit 27.2 renders a `data:` document as HTML when `type="text/html"`
+/// and the URL's own type is one it cannot show, and was not tried with
+/// other declared types, so such a type counts as running code. Chromium
+/// 159 and Firefox 159 go by the URL's type alone.
+fn declared_type_may_run(tag: &str, attributes: &[OutputAttribute]) -> bool {
+    if !matches!(tag, "object" | "embed") {
+        return false;
+    }
+    let Some(attr) = attributes
+        .iter()
+        .find(|attr| attr.name.eq_ignore_ascii_case("type"))
+    else {
+        return false;
+    };
+    let value = decode_html_attribute(if attr.has_value { &attr.value } else { "" });
+    let folded = ascii_lower(&value);
+    // Trimmed like the URL's own type, so a type that keeps a form feed or
+    // a tab here counts as one WebKit was not tried with.
+    let essence = trim_data_url_type(folded.split(';').next().unwrap_or(""));
+    essence != "text/html" && !shows_in_every_frame(essence)
+}
+
+/// Trim a `data:` type the way the browser does: spaces only.
+///
+/// Firefox and WebKit drop tabs and line breaks from the URL, and Chromium
+/// keeps them in a `data:` URL (see [`chromium_data_url_document`]); every
+/// browser writes any other control character in the URL as a `%` escape,
+/// so a form feed after `image/png` makes the type `image/png%0C`. WebKit
+/// 27.2 renders a type it does not know as HTML, so such a type must fail
+/// the lists of harmless types rather than be trimmed back to `image/png`. Chromium 159,
+/// Firefox 159 and WebKit 27.2 all trim spaces; Firefox also trims a form
+/// feed just before `;`, which only makes the check report more there.
+fn trim_data_url_type(media_type: &str) -> &str {
+    media_type.trim_matches(' ')
 }
 
 /// Whether a tag is a `<meta>` whose first `http-equiv` is `refresh`, so
@@ -1333,11 +1475,12 @@ fn loads_document_url(tag: &str, name: &str) -> bool {
 
 /// Whether the browser may open an attribute's URL as a document, in a
 /// frame or in a window: the frame attributes of [`loads_document_url`], a
-/// link (`href` on `<a>` or `<area>`, `xlink:href` on an SVG `<a>`), a form
-/// (`action`, `formaction`), or the value of an SVG animation that sets a
-/// link. A link or form opens a `data:` document only in a frame, but any
-/// link can be sent to one by its `target` or by `<base target>`, so every
-/// link counts.
+/// link (`href` on `<a>` or `<area>`, `xlink:href` on an SVG `<a>`, `href`
+/// on a MathML element), a form (`action`, `formaction`), or the value of an
+/// SVG animation that sets a link. A link or form opens a `data:` document
+/// only in a frame, but any link can be sent to one by its `target` or by
+/// `<base target>`, and a MathML link opens in the frame it sits in, which
+/// may itself be a frame, so every link counts.
 fn opens_document_url(tag: &str, name: &str, facts: DocumentFacts) -> bool {
     loads_document_url(tag, name)
         || matches!(
@@ -1347,6 +1490,7 @@ fn opens_document_url(tag: &str, name: &str, facts: DocumentFacts) -> bool {
                 | ("form", "action")
                 | ("button" | "input", "formaction")
         )
+        || (facts.follows_href && name == "href")
         || (facts.animates_href && is_animation_value_attribute(name))
 }
 
@@ -1371,9 +1515,20 @@ fn may_hold_document(tag: &str, name: &str, facts: DocumentFacts) -> bool {
 /// skips fewer. Chromium skips U+000B and Unicode spaces around the delay
 /// and before the URL.
 fn refresh_data_url(content: &str) -> Option<String> {
-    // The browser drops tabs and line breaks from a URL, so `da\tta:`
+    // Firefox and WebKit drop tabs and line breaks from a URL, so `da\tta:`
     // still starts one.
-    let content = content.replace(['\t', '\n', '\r'], "");
+    refresh_url_in(&content.replace(['\t', '\n', '\r'], ""))
+}
+
+/// The `data:` URL a refresh opens, read like [`refresh_data_url`] but with
+/// its tabs and line breaks kept, as Chromium 159 keeps them in a URL that
+/// starts with `data:` (see [`chromium_data_url_document`]).
+fn refresh_data_url_as_written(content: &str) -> Option<String> {
+    refresh_url_in(content)
+}
+
+/// The steps [`refresh_data_url`] describes, on `content` as given.
+fn refresh_url_in(content: &str) -> Option<String> {
     let rest = content
         .trim_start_matches(may_be_skipped_by_browser)
         .trim_start_matches(|c: char| c.is_ascii_digit() || c == '.')
@@ -1416,8 +1571,12 @@ fn attribute_document_requires_javascript(
         return html_document_requires_javascript(value, depth, PageKind::Srcdoc, documents);
     }
     if facts.refreshes && name == "content" {
-        return refresh_data_url(value)
-            .is_some_and(|url| data_url_requires_javascript(&url, depth, documents));
+        let opens = |url: Option<String>| {
+            url.is_some_and(|url| {
+                data_url_requires_javascript(&url, DataUrlCarrier::Frame, depth, documents)
+            })
+        };
+        return opens(refresh_data_url(value)) || opens(refresh_data_url_as_written(value));
     }
     if !opens_document_url(tag, name, facts) {
         return false;
@@ -1425,31 +1584,65 @@ fn attribute_document_requires_javascript(
     // An animation's `values` is a list the browser splits on `;`, and the
     // link takes each item in turn.
     if facts.animates_href && name == "values" {
-        return value
-            .split(';')
-            .any(|item| data_url_requires_javascript(item, depth, documents));
+        return value.split(';').any(|item| {
+            data_url_requires_javascript(item, DataUrlCarrier::Frame, depth, documents)
+        });
     }
-    data_url_requires_javascript(value, depth, documents)
+    let carrier = if facts.downloads && name == "href" {
+        DataUrlCarrier::Download
+    } else if facts.declared_type_may_run && loads_document_url(tag, name) {
+        DataUrlCarrier::DeclaredTypeMayRun
+    } else {
+        DataUrlCarrier::Frame
+    };
+    data_url_requires_javascript(value, carrier, depth, documents)
+}
+
+/// How the browser opens a `data:` URL, which decides the types that run
+/// nothing there.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DataUrlCarrier {
+    /// In a frame, or in a link, form or refresh that a frame can open:
+    /// only the types in [`shows_in_every_frame`] run nothing.
+    Frame,
+    /// A download link (see [`downloads`]): the types in
+    /// [`is_inert_media_type`] run nothing.
+    Download,
+    /// An `<object>` or `<embed>` whose `type` attribute may make WebKit
+    /// render the document as HTML (see [`declared_type_may_run`]): every
+    /// `data:` document there counts as running code.
+    DeclaredTypeMayRun,
 }
 
 /// Whether a `data:` URL loads a document with code the browser would run.
 ///
-/// A `text/html` document is read like any other page. A type the browser
-/// shows as text, an image, media, or a download runs nothing. Every other
-/// type counts as running code without being read. That covers SVG, XHTML,
+/// A `text/html` document is read like any other page. A type that every
+/// browser shows as text or an image where `carrier` opens it runs nothing
+/// (see [`DataUrlCarrier`]). Every other type counts as running code without
+/// being read. That covers SVG, XHTML,
 /// and the other XML types, whose scripts the browser runs and which the
 /// HTML scanner would read wrongly (an XML document can declare entities
 /// that expand into a `<script>`, and XHTML builds elements inside
 /// `<title>`). It also covers types a browser reads as HTML on its own, such
 /// as `*/*` in Firefox, and spellings no browser was tested with.
-fn data_url_requires_javascript(value: &str, depth: usize, documents: &EmbeddedDocuments) -> bool {
-    match decode_data_url_document(value) {
+fn data_url_requires_javascript(
+    value: &str,
+    carrier: DataUrlCarrier,
+    depth: usize,
+    documents: &EmbeddedDocuments,
+) -> bool {
+    let requires_javascript = |document| match document {
         Some(DataUrlDocument::Html(document)) => {
             html_document_requires_javascript(&document, depth, PageKind::DataUrl, documents)
         }
         Some(DataUrlDocument::Unread) => true,
         None => false,
-    }
+    };
+    // Firefox and WebKit drop tabs and line breaks from the URL; Chromium
+    // keeps them in the document, where they separate a tag's name from its
+    // attributes. Code either document holds counts.
+    requires_javascript(decode_data_url_document(value, carrier))
+        || requires_javascript(chromium_data_url_document(value))
 }
 
 // Four nested documents is deeper than any real page goes, so a deeper one
@@ -1522,7 +1715,7 @@ fn tags_require_javascript(
         if name == "script" && raw_script_is_executable(tag) {
             return true;
         }
-        let facts = DocumentFacts::of(&name, &tag.attributes);
+        let facts = DocumentFacts::of(tag, &name);
         for attr in &tag.attributes {
             let attr_name = ascii_lower(&attr.name);
             let value = decode_html_attribute(if attr.has_value { &attr.value } else { "" });
@@ -1557,14 +1750,45 @@ enum DataUrlDocument {
     Unread,
 }
 
-/// Whether a media type, already lowercased, is one the browser shows as
-/// text, an image, audio, video, a font, or a download, so a document of
-/// this type runs no script.
+/// Whether a media type, already lowercased, is one that every browser shows
+/// as text or an image when a frame opens a `data:` document of that type,
+/// so the document runs no script.
+///
+/// An empty type is `text/plain` in a `data:` URL. WebKit 27.2 renders a
+/// `data:` document of a type it cannot show as HTML, in a frame and in a
+/// link, form or refresh that a frame opens: `application/octet-stream`,
+/// fonts, and image, audio and video types it has no decoder for (it ran
+/// `video/ogg`, `image/jp2` and `audio/opus`). Which formats a WebKit build
+/// can decode varies, so only plain text, CSS, CSV, JSON and the image
+/// formats every browser decodes count. Chromium 159, Firefox 159 and WebKit
+/// 27.2 ran no script from any of these, with an HTML or an SVG body, in an
+/// `iframe`, `frame`, `object` or `embed`, or through a link, form or
+/// refresh into a frame.
+fn shows_in_every_frame(media_type: &str) -> bool {
+    matches!(
+        media_type,
+        "" | "text/plain"
+            | "text/css"
+            | "text/csv"
+            | "application/json"
+            | "image/png"
+            | "image/gif"
+            | "image/jpeg"
+            | "image/bmp"
+            | "image/x-icon"
+            | "image/vnd.microsoft.icon"
+    )
+}
+
+/// Whether a media type, already lowercased, is one a download link may
+/// give a `data:` URL and run nothing (see [`downloads`]): text, an image,
+/// audio, video, a font, a PDF, or `application/octet-stream`.
 ///
 /// An empty type is `text/plain` in a `data:` URL. An image, audio, video,
 /// or font type counts unless its subtype ends in `+xml`, the mark of an
-/// XML document such as `image/svg+xml`. Chromium 151 and Firefox 153 ran no
-/// script from any of these with an HTML or SVG body.
+/// XML document such as `image/svg+xml`. Chromium 159, Firefox 159 and
+/// WebKit 27.2 downloaded each of these, also from a link that targets a
+/// frame, and ran no script.
 fn is_inert_media_type(media_type: &str) -> bool {
     if matches!(
         media_type,
@@ -1679,14 +1903,16 @@ fn payload_may_hide_markup(body: &[u8]) -> bool {
 }
 
 /// Read the document a `data:` URL loads, or return `None` for a URL that
-/// is not a `data:` URL or whose type runs no script.
+/// is not a `data:` URL or whose type runs no script where `carrier` opens
+/// it.
 ///
-/// The browser drops tabs and line breaks anywhere in a URL, so they are
-/// removed first. An HTML payload is percent-decoded, then base64-decoded
+/// Firefox and WebKit drop tabs and line breaks anywhere in a URL, so this
+/// reading removes them first; [`chromium_data_url_document`] reads the URL
+/// with them kept. An HTML payload is percent-decoded, then base64-decoded
 /// when [`data_url_is_base64`] says so. A payload that is not valid base64,
 /// or that [`payload_may_hide_markup`], is [`DataUrlDocument::Unread`], so
 /// a document the check cannot read counts as running code.
-fn decode_data_url_document(value: &str) -> Option<DataUrlDocument> {
+fn decode_data_url_document(value: &str, carrier: DataUrlCarrier) -> Option<DataUrlDocument> {
     let value = value.trim_start_matches(|c: char| c <= '\u{20}');
     let value: Cow<str> = if value.contains(['\t', '\n', '\r']) {
         Cow::Owned(value.replace(['\t', '\n', '\r'], ""))
@@ -1700,15 +1926,23 @@ fn decode_data_url_document(value: &str) -> Option<DataUrlDocument> {
         return None;
     }
     let (header, payload) = value.split_once(',')?;
+    // A declared type WebKit was not tried with may make it read any
+    // payload, an HTML one included, as something the check cannot read.
+    if carrier == DataUrlCarrier::DeclaredTypeMayRun {
+        return Some(DataUrlDocument::Unread);
+    }
     let folded = ascii_lower(header);
     let header = &folded["data:".len()..];
-    let media_type = header
-        .split(';')
-        .next()
-        .unwrap_or("")
-        .trim_matches(is_html_space);
+    // The browser trims only spaces around the type (see
+    // [`trim_data_url_type`]).
+    let media_type = trim_data_url_type(header.split(';').next().unwrap_or(""));
     if media_type != "text/html" {
-        return (!is_inert_media_type(media_type)).then_some(DataUrlDocument::Unread);
+        let runs_nothing = match carrier {
+            DataUrlCarrier::Frame => shows_in_every_frame(media_type),
+            DataUrlCarrier::Download => is_inert_media_type(media_type),
+            DataUrlCarrier::DeclaredTypeMayRun => false,
+        };
+        return (!runs_nothing).then_some(DataUrlDocument::Unread);
     }
     let bytes = percent_decode(payload.as_bytes());
     let body = if data_url_is_base64(header) {
@@ -1724,6 +1958,47 @@ fn decode_data_url_document(value: &str) -> Option<DataUrlDocument> {
     }
     // The check above accepted only ASCII, so this always succeeds; if it
     // ever fails, the document counts as unread.
+    String::from_utf8(body)
+        .ok()
+        .map(DataUrlDocument::Html)
+        .or(Some(DataUrlDocument::Unread))
+}
+
+/// Read the HTML document Chromium 159 opens for a `data:` URL that holds a
+/// tab or line break, or return `None` when it opens the same document as
+/// [`decode_data_url_document`] reads, or no HTML document at all.
+///
+/// Chromium keeps tabs and line breaks in a URL that starts with `data:`,
+/// where the URL standard, Firefox and WebKit drop them. In the type they
+/// make a type Chromium does not know, and it renders no such document. In
+/// a base64 payload its decoder skips them, which gives the same bytes as
+/// dropping them. In any other `text/html` payload they stay, and the HTML
+/// parser reads them as the space between a tag's name and its attributes,
+/// so `<img\nsrc=x\nonerror=...>` is an image there and one long tag name
+/// once they are dropped.
+fn chromium_data_url_document(value: &str) -> Option<DataUrlDocument> {
+    let value = value.trim_start_matches(|c: char| c <= '\u{20}');
+    // A URL that only spells `data:` once these characters are dropped, such
+    // as `da\tta:`, loses them everywhere, as in the other browsers.
+    let spells_data = value
+        .get(.."data:".len())
+        .is_some_and(|scheme| scheme.eq_ignore_ascii_case("data:"));
+    if !spells_data || !value.contains(['\t', '\n', '\r']) {
+        return None;
+    }
+    let (header, payload) = value.split_once(',')?;
+    let folded = ascii_lower(header);
+    let header = &folded["data:".len()..];
+    if trim_data_url_type(header.split(';').next().unwrap_or("")) != "text/html"
+        || data_url_is_base64(header)
+        || !payload.contains(['\t', '\n', '\r'])
+    {
+        return None;
+    }
+    let body = percent_decode(payload.as_bytes());
+    if payload_may_hide_markup(&body) {
+        return Some(DataUrlDocument::Unread);
+    }
     String::from_utf8(body)
         .ok()
         .map(DataUrlDocument::Html)
@@ -2560,7 +2835,8 @@ mod tests {
     /// an app's own `innerHTML` puts it there) in either mode, and inside a
     /// `<template>` as Chromium parses it for Vue. Each page here hides its
     /// script from a reading of the whole document and runs it in Chromium
-    /// 156, Firefox 157, or both, when put into a body or a template.
+    /// 156, Firefox 157, or both, or (the `</form>` pages) in WebKit 27.2,
+    /// when put into a body or a template.
     #[test]
     fn a_script_hidden_only_in_a_whole_document_is_reported() {
         const IMG: &str = "<img src=x onerror=\"document.title=1\">";
@@ -2581,6 +2857,42 @@ mod tests {
             // real elements there.
             format!("<noscript>{IMG}</noscript>"),
             format!("<NOSCRIPT><p title=\"</noscript>\">{IMG}</NOSCRIPT>"),
+            // WebKit 27.2 lets `</form>` close every element opened after
+            // the form in `template.innerHTML`, so the `<svg>` closes and
+            // the `<noembed>` holds only the comment start.
+            format!("<form><svg></form><noembed><!-- </noembed>{IMG}<!-- -->"),
+            format!("<form><form><math></form><style><!-- </style>{IMG}<!-- -->"),
+            format!("<form><div><svg><g></form><xmp><!-- </xmp>{IMG}<!-- -->"),
+            // A template keeps a nested `<form>` that a body ignores, and
+            // ignores a `<form>` inside a table that a body keeps, so the
+            // second `</form>` closes the `<svg>` only in the template.
+            format!("<form><form></form><svg></form><noembed><!-- </noembed>{IMG}<!-- -->"),
+            format!("<form></form><form><form></form><svg></form><noembed><!-- </noembed>{IMG}<!-- -->"),
+            format!("<table><form></table><form><svg></form><noembed><!-- </noembed>{IMG}<!-- -->"),
+            format!("<table><form></table><form><math></form><style><!-- </style>{IMG}<!-- -->"),
+            // Inside SVG or MathML, `</template>` closes a foreign
+            // `template` element, also in `template.innerHTML`, so WebKit's
+            // `</form>` then closes the `<math>` or `<svg>` as above.
+            format!("<form><math><template><form></template></form><style><a title=\"</style>{IMG}\">"),
+            format!("<form><svg><template><form></template></form><style><a title=\"</style>{IMG}\">"),
+            format!("<form><math><TEMPLATE><form></TEMPLATE></form><noembed><!-- </noembed>{IMG}<!-- -->"),
+            format!("<form><svg><g><template><form></template></form><xmp><!-- </xmp>{IMG}<!-- -->"),
+            format!("<form><math><template><template><form></template></template></form><style><!-- </style>{IMG}<!-- -->"),
+            // Chromium builds `template.innerHTML` with `<noscript>` read as
+            // markup and a body's `</form>` rule, which takes out only the
+            // form, so the `<svg>` or `<math>` stays open there.
+            format!("<noscript><form><math></form><title>{IMG}</title>"),
+            format!("<noscript><form><svg></form><title>{IMG}</title>"),
+            format!("<noscript><form><math></form><style>{IMG}</style>"),
+            format!("<noscript><form><div><svg></form><desc>{IMG}</desc>"),
+            format!("<NOSCRIPT><form><svg></form><title>{IMG}</title>"),
+            // WebKit also reads `<noscript>` as markup there, with a
+            // template's `</form>` rule, which closes the `<svg>`.
+            format!("<form><div><svg><g><template></template></form><noscript><xmp><!-- </xmp>{IMG}<!-- -->"),
+            format!("<noscript><form><svg><g></Template></Template></form><title><!-- </title>{IMG}<!-- --></title>"),
+            format!(
+                "<i><noscript><form><math><mrow><template><template shadowrootmode=open></TEMPLATE></form><title>{IMG}</title>"
+            ),
         ] {
             assert!(
                 javascript_rules(&page).contains(&"js-native-handler"),
@@ -2594,6 +2906,63 @@ mod tests {
             "<frameset><frame src=a></frameset>",
             "<html><head></head><body><p>x</p></body></html>",
             "<noscript><p>Turn on JavaScript.</p><img src=pixel.gif alt=\"\"></noscript>",
+            "<form><div><svg><circle r=\"1\"/></svg></div></form><p>x</p>",
+            "<form><div><input name=q></form><p>x</p>",
+        ] {
+            assert_eq!(javascript_rules(page), Vec::<&str>::new(), "{page}");
+        }
+    }
+
+    /// Inside a `<template>` the page writes, a declarative shadow root
+    /// included, Chromium 159 drops a `</form>` when a special element such
+    /// as a `<div>` stands between it and the form, where the standard
+    /// closes the form and every element opened after it. Each page here
+    /// leaves an `<svg>` or `<math>` open only in Chromium, so the `<img>`
+    /// is an element there and runs on page load in a shadow root. Both
+    /// checks must report it.
+    #[test]
+    fn a_script_chromium_builds_after_a_form_end_tag_in_a_template_is_reported() {
+        const IMG: &str = "<img src=x onerror=\"document.title=1\">";
+        for page in [
+            format!("<div><template shadowrootmode=open><form><div><svg></form><title>{IMG}</title></template></div>"),
+            format!("<div><template shadowrootmode=open><form><ul><li><math></form><textarea>{IMG}</textarea></template></div>"),
+            format!("<div><template><form><section><svg></form><title>{IMG}</title></template></div>"),
+            format!("<div><template><form><p><svg></form><title>{IMG}</title></template></div>"),
+            format!("<div><template><svg><foreignObject><form><div><svg></form><title>{IMG}</title></template></div>"),
+            format!("<div><template><tr><td><form><div><svg></form><title>{IMG}</title></template></div>"),
+            format!("<div><template><math><mtext><form><div><svg></form><title>{IMG}</title></template></div>"),
+            format!("<div><template><form><template></template><div><svg></form><title>{IMG}</title></template></div>"),
+            // Also when the page goes into another page's body or a
+            // `<template>`, and inside an `iframe srcdoc` document.
+            format!("<template><form><div><svg></form><title>{IMG}</title></template>"),
+            "<iframe srcdoc=\"&lt;div&gt;&lt;template shadowrootmode=open&gt;&lt;form&gt;&lt;div&gt;&lt;svg&gt;&lt;/form&gt;&lt;title&gt;&lt;img src=x onerror=document.title=1&gt;&lt;/title&gt;&lt;/template&gt;\"></iframe>"
+                .to_owned(),
+        ] {
+            let rules = javascript_rules(&page);
+            assert!(
+                rules.contains(&"js-native-handler") || rules.contains(&"js-embedded-document"),
+                "{page} {rules:?}"
+            );
+            // The CSP check leaves a `srcdoc` document to the page's policy,
+            // which the document inherits.
+            if page.starts_with("<iframe") {
+                continue;
+            }
+            let csp = check(&page, PolicyPass::Settled, true, None, None, &[], None);
+            assert!(
+                csp.events
+                    .iter()
+                    .any(|event| matches!(event, PolicyEvent::Finding(_))),
+                "{page}"
+            );
+        }
+        // Forms in templates that close cleanly, or whose `</form>` Chromium
+        // drops with nothing to hide, get no finding.
+        for page in [
+            "<div><template shadowrootmode=open><form><div><input name=q></div></form></template></div>",
+            "<div><template><form><p>Name <input name=n></form><p>x</p></template></div>",
+            "<div><template><form><div><svg><circle r=\"1\"/></svg></div></form><title>t</title></template></div>",
+            "<div><template><form><b><svg></form><title><img src=x></title></template></div>",
         ] {
             assert_eq!(javascript_rules(page), Vec::<&str>::new(), "{page}");
         }
@@ -3109,7 +3478,7 @@ mod tests {
             "<iframe src=\"data:foo,x\"></iframe>",
             "<iframe src=\" DATA:Image/SVG+XML ;charset=utf-8,x\"></iframe>",
             "<iframe src=\"data:\timage/svg+xml\x0c;x,x\"></iframe>",
-            // The browser drops tabs and line breaks anywhere in a URL.
+            // Firefox and WebKit drop tabs and line breaks anywhere in a URL.
             "<iframe src=\"da&#9;ta:image/svg+xml,x\"></iframe>",
             "<iframe src=\"data:image/svg+x&#10;ml,x\"></iframe>",
             "<iframe src=\"data:image/svg+xml;base64,!\"></iframe>",
@@ -3119,23 +3488,188 @@ mod tests {
         ] {
             assert!(embedded_document_reported(html), "{html}");
         }
-        // Text, images, media, fonts, and downloads run no script.
+        // Text and the images every browser decodes run no script.
         for html in [
-            "<iframe src=\"data:image/svg,x\"></iframe>",
-            "<iframe src=\"data:image/svg+xmlx,x\"></iframe>",
             "<iframe src=\"data:IMAGE/PNG;x,%3Cscript%3Ex()%3C/script%3E\"></iframe>",
             "<iframe src=\"data:text/plain,%3Csvg onload=x%3E\"></iframe>",
             "<iframe src=\"data:,%3Cscript%3Ex()%3C/script%3E\"></iframe>",
-            "<object data=\"data:application/pdf,x\"></object>",
-            "<embed src=\"data:video/mp4,x\">",
-            "<embed src=\"data:audio/mpeg,%3Cscript%3Ex()%3C/script%3E\">",
-            "<iframe src=\"data:font/woff,%3Cscript%3Ex()%3C/script%3E\"></iframe>",
+            "<object data=\"data:image/gif,x\"></object>",
+            "<embed src=\"data:text/css,%3Cscript%3Ex()%3C/script%3E\">",
             "<iframe src=\"data:application/json;charset=utf-8,%3Cscript%3E\"></iframe>",
+            // A declared type of HTML or of one of those types leaves the
+            // URL's type in charge in every browser.
+            "<object type=\"text/html\" data=\"data:text/plain,%3Cscript%3Ex()%3C/script%3E\"></object>",
+            "<embed type=\" Image/PNG ;x\" src=\"data:image/png,x\">",
             // No comma, so the browser loads nothing.
             "<iframe src=\"data:image/svg+xml\"></iframe>",
             "<img src=\"data:image/svg+xml,%3Csvg onload=x%3E\">",
         ] {
             assert!(!embedded_document_reported(html), "{html}");
+        }
+    }
+
+    /// WebKit 27.2 renders a `data:` document as HTML when it cannot show
+    /// the document's type, in a frame and through a link, form or refresh
+    /// into a frame, and also when an `<object>` or `<embed>` declares
+    /// `type="text/html"`. Each page here runs its script in WebKit.
+    #[test]
+    fn a_data_url_webkit_renders_as_html_is_reported() {
+        const BODY: &str = "%3Cscript%3Eparent.postMessage(1,'*')%3C/script%3E";
+        for media_type in [
+            "application/octet-stream",
+            "font/woff",
+            "font/woff2",
+            "font/ttf",
+            "font/otf",
+            "image/svg",
+            "image/x-foo",
+            "audio/x-foo",
+            "video/x-foo",
+            "video/ogg",
+            "application/pdf",
+            "image/webp",
+            "video/mp4",
+        ] {
+            let url = format!("data:{media_type},{BODY}");
+            for html in [
+                format!("<iframe src=\"{url}\"></iframe>"),
+                format!("<frameset><frame src=\"{url}\"></frameset>"),
+                format!("<object type=\"text/html\" data=\"{url}\"></object>"),
+                format!("<embed type=\"text/html\" src=\"{url}\">"),
+                format!("<iframe name=f></iframe><a target=f href=\"{url}\">x</a>"),
+                format!("<form action=\"{url}\" target=f><button>x</button></form>"),
+                format!("<form target=f><button formaction=\"{url}\">x</button></form>"),
+                format!("<iframe srcdoc=\"&lt;meta http-equiv=refresh content='0;url={url}'&gt;\"></iframe>"),
+                format!("<iframe srcdoc=\"&lt;iframe src='{url}'&gt;&lt;/iframe&gt;\"></iframe>"),
+                // WebKit ignores `download` on an SVG `<a>`.
+                format!("<svg><a download target=f href=\"{url}\"><rect/></a></svg>"),
+                format!("<svg><a download target=f xlink:href=\"{url}\"><rect/></a></svg>"),
+                // Inside an embedded document the check does not know an
+                // `<a>` from an SVG one, so it counts no download there.
+                format!("<iframe srcdoc=\"&lt;a download target=f href='{url}'&gt;x&lt;/a&gt;\"></iframe>"),
+            ] {
+                assert!(embedded_document_reported(&html), "{html}");
+            }
+        }
+        // The browser trims only spaces around a `data:` type. Any other
+        // control character becomes a `%` escape in the type, which WebKit
+        // then does not know and renders as HTML, also for the listed types.
+        for media_type in [
+            "image/png\x0c",
+            "\x0cimage/png",
+            "image/png&#12;",
+            "text/plain\x0b",
+            "\x0ctext/plain",
+            "application/json\x01",
+            "image/gif\x1f",
+            "image/jpeg\x7f",
+            "image/x-icon\x0c;charset=utf-8",
+        ] {
+            let url = format!("data:{media_type},{BODY}");
+            for html in [
+                format!("<iframe src=\"{url}\"></iframe>"),
+                format!("<iframe name=f></iframe><a target=f href=\"{url}\">x</a>"),
+                format!("<iframe srcdoc=\"&lt;meta http-equiv=refresh content='0;url={url}'&gt;\"></iframe>"),
+            ] {
+                assert!(embedded_document_reported(&html), "{html:?}");
+            }
+        }
+        assert!(embedded_document_reported(
+            "<iframe src=\"data:image/png\x0c;base64,PHNjcmlwdD54KCk8L3NjcmlwdD4=\"></iframe>"
+        ));
+        assert!(embedded_document_reported(
+            "<object type=\"image/png\x0c\" data=\"data:image/png,x\"></object>"
+        ));
+        // WebKit and Firefox follow `href` on any MathML element on a click,
+        // in the frame it sits in, which may be a frame of the page.
+        for html in [
+            format!("<math href=\"data:text/html,{BODY}\"><mi>x</mi></math>"),
+            format!("<math><mi href=\"data:application/octet-stream,{BODY}\">x</mi></math>"),
+            format!("<math><mrow><mtext href=\"data:image/png\x0c,{BODY}\">x</mtext></mrow></math>"),
+            format!("<math><x-unknown href=\"data:font/woff,{BODY}\">x</x-unknown></math>"),
+            format!("<iframe srcdoc=\"&lt;math&gt;&lt;mi href='data:text/html,{BODY}'&gt;x&lt;/mi&gt;&lt;/math&gt;\"></iframe>"),
+            format!("<iframe srcdoc=\"&lt;math&gt;&lt;foo href='data:application/octet-stream,{BODY}'&gt;x&lt;/foo&gt;&lt;/math&gt;\"></iframe>"),
+        ] {
+            assert!(embedded_document_reported(&html), "{html}");
+        }
+        // Browsers ignore `xlink:href` on a MathML element, and `href` and
+        // `xlink:href` on SVG elements other than `<a>` and on HTML
+        // elements other than links, so these stay harmless.
+        for html in [
+            "<math><mi xlink:href=\"data:application/octet-stream,x\">x</mi></math>",
+            "<svg><rect href=\"data:application/octet-stream,x\"/></svg>",
+            "<svg><image href=\"data:image/svg+xml,x\"/></svg>",
+            "<svg><use xlink:href=\"data:application/octet-stream,x\"/></svg>",
+            "<div href=\"data:application/octet-stream,x\">x</div>",
+            "<math><mi href=\"data:image/png,x\">x</mi></math>",
+            "<math><mi href=\"data:image/png ,x\">x</mi></math>",
+        ] {
+            assert!(!embedded_document_reported(html), "{html}");
+        }
+        // A declared type WebKit was not tried with counts whatever the URL.
+        for html in [
+            "<object type=\"image/svg+xml\" data=\"data:text/plain,x\"></object>",
+            "<embed type=\"application/x-foo\" src=\"data:image/png,x\">",
+            "<object type=\"image/svg+xml\" data=\"data:text/html,%3Cp%3Ehi%3C/p%3E\"></object>",
+        ] {
+            assert!(embedded_document_reported(html), "{html}");
+        }
+        // An HTML download link downloads every one of these types, also
+        // when it targets a frame, and runs nothing; a plain `<object>` or
+        // `<embed>` without `type` follows the frame rule.
+        for html in [
+            "<a download href=\"data:application/octet-stream,%3Cscript%3Ex()%3C/script%3E\">x</a>",
+            "<a download=report.csv target=f href=\"data:font/woff,x\">x</a>",
+            "<map><area download href=\"data:application/pdf;base64,JVBERi0=\"></map>",
+            "<a DOWNLOAD href=\"data:application/zip;base64,UEs=\">x</a>",
+            "<svg><foreignObject><a download href=\"data:video/mp4,x\">x</a></foreignObject></svg>",
+        ] {
+            let reported = embedded_document_reported(html);
+            if html.contains("application/zip") {
+                // Not a type a download may have; serve such a file from a URL.
+                assert!(reported, "{html}");
+            } else {
+                assert!(!reported, "{html}");
+            }
+        }
+    }
+
+    /// Chromium 159 keeps tabs and line breaks in a URL that starts with
+    /// `data:`, where Firefox and WebKit drop them, so `<img`, a line break
+    /// and `src` make an image there. Each page here runs its script in
+    /// Chromium, on load or after a click.
+    #[test]
+    fn a_data_url_chromium_reads_with_its_line_breaks_is_reported() {
+        for gap in ["\n", "\t", "\r", "\r\n"] {
+            let body = format!("<img{gap}src=x{gap}onerror=parent.postMessage(1,origin)>");
+            let url = format!("data:text/html,{body}");
+            for html in [
+                format!("<iframe src=\"{url}\"></iframe>"),
+                format!("<object data=\"{url}\"></object>"),
+                format!("<embed src=\"{url}\">"),
+                format!("<iframe name=f></iframe><a target=f href=\"{url}\">x</a>"),
+                format!("<form action=\"{url}\" target=f><button>x</button></form>"),
+                format!("<svg><a target=f><set attributeName=href to=\"{url}\"/><text>x</text></a></svg>"),
+                format!("<iframe srcdoc=\"&lt;iframe src='{url}'&gt;&lt;/iframe&gt;\"></iframe>"),
+                format!("<iframe srcdoc=\"&lt;meta http-equiv=refresh content='0;url={url}'&gt;\"></iframe>"),
+                format!("<meta http-equiv=refresh content=\"0;url={url}\">"),
+            ] {
+                assert!(embedded_document_reported(&html), "{html:?}");
+            }
+        }
+        assert!(embedded_document_reported(
+            "<iframe src=\"DATA:Text/HTML;charset=utf-8,<svg\nonload=parent.postMessage(1,'*')>\"></iframe>"
+        ));
+        // A line break in the type gives a type Chromium does not know, and a
+        // base64 payload loses its line breaks there too, so these read the
+        // same as in the other browsers.
+        for html in [
+            "<iframe src=\"data:text/html,<p>\nHello</p>\"></iframe>",
+            "<iframe src=\"data:image/png\n,<img\nsrc=x\nonerror=x()>\"></iframe>",
+            "<iframe src=\"data:text/html;base64,PHA+\naGk8L3A+\"></iframe>",
+            "<iframe src=\"da\nta:text/html,<b\n>x</b>\"></iframe>",
+        ] {
+            assert!(!embedded_document_reported(html), "{html:?}");
         }
     }
 
@@ -3729,7 +4263,7 @@ mod tests {
         ];
         for (value, expected) in documents {
             assert_eq!(
-                describe(decode_data_url_document(value)),
+                describe(decode_data_url_document(value, DataUrlCarrier::Frame)),
                 expected,
                 "{value:?}"
             );

@@ -1532,19 +1532,31 @@ into a link, as [described for
 scripts through `iframe srcdoc` or a data URL. Citry checks every data
 URL the page loads or opens as a document: in an `iframe`, `frame`,
 `object`, or `embed`, in a link or form (`href`, `xlink:href`, `action`,
-`formaction`, and the value of an SVG animation of a link, since any link
-can open in a frame), and in a `<meta http-equiv="refresh">`. It reads an HTML data URL, and counts any
+`formaction`, the `href` of a MathML element, and the value of an SVG
+animation of a link, since any link can open in a frame), and in a
+`<meta http-equiv="refresh">`. It reads an HTML data URL, and counts any
 other type as needing JavaScript, with or without a script, because the
 browser runs the scripts of an SVG or other XML document. A data URL of
-plain text, CSS, CSV, JSON, an image, audio, video, a font, a PDF, or
-`application/octet-stream` does not count. An HTML data URL counts when
+plain text, CSS, CSV, JSON, or a PNG, GIF, JPEG, BMP or ICO image does
+not count. WebKit, the engine Safari uses, shows a data URL as HTML when
+it cannot display the type, such as a font or `application/octet-stream`,
+so every other type counts. That includes a listed type written with a
+control character, such as a form feed, because the browser keeps the
+character in the type. An `object` or `embed` whose
+`type` attribute names anything other than HTML or one of these types
+counts every data URL as needing JavaScript. An HTML data URL counts when
 it has a script or when Citry cannot read it, such as invalid base64 or
 any text outside plain ASCII, because a browser can read that text in
 another encoding. Write such text in the document as a percent-encoded
 reference, such as `%26%23233;` for `é`. A raw `#` would end the document.
-A download link (`<a download>`) counts too, so give a file you
-offer for download one of those types, such as
-`application/octet-stream`, or serve it from a URL. It checks dependencies
+A download link (`<a download>` or `<area download>`) downloads the
+file instead of showing it, so there plain text, CSS, CSV, JSON, an
+image, audio, video, a font, a PDF, or `application/octet-stream` does
+not count. Give a file you offer for download one of those types, or
+serve it from a URL. On an SVG `<a>`, or inside an `iframe srcdoc`
+document, a download link follows the shorter list above. Chromium keeps
+a tab or line break written inside a data URL, where other browsers drop
+it, so Citry reads an HTML data URL both ways. Citry checks dependencies
 and HTML after extensions have changed them. An `Events` method that no
 template calls does not count.
 
@@ -1646,8 +1658,8 @@ meaning quirks mode, and Firefox always reads it in standards mode.
 In an interactive component, Vue inserts some HTML, such as `Markup` or a
 `<c-raw>` block, as one opaque HTML block: a piece of HTML that Vue does
 not read itself. Vue builds that block in the browser inside a
-`<template>`. Chromium reads the HTML inside a `<noscript>` there as real
-elements, which load and run once Vue moves them into the page. So
+`<template>`. Chromium and WebKit read the HTML inside a `<noscript>`
+there as real elements, which load and run once Vue moves them into the page. So
 Citry's check also reads a page with tags inside a `<noscript>` that way,
 and reports a handler or script there. Remove the handler or script from
 the `<noscript>`.
@@ -1658,6 +1670,18 @@ inside a `#c-ignore` or `v-pre` element, and Citry's browser code refuses
 such a block too. A `<noscript>` you write yourself in a `<c-raw>` block
 or in those contents is not refused, so keep handlers and scripts out of
 that `<noscript>`.
+
+Browsers do not agree on what a `</form>` closes while an element opened
+inside the form is still open. In a page, Chromium, Firefox and WebKit
+close only the form. When a script sets the HTML on a `<template>`,
+WebKit, the engine Safari uses, closes every element opened inside the
+form too. Inside a `<template>` written in the page, which includes a
+declarative shadow root (`<template shadowrootmode>`) that the browser
+shows as soon as the page loads, Chromium leaves the form open when a
+`<div>`, `<p>` or similar element is still open inside it. Citry's check
+reads a page with a `</form>` each of these ways and reports a script that
+any of them finds. Close every element inside a form before its `</form>`
+to avoid the difference.
 
 If a reading reports a script or handler that you wrote on purpose, move
 it into `Component.js`, or into structured
