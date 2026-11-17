@@ -1,16 +1,17 @@
 # Release notes
 
-## Unreleased
+## v2.1.1
 
 ### Fixed
 
-- Security: the output checks now find a script hidden behind a
-  `</form>` that a browser reads differently: WebKit when a script sets
-  the HTML of a `<template>`, Chromium in the same case when the
-  `</form>` sits in a `<noscript>`, and Chromium inside a `<template>`
-  written in the page. When they read a page as the contents of a
-  `<template>`, they also let `</template>` close an SVG or MathML
-  `template` element, as every browser does.
+- Security: the output checks (the checks behind Citry's
+  `security_javascript` and `security_csp` settings) now find a script
+  hidden behind a `</form>` that a browser reads differently: WebKit
+  when a script sets the HTML of a `<template>`, Chromium in the same
+  case when the `</form>` sits in a `<noscript>`, and Chromium inside a
+  `<template>` written in the page. When the checks read a page as the
+  contents of a `<template>`, they also let `</template>` close an SVG
+  or MathML `template` element, as every browser does.
 - Security: the JavaScript output check counts a `data:` document as
   running code unless every browser shows its type as text or an image,
   because WebKit renders a type it cannot display as HTML. It trims only

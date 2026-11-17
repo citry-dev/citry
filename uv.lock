@@ -179,7 +179,7 @@ wheels = [
 
 [[package]]
 name = "citry"
-version = "1.0.0"
+version = "1.0.1"
 source = { editable = "packages/py/citry" }
 dependencies = [
     { name = "citry-core" },
@@ -267,7 +267,7 @@ e2e = [
 
 [[package]]
 name = "citry-core"
-version = "2.1.0"
+version = "2.1.1"
 source = { editable = "packages/py/citry_core" }
 
 [package.dev-dependencies]
@@ -381,7 +381,7 @@ dev = [
 
 [[package]]
 name = "citry-ui"
-version = "0.6.0"
+version = "0.6.1"
 source = { editable = "packages/py/citry_ui" }
 dependencies = [
     { name = "citry" },
