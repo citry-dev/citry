@@ -1613,6 +1613,13 @@ Citry's check also reads a page with tags inside a `<noscript>` that way,
 and reports a handler or script there. Remove the handler or script from
 the `<noscript>`.
 
+With or without the output checks, a `Markup` value that holds a
+`<noscript>` raises `ValueError` in an interactive component, including
+inside a `#c-ignore` or `v-pre` element, and Citry's browser code refuses
+such a block too. A `<noscript>` you write yourself in a `<c-raw>` block
+or in those contents is not refused, so keep handlers and scripts out of
+that `<noscript>`.
+
 If a reading reports a script or handler that you wrote on purpose, move
 it into `Component.js`, or into structured
 [`Dependencies`][citry.Component.Dependencies], instead of writing it in

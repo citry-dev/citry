@@ -88,6 +88,34 @@ def reject_cross_boundary_html(html: str, *, origin: str) -> None:
         raise ValueError(msg) from error
 
 
+def reject_noscript_in_opaque_html(html: str, *, origin: str) -> None:
+    """
+    Reject opaque markup that holds a `<noscript>` element.
+
+    Vue builds an opaque block by parsing it inside a `<template>`. Chromium
+    and WebKit parse there with scripting off, so the markup inside a
+    `<noscript>` becomes real elements, which load and run once Vue moves them
+    into the page, while the page's own parse keeps that markup as inert text.
+    The Vue writer calls this for every `Markup` value, the trusted HTML that
+    data can reach, both where it becomes a block of its own and inside the
+    contents of a `#c-ignore` or `v-pre` element. `<c-raw>` and the rest of
+    those contents are written in the template, so they are not checked. The
+    browser runtime checks each block made from a `Markup` value again before
+    Vue inserts it.
+    """
+    # Most blocks never name the tag, so skip the scan for them.
+    if "noscript" not in html.casefold():
+        return
+    if any(element.start_tag.name.content == "noscript" for element in scan_output_html(html).elements):
+        msg = (
+            f"{origin} holds a <noscript> element, which is not accepted inside an interactive component."
+            " Vue inserts this HTML as one block that the browser reads with scripts turned off, so Chromium"
+            " and Safari would show and run the contents of the <noscript>. Move the <noscript> outside the"
+            " component, or remove it from the HTML."
+        )
+        raise ValueError(msg)
+
+
 def mark_opaque_html(html: str, markers: tuple[tuple[str, object], ...]) -> str:
     """Apply validated component-root markers while preserving all other bytes."""
     if type(html) is not str:
@@ -152,4 +180,4 @@ def opaque_html_record(html: str, *, pinned: bool = False) -> dict[str, object]:
     return record
 
 
-__all__ = ["mark_opaque_html", "opaque_html_record", "reject_cross_boundary_html"]
+__all__ = ["mark_opaque_html", "opaque_html_record", "reject_cross_boundary_html", "reject_noscript_in_opaque_html"]

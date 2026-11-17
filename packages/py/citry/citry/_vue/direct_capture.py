@@ -112,7 +112,12 @@ from .leaf_program import (
     PreparedLeafProgram,
     typed_leaf_parts,
 )
-from .opaque_html import mark_opaque_html, opaque_html_record, reject_cross_boundary_html
+from .opaque_html import (
+    mark_opaque_html,
+    opaque_html_record,
+    reject_cross_boundary_html,
+    reject_noscript_in_opaque_html,
+)
 from .prepared import (
     PreparedMarker,
     PreparedOccurrence,
@@ -1934,6 +1939,7 @@ def assemble_typed_render(
                             f" compiles the contents instead, so they cannot hold {found}. {advice}"
                         )
                     return open_index
+                trusted_html: list[str] = []
                 html = _ignored_contents_html(
                     opening,
                     contents,
@@ -1941,6 +1947,7 @@ def assemble_typed_render(
                     label=label,
                     allowed=_V_PRE_CONTENTS_ALLOWED if v_pre else _IGNORED_CONTENTS_ALLOWED,
                     keep_vue_attributes=v_pre,
+                    trusted_html=trusted_html,
                 )
                 if v_pre and opening.tag.lower() in _LEADING_NEWLINE_TAGS:
                     # The browser drops one line break written straight after
@@ -1950,6 +1957,11 @@ def assemble_typed_render(
                     line_break = next((item for item in ("\r\n", "\n", "\r") if html.startswith(item)), "")
                     html = html.removeprefix(line_break)
                 reject_cross_boundary_html(html, origin=f"The HTML inside {label.removesuffix(',')}")
+                # The block is one record written in the template, so the
+                # browser cannot tell a Python value inside it from the
+                # author's HTML around it; refuse that value's <noscript> here.
+                for value_html in trusted_html:
+                    reject_noscript_in_opaque_html(value_html, origin="A Markup value (trusted HTML from Python)")
                 key = data_key("Opaque", opening.source, opening.span, data_owner_id)
                 projected_data_container("opaqueHtml")
                 opaque_values = data_values.setdefault("opaqueHtml", {})
@@ -3091,6 +3103,7 @@ def assemble_typed_render(
                         _append_text_binding(output, key)
                         continue
                     reject_cross_boundary_html(serialized, origin="A Markup value (trusted HTML from Python)")
+                    reject_noscript_in_opaque_html(serialized, origin="A Markup value (trusted HTML from Python)")
                     html = mark_opaque_html(
                         serialized,
                         root_markers if project_root_markers and dom_depth == 0 else (),
@@ -4909,9 +4922,13 @@ def _ignored_contents_html(
     label: str | None = None,
     allowed: str = _IGNORED_CONTENTS_ALLOWED,
     keep_vue_attributes: bool = False,
+    trusted_html: list[str] | None = None,
 ) -> str:
     """
     Write a `#c-ignore` or `v-pre` element's contents as the HTML the server renders.
+
+    Each `Markup` value written into the contents is also appended to
+    `trusted_html`, when given, so the caller can check it on its own.
 
     The contents are written like the static serializer writes them, and
     Vue inserts them as HTML without building nodes for them, so anything
@@ -4964,10 +4981,11 @@ def _ignored_contents_html(
                     # The helper is an internal name, so describe what it does.
                     raise reject("a value that the browser fills in")
                 out.append(escape_to_str(part.value))
-            elif isinstance(part, PreparedTrustedHtmlValue):
-                out.append(part.html)
-            elif isinstance(part, Markup):
-                out.append(str(part))
+            elif isinstance(part, (PreparedTrustedHtmlValue, Markup)):
+                html = part.html if isinstance(part, PreparedTrustedHtmlValue) else str(part)
+                if trusted_html is not None:
+                    trusted_html.append(html)
+                out.append(html)
             elif isinstance(part, PreparedVerbatimHtml):
                 out.append(part.html)
             elif isinstance(part, PreparedElementOpen):

@@ -941,6 +941,26 @@
   // An opaque HTML record is trusted HTML from Python and the number of top-level nodes it parses
   // into inside a <template> element, which the server computed. `pinned: true` asks the browser to
   // keep the block's first render for the life of the component (see opaqueHtmlComponent).
+  // Chromium and WebKit parse the HTML inside a <template> with scripting off, which is how Vue builds
+  // an opaque block, so the markup inside a <noscript> becomes real elements that load and run once
+  // Vue moves them into the page. The server refuses a Markup value that holds a <noscript>
+  // (`reject_noscript_in_opaque_html` in citry/_vue/opaque_html.py); preflightDefinitions checks it again.
+  function opaqueHtmlHoldsNoscript(html) {
+    if (!/noscript/i.test(html)) return false;
+    // Without a document there is no parser to read the block with, so refuse it rather than guess.
+    if (typeof document === "undefined") return true;
+    // The <template> parse is inert: nothing in it loads or runs while it is read here.
+    const template = pageDocument.createElement("template");
+    template.innerHTML = html;
+    const pending = [template.content];
+    while (pending.length !== 0) {
+      const root = pending.pop();
+      if (root.querySelector("noscript") !== null) return true;
+      // A nested <template> keeps its contents in a fragment of its own, which querySelector skips.
+      for (const nested of root.querySelectorAll("template")) pending.push(nested.content);
+    }
+    return false;
+  }
   function checkOpaqueHtmlRecord(value) {
     const record = plain(value, "opaque HTML record");
     const keys = Object.keys(record).sort().join(",");
@@ -1307,7 +1327,14 @@
       const declaredOpaque = new Map(definition.opaqueHtmlSites.map(site => [site.key, site]));
       if (Object.keys(opaque).length !== declaredOpaque.size || Object.keys(opaque).some(key => !declaredOpaque.has(key)))
         throw new Error("prepared opaque HTML does not match definition declarations");
-      for (const key of declaredOpaque.keys()) checkOpaqueHtmlRecord(opaque[key]);
+      for (const [key, site] of declaredOpaque) {
+        const record = checkOpaqueHtmlRecord(opaque[key]);
+        // A block made from one Markup value, the trusted HTML that data can reach. A `<c-raw>`,
+        // `#c-ignore` or `v-pre` block is one record written in the template, whose Markup values
+        // the server checks one by one.
+        if (site.origin === "markup" && opaqueHtmlHoldsNoscript(record.html))
+          throw new Error("prepared opaque HTML from a Markup value holds a <noscript> element");
+      }
     }
     validateGraph(occurrenceMap, rootId, keptOwners);
     return declared;

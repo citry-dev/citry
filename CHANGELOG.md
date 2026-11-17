@@ -64,6 +64,9 @@
   content along. So `<c-i18n>` with a `tag` of `svg`, and Citry UI layout
   components given `attrs={"is": "svg"}`, raise when they have content.
 - The same rule applies to the MathML tags `mglyph` and `malignmark`.
+- In an interactive component (one with `js`) and in an Events `Render`,
+  a `Markup` value that holds a `<noscript>` element now raises
+  `ValueError`, also inside a `#c-ignore` or `v-pre` element.
 
 ### Fixes
 
@@ -113,6 +116,12 @@
   elements such as `<style>` and `<noscript>` as markup. A `Markup` value
   that is harmless in HTML, such as sanitizer output, could run script
   there.
+- Security: in an interactive component and in an Events `Render`, a
+  `Markup` value that holds a `<noscript>` no longer runs its contents in
+  Chromium and WebKit, the engine in Safari. Vue builds such a value inside
+  a `<template>`, where those browsers read the `<noscript>` contents as
+  markup. Citry now refuses the value on the server, and its browser code
+  refuses it too.
 - A malformed State token, or a malformed `cache/` or `asset/` URL,
   now gets a 403 or 404 instead of a server error when Citry's cache
   is a Django memcached backend.
