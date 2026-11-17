@@ -574,6 +574,54 @@ body {
   outline-offset: 3px;
 }
 
+/* A box with a picture: the image fills the 16:9 box and a dark layer over
+   it keeps the white play button and label readable on most frames. Only a
+   box that holds a picture carries this class, so an older docs version
+   that shares this stylesheet keeps the plain look above. */
+.youtube-video__facade--thumbnail,
+.youtube-video__facade--thumbnail:hover {
+  position: relative;
+  overflow: hidden;
+  background: #000;
+}
+
+/* This selector has two classes, which outranks `.prose img` (auto height,
+   rounded corners) on a docs page. The box's own radius and `overflow`
+   round the picture's corners. */
+.youtube-video .youtube-video__thumbnail {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  border-radius: 0;
+  object-fit: cover;
+}
+
+.youtube-video__facade--thumbnail::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 40%);
+  transition: background-color 0.15s;
+}
+
+.youtube-video__facade--thumbnail:hover::after {
+  background: rgb(0 0 0 / 25%);
+}
+
+/* The dark layer covers the whole box, so the play button and label need their
+   own stacking position to paint above it. */
+.youtube-video__facade--thumbnail .youtube-video__play,
+.youtube-video__facade--thumbnail .youtube-video__label {
+  position: relative;
+  z-index: 1;
+}
+
+.youtube-video__facade--thumbnail .youtube-video__label {
+  text-shadow: 0 1px 4px rgb(0 0 0 / 70%);
+}
+
 .youtube-video__play {
   display: inline-grid;
   width: 2.5rem;

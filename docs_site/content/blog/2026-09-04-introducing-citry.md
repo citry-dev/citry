@@ -47,6 +47,7 @@ It's now in public beta. If you'd rather see how it works, I recorded a Citry an
 <c-youtube-video
   video_id="d3nPqvDdNB0"
   title="50-minute Citry and Django code-along"
+  thumbnail="/static/img/video-thumbnails/d3nPqvDdNB0.jpg"
 />
 
 ## Two years in the making

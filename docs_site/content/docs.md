@@ -21,6 +21,7 @@ This documentation site is built with Citry too.
 <c-youtube-video
   video_id="d3nPqvDdNB0"
   title="50-minute Citry and Django code-along"
+  thumbnail="/static/img/video-thumbnails/d3nPqvDdNB0.jpg"
 />
 
 The tutorial starts with reusable HTML rendered in Python. Each step adds one
