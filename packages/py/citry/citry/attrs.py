@@ -242,15 +242,22 @@ def reject_vue_code_attr_name(
 # `<iframe>` loads its value as a page.
 _MARKUP_PROPERTY_ATTR_NAMES = frozenset({"innerhtml", "outerhtml", "srcdoc"})
 
+# Props that Vue reads itself rather than setting them on the element. Given
+# `ref`, `ref_for` or `ref_key`, Vue stores the element in the component's
+# `setup()` value of that name, so data could replace a value that the
+# component shows with `v-html` or uses to decide whether to. Vue compares
+# them in exact case; refusing every case costs nothing.
+_VUE_REF_ATTR_NAMES = frozenset({"ref", "ref_for", "ref_key"})
+
 
 def is_script_capable_attr_name(name: object) -> bool:
-    """Return whether a browser reads this attribute's value as code or markup."""
+    """Return whether a browser reads this attribute's value as code or markup, or Vue stores the element by it."""
     if not isinstance(name, str):
         return False
     # Read the stored text directly, so a str subclass that overrides these
     # methods gets the same answer.
     folded = str.lower(name)
-    return folded.startswith("on") or folded in _MARKUP_PROPERTY_ATTR_NAMES
+    return folded.startswith("on") or folded in _MARKUP_PROPERTY_ATTR_NAMES or folded in _VUE_REF_ATTR_NAMES
 
 
 SCRIPT_CAPABLE_ATTR_FIX = (
@@ -282,7 +289,10 @@ def reject_script_capable_attr_name(
     Raise `ValueError` when render-time data sets an attribute the browser reads as code.
 
     That is an inline event handler such as `onclick`, or `innerHTML`,
-    `outerHTML`, or `srcdoc`. Such a name from data, such as a `c-bind`
+    `outerHTML`, or `srcdoc`, and also `ref`, `ref_for`, or `ref_key`, which
+    Vue reads to store the element in one of the component's own values.
+    Citry compares all of these names in any letter case. Such a name from
+    data, such as a `c-bind`
     mapping key or one an `on_attrs_resolved` hook adds, is refused. On a
     plain element, a name the author wrote in the template, including a
     `c-on*` or `c-srcdoc` attribute, never reaches this check. A
@@ -299,7 +309,8 @@ def reject_script_capable_attr_name(
     if is_script_capable_attr_name(name):
         msg = (
             f"{where} sets {name!r} on <{tag_name}>. An attribute name from data may not start with 'on' or be "
-            f"innerHTML, outerHTML, or srcdoc, because the browser reads that value as code or markup. {fix}"
+            "innerHTML, outerHTML, srcdoc, ref, ref_for, or ref_key, because the browser reads that value as code "
+            f"or markup, or Vue reads it to replace one of the component's own values. {fix}"
         )
         raise ValueError(msg)
 

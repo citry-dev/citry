@@ -226,8 +226,13 @@ values in templates.
 
 `c-bind` refuses a name that starts with `on`, such as `onclick`, and the
 names `innerHTML`, `outerHTML`, and `srcdoc`, in any letter case. The
-browser reads those values as code or markup. It raises `ValueError`, and
-so does an `on_attrs_resolved` hook that adds such a name.
+browser reads those values as code or markup. It also refuses `ref`,
+`ref_for`, and `ref_key`: in a component with `js`, Vue reads them and
+stores the element in the component's own value of that name, which could
+replace a value the component shows with `v-html`. Citry raises
+`ValueError` for these names, also when an `on_attrs_resolved` hook adds
+one. For the same reason `c-ref="..."` raises `ValueError`: write
+`ref="name"` with a plain text value.
 
 Write the handler in the template instead: `@click` on a Vue page,
 `@c-click` to call a handler of your component, or `onclick="..."`. A

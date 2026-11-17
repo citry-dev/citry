@@ -332,6 +332,9 @@ class I18nBindingElementAttrsNode(Node):
                 tag_name=self.original.tag_name,
                 origin="c-attr",
             )
+        # The same holds for a `c-ref`, which the wrapped node refuses.
+        if self.original._vue_ref_attr_key is not None:
+            self.original._reject_vue_ref_attr()
         collector = cast("Any", component).i18n._bindings
         declarations: OrderedDict[tuple[str, str | None], _Declaration] = OrderedDict()
         contributions: list[Mapping[str, Any]] = []

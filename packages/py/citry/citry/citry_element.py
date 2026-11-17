@@ -66,6 +66,9 @@ class _ElementMorphMetadata:
     control_bindings: tuple[dict[str, object], ...] = ()
     owner_name: str | None = None
     runtime_events_candidate: bool = False
+    # The `ref` written as plain text on the `<c-element>` tag in the
+    # template, the only `ref` the element accepts.
+    authored_ref: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -239,6 +239,10 @@ lowercase.
   Vue `@click` in a component with `js`, or write a plain tag in a `c-if`
   branch. A plain `<c-element is="div" onclick="...">` with no `c-bind`
   makes an ordinary element, so it works.
+- It also refuses `ref_for`, `ref_key`, `c-ref`, and a `ref` passed in as
+  data. In a component with `js`, Vue stores the element in the
+  component value with that name. A `ref="name"` you write in the
+  template works.
 - A `<c-element>` that has `c-is` or `c-bind` also refuses the names
   Citry reserves for its own use, such as `c-render-id`, `data-cid-*`,
   and `data-citry-key`, whether you wrote them or passed them in. It

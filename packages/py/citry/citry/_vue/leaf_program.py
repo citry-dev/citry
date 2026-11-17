@@ -489,6 +489,8 @@ def _simple_json_fixed_attrs(operation: _Open) -> tuple[tuple[str, ExprHtmlAttr]
         # A `c-v-if`-style attribute must reach the ordinary resolver, which
         # raises VueCodeError for it; this direct evaluator would skip that.
         or node._vue_code_attr_key is not None
+        # So must a `c-ref`, which the ordinary resolver refuses.
+        or node._vue_ref_attr_key is not None
         or node._static_prepared is not None
         or node._has_spread
         or node._event_bindings
@@ -3472,6 +3474,8 @@ def _fixed_attrs_plan(node: PreparedElementOpenNode, renderer: Node) -> tuple[tu
         # A `c-v-if`-style attribute must reach the ordinary resolver, which
         # raises VueCodeError for it; this direct evaluator would skip that.
         or node._vue_code_attr_key is not None
+        # So must a `c-ref`, which the ordinary resolver refuses.
+        or node._vue_ref_attr_key is not None
         or node._static_prepared is not None
         or node._has_spread
         or node._event_bindings

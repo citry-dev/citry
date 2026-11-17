@@ -164,7 +164,8 @@ request data (a query parameter, form field, or header).
 
 An `on_attrs_resolved` hook may change attribute values, but it may not
 add an inline event handler such as `onclick`, or `innerHTML`,
-`outerHTML`, or `srcdoc`; Citry raises `ValueError` if it does.
+`outerHTML`, `srcdoc`, `ref`, `ref_for`, or `ref_key`; Citry raises
+`ValueError` if it does.
 
 A hook may change the value of a handler the template already has, so
 never put request data into that handler's value. Citry escapes the

@@ -67,6 +67,14 @@
 - In an interactive component (one with `js`) and in an Events `Render`,
   a `Markup` value that holds a `<noscript>` element now raises
   `ValueError`, also inside a `#c-ignore` or `v-pre` element.
+- `c-bind`, and an extension's `on_attrs_resolved` hook, can no longer
+  set `ref`, `ref_for` or `ref_key`; Citry raises `ValueError`.
+- `c-ref="..."` now raises `ValueError`, whatever its value. Write
+  `ref="name"` as plain text instead.
+- The built-in `element` component raises when Python passes it a `ref`.
+- A `<c-element>` with `c-is` or `c-bind` raises for `ref_for` and
+  `ref_key` written in its template. A plain text `ref="name"` on it
+  still works.
 
 ### Fixes
 
@@ -122,6 +130,10 @@
   a `<template>`, where those browsers read the `<noscript>` contents as
   markup. Citry now refuses the value on the server, and its browser code
   refuses it too.
+- Security: a `ref`, `ref_for` or `ref_key` attribute name or `c-ref`
+  value from data no longer reaches Vue. Vue stored the element in the
+  component's own `setup()` value of that name, so data could replace a
+  value that the component showed with `v-html`, and run script.
 - A malformed State token, or a malformed `cache/` or `asset/` URL,
   now gets a 403 or 404 instead of a server error when Citry's cache
   is a Django memcached backend.

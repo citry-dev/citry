@@ -1535,8 +1535,8 @@ def _reject_script_capable_from_attrs_hook(
     Raise `ValueError` when attribute hooks added a name the browser reads as code.
 
     A name already present was written in the template, so a hook may keep
-    it or change its value; a new `on*`, `innerHTML`, `outerHTML`, or
-    `srcdoc` name would come from the hook.
+    it or change its value; a new `on*`, `innerHTML`, `outerHTML`, `srcdoc`,
+    `ref`, `ref_for`, or `ref_key` name would come from the hook.
     """
     written = {str.lower(key) for key in before if isinstance(key, str)}
     for key in after:

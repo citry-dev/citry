@@ -615,10 +615,14 @@ def _resolve_element_attrs(renderer: Component, tag: str, attrs: dict[str, Any])
     # code called the element directly, so one check here covers every route.
     from citry.nodes import _reject_reserved_events_attr  # noqa: PLC0415
 
-    for key in contributions:
+    for key, value in contributions.items():
         name = validate_html_attr_name(key, where="<c-element>")
         _reject_reserved_events_attr(name, tag_name=tag)
-        reject_script_capable_attr_name(name, tag_name=tag, where="<c-element>", fix=C_ELEMENT_HANDLER_FIX)
+        # A plain text `ref` written on the tag in the template is the
+        # author's Vue template ref (Citry UI's CSidebar writes one); the tag
+        # records it, since by now it is just another kwarg.
+        if not (name == "ref" and _is_authored_ref(renderer, value)):
+            reject_script_capable_attr_name(name, tag_name=tag, where="<c-element>", fix=C_ELEMENT_HANDLER_FIX)
         reject_citry_marker_attr_name(name, tag_name=tag, where="<c-element>", fix=C_ELEMENT_MARKER_FIX)
     for value in contributions.values():
         # A nested-template attribute value resolves to a CitryRender, whose
@@ -671,6 +675,12 @@ def _resolve_element_attrs(renderer: Component, tag: str, attrs: dict[str, Any])
         if metadata.morph_mode == "ignore":
             resolved[_ELEMENT_MORPH_ATTR] = "ignore"
     return dict(resolved)
+
+
+def _is_authored_ref(renderer: Component, value: object) -> bool:
+    """Return whether `value` is the plain text `ref` the template wrote on this `<c-element>` tag."""
+    metadata = renderer._element_morph_metadata
+    return metadata is not None and metadata.authored_ref is not None and value == metadata.authored_ref
 
 
 def _format_resolved_element_attrs(resolved: dict[str, Any]) -> Markup:

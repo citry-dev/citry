@@ -79,6 +79,7 @@ from citry._nested_declarations import _schema_field_names
 from citry._vue import native_render as _native_render
 from citry._vue import native_walk as _native_walk
 from citry.attrs import (
+    _VUE_REF_ATTR_NAMES,
     C_ELEMENT_HANDLER_FIX,
     C_ELEMENT_MARKER_FIX,
     TEMPLATE_EMPTY_VALUE,
@@ -1255,6 +1256,16 @@ class ElementAttrsNode(Node):
             ),
             None,
         )
+        # A `c-ref` attribute lets Python data choose the `setup()` value
+        # that Vue replaces with this element, so it is refused the same way.
+        self._vue_ref_attr_key = next(
+            (
+                resolved_key
+                for attr, resolved_key in zip(attrs, self._resolved_keys, strict=True)
+                if attr.key.startswith("c-") and str.lower(resolved_key) in _VUE_REF_ATTR_NAMES
+            ),
+            None,
+        )
         self._has_runtime_events_candidate = self._has_spread or any(
             attr.key.startswith(("@c-", ":c-"))
             or attr.key.lower().startswith("data-cev-")
@@ -1336,6 +1347,16 @@ class ElementAttrsNode(Node):
             for key in resolved
         )
 
+    def _reject_vue_ref_attr(self) -> None:
+        """Raise `ValueError` for a `c-ref` attribute, whose value would choose a Vue ref name."""
+        name = self._vue_ref_attr_key
+        msg = (
+            f"c-{name} on <{self.tag_name}> lets a Python value choose which of the component's own values "
+            f'Vue replaces with this element. Write {name}="name" with a plain text value in the template '
+            "instead."
+        )
+        raise ValueError(msg)
+
     def _resolve(self, context: CitryContext) -> dict[str, Any]:
         """
         Collect the attribute contributions and merge them into one dict.
@@ -1349,6 +1370,8 @@ class ElementAttrsNode(Node):
         # so a `c-v-if`-style attribute fails on every page, with or without Vue.
         if self._vue_code_attr_key is not None:
             raise vue_code_error(self._vue_code_attr_key, tag_name=self.tag_name, origin="c-attr")
+        if self._vue_ref_attr_key is not None:
+            self._reject_vue_ref_attr()
         if not self._has_spread:
             items: list[tuple[str, Any]] = []
             for attr, resolved_key, template_empty in zip(
@@ -1631,6 +1654,8 @@ class _ResolvedComponentInputs:
     # on a component tag stays an ordinary client binding.
     client_bindings: tuple[ComponentTagClientBinding | RuntimeComponentEventBinding, ...]
     element_bindings: tuple[ComponentTagClientBinding, ...] = ()
+    # A `ref` written as plain text on a `<c-element>` tag (see `_ElementMorphMetadata.authored_ref`).
+    element_ref: str | None = None
 
 
 # ComponentNode._finish_render's default for "the key is not evaluated yet",
@@ -1864,6 +1889,7 @@ class ComponentNode(Node):
             or self._element_poll_bindings
             or self._element_control_bindings
             or self._element_runtime_events_candidate
+            or resolved.element_ref is not None
         ):
             element_morph_metadata = _ElementMorphMetadata(
                 key=evaluated_key,
@@ -1874,6 +1900,7 @@ class ComponentNode(Node):
                 control_bindings=self._element_control_bindings,
                 owner_name=type(context.component).__name__,
                 runtime_events_candidate=self._element_runtime_events_candidate,
+                authored_ref=resolved.element_ref,
             )
         element_type = CitryElement
         if child_cls._citry_dynamic_selector:
@@ -2022,6 +2049,7 @@ class ComponentNode(Node):
         element_attr_contributions: list[Mapping[str, Any]] = []
         pending_client_bindings: dict[str, _PendingComponentTagClientBinding] = {}
         pending_element_bindings: dict[str, _PendingComponentTagClientBinding] = {}
+        element_ref: str | None = None
         tag_name = f"c-{self.name}"
         component_boundary = self.name != "element"
         component = context.component
@@ -2076,6 +2104,18 @@ class ComponentNode(Node):
             if client_binding_kind is None:
                 return False
             if not component_boundary:
+                if client_binding_kind is ComponentTagClientBindingKind.REF_STATIC:
+                    # Vue stores the element in the component's value that `ref`
+                    # names, so only a plain text `ref` written on the tag may
+                    # choose it; `c-ref` and a spread would let data choose.
+                    if source is not ComponentTagClientBindingSource.DIRECT or type(attr) is not StaticHtmlAttr:
+                        raise RuntimeError(
+                            f"{resolved_key!r} on <c-element> came from Python data; write "
+                            f'{resolved_key}="name" directly in the template.'
+                        )
+                    nonlocal element_ref
+                    element_ref = raw_value if isinstance(raw_value, str) else None
+                    return False
                 if client_binding_kind not in {
                     ComponentTagClientBindingKind.EVENT,
                     ComponentTagClientBindingKind.PROP,
@@ -2311,6 +2351,7 @@ class ComponentNode(Node):
             kwargs=kwargs,
             client_bindings=client_bindings,
             element_bindings=element_bindings,
+            element_ref=element_ref,
         )
 
     def _collect_slots(self, context: CitryContext) -> dict[str, Slot]:
