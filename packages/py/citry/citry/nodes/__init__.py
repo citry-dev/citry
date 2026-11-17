@@ -1541,9 +1541,11 @@ class ElementKeyNode(Node):
         value = const_value(self.attr.resolve(context))
         if value is None:
             return ""
-        # The key is identity text, never markup: str() first, so a Markup
-        # key is escaped too, the same way the Vue render writes it.
-        return f' data-citry-key=":{escape(str(value))}"'
+        # The key is identity text, never markup, so it is escaped even when
+        # the value is trusted HTML. `str()` alone drops `__html__` from
+        # `Markup` but not from a Django `SafeString`, which `escape` would
+        # pass through unchanged, letting a `"` end the attribute.
+        return f' data-citry-key=":{escape(exact_str(str(value)))}"'
 
     def __repr__(self) -> str:
         return f"ElementKeyNode(expr={self.attr.expr!r}, used_vars={self.used_vars})"
@@ -1848,7 +1850,9 @@ class ComponentNode(Node):
             evaluated_key = None
             if self.key is not None:
                 key_value = const_value(self.key.resolve(context))
-                evaluated_key = None if key_value is None else str(key_value)
+                # A key is identity text. `str()` keeps a Django `SafeString`
+                # as its subclass, which the Vue path refuses as a key.
+                evaluated_key = None if key_value is None else exact_str(str(key_value))
         evaluated_key = cast("str | None", evaluated_key)
         element_key_target = self._metadata_locus == "element" or self.name == "element"
         element_morph_metadata = None
@@ -1948,7 +1952,8 @@ class ComponentNode(Node):
         # render collects the slots here, which gives {} for the empty body
         # every admitted call has, so that step has nothing to do.
         key_value = const_value(cast("ExprHtmlAttr", self.key).resolve(context))
-        evaluated_key = None if key_value is None else str(key_value)
+        # The same exact-str key text as `render` computes.
+        evaluated_key = None if key_value is None else exact_str(str(key_value))
         # render reads the selector flag after the key, to pick the element
         # type; a class that became a selector also leaves the run.
         if child_cls._citry_dynamic_selector:

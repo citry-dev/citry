@@ -119,6 +119,27 @@ def escape_to_str(value: Any) -> str:
     return _escape_to_str_impl(text).replace(_ESC, _ESC_REFERENCE)
 
 
+def exact_str(name: str) -> str:
+    """
+    Return the text of ``name`` as an exact ``str``.
+
+    A ``str`` subclass can override methods such as ``startswith``,
+    ``__eq__`` or ``__str__`` (a StrEnum member, say), or carry ``__html__``
+    (Django's ``SafeString``, whose ``str()`` returns itself). Text from
+    Python data goes through this first, so that every check after it reads
+    the real text and :func:`escape` and :func:`escape_to_str` escape it
+    instead of passing it through as trusted HTML.
+
+    Raises:
+        TypeError: When ``name`` is not a ``str``.
+
+    """
+    if type(name) is str:
+        return name
+    # A full slice copies the stored characters without calling any override.
+    return str.__getitem__(name, slice(None))
+
+
 # One character reference, the same pattern Python's html.unescape uses.
 _CHARREF = re.compile(r"&(#[0-9]+;?|#[xX][0-9a-fA-F]+;?|[^\t\n\f <&#;]{1,32};?)")
 
@@ -538,9 +559,14 @@ def decode_attribute_entities(html: str) -> str:
     URL. A numeric reference decodes as the browser decodes it, the same as
     in ``decode_character_references``, so ``a&#1;b`` keeps its U+0001
     between the two letters.
+
+    The result is always an exact ``str``, never a subclass. The attribute
+    writers escape it next, and a subclass that keeps ``__html__`` (Django's
+    ``SafeString``, whose ``str()`` returns itself) would pass through that
+    escape unchanged, so its ``"`` could end the attribute.
     """
     if "&" not in html:
-        return html
+        return exact_str(html)
     return _CHARREF.sub(_decode_attribute_charref, html)
 
 
@@ -610,6 +636,7 @@ __all__ = [
     "escape",
     "escape_attribute_value",
     "escape_to_str",
+    "exact_str",
     "script_json",
 ]
 

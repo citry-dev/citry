@@ -45,7 +45,7 @@ import wrapt
 
 from citry._i18n_directives import looks_like_i18n_binding
 from citry.util import html as _html
-from citry.util.html import Markup, decode_attribute_entities, escape_attribute_value, escape_to_str
+from citry.util.html import Markup, decode_attribute_entities, escape_attribute_value, escape_to_str, exact_str
 
 ClassValue: TypeAlias = "str | Mapping[str, bool] | Sequence[ClassValue]"
 """A ``class`` attribute value: string, ``{class_name: bool}`` dict, or a list of those."""
@@ -487,25 +487,6 @@ def is_unchanged_template_value(value: object, written: object) -> bool:
 def _is_valid_exact_html_attr_name(name: str) -> bool:
     """Cache validation for ordinary strings without retaining arbitrary objects."""
     return bool(name) and _INVALID_HTML_ATTR_NAME_CHAR.search(name) is None and "{#" not in name
-
-
-def exact_str(name: str) -> str:
-    """
-    Return the text of ``name`` as an exact ``str``.
-
-    A ``str`` subclass (a StrEnum member, say) can override methods such as
-    ``startswith``, ``__eq__`` or ``__str__``. A name from Python data goes
-    through this first, so that every check after it reads the real text
-    and none can be fooled by an override.
-
-    Raises:
-        TypeError: When ``name`` is not a ``str``.
-
-    """
-    if type(name) is str:
-        return name
-    # A full slice copies the stored characters without calling any override.
-    return str.__getitem__(name, slice(None))
 
 
 def validate_html_attr_name(name: Any, *, where: str = "HTML attributes") -> str:

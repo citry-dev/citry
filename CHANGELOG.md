@@ -14,6 +14,14 @@
   tags); a slot rendered with `str(slot)` after the page render; and a
   slot rendered in a worker thread. A component inside such markup now
   raises in those renders, as it already did elsewhere.
+- Security: Citry now escapes a Django `SafeString` (from `mark_safe`
+  or `format_html`) that a template writes into an HTML attribute, as
+  it already escaped `Markup`. Before, it was written unescaped by
+  `c-<name>` attributes, `c-bind`, `<c-element>` and `format_attrs()`,
+  and by `#c-key` in the three kinds of render listed above, so a `"` in
+  it could end the attribute and add another one, such as `onmouseover`.
+  A component with Vue bindings also no longer fails with a `TypeError`
+  on such a value.
 
 ## v1.0.0
 

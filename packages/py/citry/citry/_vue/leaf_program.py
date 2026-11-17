@@ -45,7 +45,7 @@ from citry.nodes import (
     _validate_introduced_variables,
 )
 from citry.util import html as _html_module
-from citry.util.html import escape_to_str, script_json
+from citry.util.html import escape_to_str, exact_str, script_json
 
 from . import native_render as _native_render
 from .capture import (
@@ -1834,13 +1834,14 @@ class _SimpleJsonCodegen:
                     lines.append(f"{pad}    {kwargs_name}[{input_name!r}] = {value_code}")
                 lines.append(f"{pad}    {key_name} = None")
                 if simple.expression is not None:
-                    # Exactly None opts out of a key, as in ComponentNode.render.
+                    # Exactly None opts out of a key, and the key text is an
+                    # exact str, as in ComponentNode.render.
                     lines.extend(
                         (
                             f"{pad}    {key_name} = _const_value("
                             f"{self._expr(simple.expression, local_names=local_names)})",
                             f"{pad}    if {key_name} is not None:",
-                            f"{pad}        {key_name} = str({key_name})",
+                            f"{pad}        {key_name} = _exact_str(str({key_name}))",
                         )
                     )
                 lines.extend(
@@ -1922,6 +1923,7 @@ class _SimpleJsonCodegen:
             "_ConstMapping": _ConstMapping,
             "_Const": Const,
             "_const_value": const_value,
+            "_exact_str": exact_str,
             "_VALUE_CONTEXT": _VALUE_CONTEXT,
             "_attach_error": _attach_error,
             "_evaluate": _evaluate,

@@ -28,7 +28,7 @@ from citry.citry_render import (
 )
 from citry.constness import const_value
 from citry.nodes import ElementAttrsNode, ElementKeyNode, ExprHtmlAttr, ExprNode, ForNode, Node
-from citry.util.html import Markup, decode_character_references
+from citry.util.html import Markup, decode_character_references, exact_str
 
 from .direct import (
     DirectProjectionRender,
@@ -870,7 +870,9 @@ class PreparedConstPrecomputeAdapter:
             if kind == "key" and isinstance(value, ExprHtmlAttr) and set(value.used_vars) <= const_names:
                 try:
                     resolved = const_value(value.resolve(context))
-                    resolved = None if resolved is None else str(resolved)
+                    # The key is sent to the browser as exact JSON text, the
+                    # same as the render-time key below.
+                    resolved = None if resolved is None else exact_str(str(resolved))
                 except Exception:  # noqa: BLE001 -- normal rendering owns the error
                     specialized.append((kind, value))
                 else:
@@ -1455,7 +1457,10 @@ def _resolve_element_metadata(
             key = const_value(value.resolve(context))
         else:
             raise TypeError("prepared element key metadata has an unsupported value")
-        resolved.append(("key", None if key is None else str(key)))
+        # A key is identity text. `exact_str` also turns a Django
+        # `SafeString`, whose `str()` keeps the subclass, into the exact str
+        # that the browser data accepts, as `str()` already does for `Markup`.
+        resolved.append(("key", None if key is None else exact_str(str(key))))
     return tuple(resolved)
 
 
