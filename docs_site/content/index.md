@@ -8,7 +8,7 @@ boost: 2
 <section class="landing-hero" markdown="1">
 <div class="landing-hero__grid" markdown="1">
 <div class="landing-hero__copy" markdown="1">
-# The complete Python frontend engineered for AI agents.
+# Safe, fast, and smart Python frontend engineered for <span class="landing-hero__tail">AI agents.</span>
 
 <p class="landing-hero__lede">
 Citry is a free, open source <strong>HTML-first frontend framework</strong> for Python web
@@ -175,6 +175,7 @@ readme_advisory_watch validator fails when they differ. -->
 <c-youtube-video
   video_id="d3nPqvDdNB0"
   title="50-minute Citry and Django code-along"
+  thumbnail="/static/img/video-thumbnails/d3nPqvDdNB0.jpg"
 />
 
 </section>

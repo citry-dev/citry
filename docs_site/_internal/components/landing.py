@@ -2167,16 +2167,31 @@ class LandingPage(Component):
         box-shadow: 0 0 1rem var(--landing-cyan);
       }
 
-      /* Sized for a sentence rather than a phrase: the cap holds it to three
-         lines beside the code panel instead of stacking one word per row. */
+      /* The headline reads as four short lines: "Safe, fast, and smart",
+         "Python frontend", "engineered for", "AI agents.". The browser makes
+         the first three breaks from the width, so the size and the cap are
+         tuned to them. At the largest size the column beside the code panel
+         still fits "Safe, fast, and smart" on one line; a larger size moves
+         "smart" down. The cap is 10.5 times the font size: wide enough for
+         that first line, too narrow for "Python frontend engineered", which
+         would fit when the code panel is hidden and the column is wide.
+         `text-wrap: auto` fills each line before starting the next. */
       .landing-content .landing-hero h1 {
-        max-width: 15ch;
+        max-width: 10.5em;
         margin: 0;
-        font-size: clamp(2.9rem, 5.6vw, 4.6rem);
+        font-size: clamp(2.7rem, 4.9vw, 4rem);
         font-weight: 700;
-        line-height: 1;
+        line-height: 1.1;
         letter-spacing: -0.03em;
-        text-wrap: balance;
+        text-wrap: auto;
+      }
+
+      /* "AI agents." always starts its own line, so the break lands before
+         the audience on every screen, and a phone never ends on a one-word
+         last line. The words sit in a span rather than after a line break so
+         the heading text stays one sentence for search and screen readers. */
+      .landing-content .landing-hero h1 .landing-hero__tail {
+        display: block;
       }
 
       .landing-hero__lede {
@@ -4186,8 +4201,11 @@ class LandingPage(Component):
           margin-top: 0;
         }
 
+        /* Small enough that "Safe, fast, and smart" fits one line on a phone
+           340px wide or more, so the headline keeps its four-line shape.
+           A narrower screen wraps it to five lines. */
         .landing-content .landing-hero h1 {
-          font-size: clamp(2.6rem, 11vw, 3.6rem);
+          font-size: clamp(2.4rem, 10vw, 3.6rem);
         }
 
         .landing-actions {

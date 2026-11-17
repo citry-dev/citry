@@ -1689,6 +1689,57 @@ A GitHub organisation profile picture and a repository social-preview image can
 only be uploaded through the web interface; there is no API for either.
 `docs/assets/citry-avatar.png` is the file to upload for the profile picture.
 
+### Add a video thumbnail
+
+`<c-youtube-video>` shows a play button until the visitor clicks it, and loads
+nothing from YouTube or Google before that. When you add a video or re-record
+one, save its thumbnail so the box shows a picture instead of a plain dark
+background. The video id is the part after `v=` in the video's watch URL:
+
+```bash
+uv run --no-sync python \
+  -m docs_site.scripts.youtube_thumbnail <video id>
+```
+
+The script saves YouTube's 1280 by 720 picture, or the 480 by 360 one when
+YouTube has no large version, as
+`docs_site/static/img/video-thumbnails/<video id>.jpg`. It prints the
+`thumbnail` value to copy into the component:
+
+```citry-html
+<c-youtube-video
+  video_id="d3nPqvDdNB0"
+  title="50-minute Citry and Django code-along"
+  thumbnail="/static/img/video-thumbnails/d3nPqvDdNB0.jpg"
+/>
+```
+
+The picture is a file in this repository because a thumbnail linked from
+`i.ytimg.com` (YouTube's image server) would send the visitor's IP address to
+Google when the page loads. So a `thumbnail` that does not start with
+`/static/` stops the docs build with an error that names the value. Without a
+`thumbnail`, the play button sits on the plain dark box.
+
+The script prints an error and writes nothing when any of these happens:
+
+- The video id is malformed.
+- The file already exists.
+- YouTube has no thumbnail, answers with something that is not a complete
+  JPEG, or the request fails (for example a rate limit).
+
+A re-recorded video has a new id, so it gets a new file:
+
+1. Run the script for the new id.
+2. Update `video_id` and `thumbnail` in every `<c-youtube-video>`
+   (`git grep -n "c-youtube-video" docs_site/content`).
+3. Keep the old file. `docs_site/versions/` holds a built copy of each
+   released docs version, and its pages load images from the shared `/static/`
+   folder. The `snapshot_static_files` check, which `python -m docs_site
+   versions-check` runs, fails when a file one of those pages loads is gone.
+
+Add `--replace` to the command only when the picture changed on YouTube for
+the same id and every docs version should show the new one.
+
 ## Rust-First Architecture
 
 ### Core Principle
