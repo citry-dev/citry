@@ -70,6 +70,10 @@ class Secret(Generic[T]):
 
     ```python
     token = API_TOKEN.get_secret_value().encode()
+    # An unset variable gives an empty token, which an empty
+    # input would match, so refuse it first.
+    if not token:
+        raise RuntimeError("API_TOKEN is not set")
     matches = hmac.compare_digest(token, sent.encode())
     ```
 

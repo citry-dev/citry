@@ -865,7 +865,8 @@ class CitrySettings:
     lint: LintSettings = field(default_factory=LintSettings)
     # Advanced/niche settings
     id_generator: Callable[[], str] | str | None = None
-    secret: str | list[str] | None = None
+    # Kept out of repr(), so logging or printing the settings never shows the key.
+    secret: str | list[str] | None = field(default=None, repr=False)
     event_result_resolvers: Sequence[Any] = ()
     event_payload_codecs: Sequence[Any] = ()
     security_csp: SecurityCspMode = "off"

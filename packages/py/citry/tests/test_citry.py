@@ -369,6 +369,12 @@ class TestSecretAndEventRegistries:
     def test_secret_tuple_is_stored_as_a_list(self):
         assert CitrySettings(secret=("k1", "k2")).secret == ["k1", "k2"]
 
+    def test_the_secret_is_left_out_of_the_settings_repr(self):
+        # Settings end up in logs and error reports, which must not hold the key.
+        settings = Citry(secret=["visible-new-key", "visible-old-key"]).settings
+        assert "visible-" not in repr(settings)
+        assert "visible-" not in str(settings)
+
     @pytest.mark.parametrize(
         ("secret", "where"),
         [

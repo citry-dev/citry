@@ -68,6 +68,7 @@
   ASCII letters, digits and `._~+-`, or is longer than 128 characters,
   is now written into the page, because a link to it would not load on
   every server and cache backend.
+- Printing or logging `CitrySettings` no longer shows the `secret`.
 
 ### Added
 
