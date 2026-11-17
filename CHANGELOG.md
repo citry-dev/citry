@@ -81,6 +81,10 @@
   that an earlier release signed, and to a State your own code filled
   with such a number. Keep such numbers out of State, or store them as
   text.
+- With `security_javascript="forbid"`, an Events handler's answer to a
+  plain form post, or to a link that opens a `GET` handler, now fails
+  with a 500 error when the page it renders needs JavaScript, as a
+  normal render does. Before, Citry served that page with a warning.
 
 ### Fixes
 
@@ -149,6 +153,12 @@
   earlier release, or a State your own code filled with such a number,
   now gets the same error, so keep such numbers out of State or store
   them as text.
+- Security: with `security_javascript="forbid"`, an Events handler's
+  answer to a plain form post, or to a link that opens a `GET` handler,
+  now fails with a 500 error when it needs JavaScript, as a normal render
+  does.
+  Citry used to serve it with only a warning, including a `javascript:`
+  link built from request data or an `onclick` written in the template.
 - A malformed State token, or a malformed `cache/` or `asset/` URL,
   now gets a 403 or 404 instead of a server error when Citry's cache
   is a Django memcached backend.

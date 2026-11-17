@@ -65,6 +65,7 @@ if TYPE_CHECKING:
 
     from citry.citry import Citry
     from citry.ext.events.extension import EventHandler
+    from citry.settings import SecurityJavascriptMode
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,17 +100,20 @@ class HtmlFragmentRenderEncoder:
 
     def encode(self, action: Render, target: str, context: RenderEncodingContext) -> dict[str, Any]:
         rendered = action.element.render() if isinstance(action.element, CitryElement) else action.element
+        compat = context.response_mode == "compat"
         return build_render_action(
             _html_wire_target(
                 target,
                 context.caller_render_id,
-                compat=context.response_mode == "compat",
+                compat=compat,
                 handler=context.handler.name,
             ),
             action.swap,
             rendered.serialize(
                 deps_strategy="fragment",
-                security_javascript="omit" if context.response_mode == "compat" else None,
+                # The wire path passes None so the app's own setting applies.
+                # A compat answer needs its own mode, see _compat_security_javascript.
+                security_javascript=_compat_security_javascript(rendered, context.citry) if compat else None,
                 csp_nonce=context.csp_nonce,
             ),
             delay=action.delay,
@@ -118,6 +122,29 @@ class HtmlFragmentRenderEncoder:
 
 
 HTML_RENDER_ENCODER = HtmlFragmentRenderEncoder()
+
+
+def _compat_security_javascript(rendered: CitryRender, routing_citry: Citry) -> SecurityJavascriptMode:
+    """
+    Pick the ``security_javascript`` mode for a Render in a no-JavaScript answer.
+
+    The no-JavaScript answer (the HTML page Citry sends back for a plain form
+    post, or for a link that opens a ``GET`` handler) has no Citry runtime to
+    run Citry's own scripts, so ``"omit"`` leaves them out. ``"omit"`` only
+    warns about the JavaScript a template writes, though, so an app that set
+    ``"forbid"`` keeps it here: the answer then fails with the same error as
+    the page render, instead of serving a ``javascript:`` link or an
+    ``onclick`` the app asked Citry to refuse.
+    """
+    # Both engines count: the one that serves the route, and the one that owns
+    # the rendered value (whose setting serialize() reads when given None). A
+    # component that belongs to another engine, such as one that forgot its
+    # ``citry = app`` line, must not drop the serving app's "forbid".
+    for engine in (routing_citry, rendered.owner_citry):
+        if engine is not None and engine.settings.security_javascript == "forbid":
+            return "forbid"
+    return "omit"
+
 
 # Compatibility responses consume the HTML before it reaches a client, but the
 # intermediate protocol action (which on_event_result hooks also see) still

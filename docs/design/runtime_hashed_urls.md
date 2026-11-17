@@ -131,7 +131,7 @@ docs and the tests. Paths are relative to
   JavaScript that adds a `<script>` for `citry.js` when `window.Citry.fragments`
   is missing. It sets `integrity`, `crossOrigin` and `nonce`. It is omitted
   under strict CSP (`:944-945`). Events `Render` results carry this loader
-  inside the result's HTML (`ext/events/results.py:108-115,400-403`).
+  inside the result's HTML (`ext/events/results.py:111-118,427-430`).
 - Integrity: `_serialization_security.py:361-385` computes a SHA-384 of the
   owned body on every render and sets `integrity` and
   `crossorigin="anonymous"`. `record_owned_dynamic` (`:256-275`) records the

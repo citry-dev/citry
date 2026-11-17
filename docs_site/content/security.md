@@ -1516,6 +1516,14 @@ email_html = page.render().serialize(
 
 Any other value raises `ValueError`.
 
+An Events handler can also answer a [plain form
+post](/events/routes/#keep-a-form-working-without-javascript), or a link
+that opens a `GET` handler, with an HTML page. That page has no Citry
+runtime, so Citry writes it with `"omit"` when the app's mode is
+`"allow"`, `"warn"` or `"omit"`. When the app's mode is `"forbid"`, the
+page keeps `"forbid"`, and a page that needs JavaScript fails with a 500
+error.
+
 Citry looks for these when it decides what needs JavaScript: Vue and Events
 bindings that are in use, executable scripts, native `on*` attributes,
 `javascript:` URLs (including the ones an SVG `<animate>` or `<set>` writes
