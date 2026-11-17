@@ -61,6 +61,13 @@
   stylesheets that Citry's browser code adds to the page, or the Citry
   script that a fragment adds, to another site, even when the page's
   CSP has no `base-uri`.
+- A malformed State token, or a malformed `cache/` or `asset/` URL,
+  now gets a 403 or 404 instead of a server error when Citry's cache
+  is a Django memcached backend.
+- A `local_files = "serve"` file whose extension holds anything but
+  ASCII letters, digits and `._~+-`, or is longer than 128 characters,
+  is now written into the page, because a link to it would not load on
+  every server and cache backend.
 
 ### Added
 

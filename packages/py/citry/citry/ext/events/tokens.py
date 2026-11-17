@@ -164,6 +164,10 @@ _UNKNOWN_VERSION_MSG = (
     "The state token was written in a token version this server does not know (for example by"
     " another Citry release during a deploy). Reload the page to get a fresh token."
 )
+# The shape that `secrets.token_urlsafe(32)` gives a server token's key:
+# 43 URL-safe base64 characters.
+_SERVER_KEY_SHAPE = re.compile(r"[A-Za-z0-9_-]{43}")
+
 _MALFORMED_MSG = (
     "The state token is malformed and could not be read. It may have been truncated or"
     " altered in transit; reload the page to get a fresh token."
@@ -914,6 +918,11 @@ def _load_server_payload(key: str, cache: CitryCache | None) -> dict[str, Any]:
         # A server-style token reached a component with no cache to load it from
         # (for example a signed-storage component being sent a token it never
         # minted). Treat it as invalid rather than crash.
+        raise InvalidStateError(_MALFORMED_MSG)
+    # The key comes from the request. Some backends raise for a long key or
+    # one with spaces (memcached through Django), which would answer 500, so
+    # only the shape Citry mints reaches the cache.
+    if _SERVER_KEY_SHAPE.fullmatch(key) is None:
         raise InvalidStateError(_MALFORMED_MSG)
     raw = cache.get(_state_cache_key(key))
     if raw is None:

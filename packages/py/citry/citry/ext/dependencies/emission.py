@@ -37,6 +37,7 @@ from citry.ext.dependencies.scripts import (
     get_component_script,
     get_script,
     has_component_asset,
+    servable_asset_extension,
     uses_component,
 )
 from citry.ext.dependencies.types import Dependency, Script, Style
@@ -1231,8 +1232,13 @@ def _maybe_serve_local_file(path: Path, comp_cls: type[Component]) -> _OwnedReso
     citry = comp_cls.citry
     if citry.mounted_prefix is None:
         return None
-    content = _read_asset(path)
     extension = path.suffix.lstrip(".")
+    # The asset route refuses a name that would not reach it unchanged from
+    # every browser and server, or that a cache backend could refuse, so
+    # such a file is inlined rather than linked to a URL that answers 404.
+    if not servable_asset_extension(extension):
+        return None
+    content = _read_asset(path)
     # The file is named by its content's hash, so the content in hand is
     # what the asset endpoint serves under that name.
     file_name = cache_asset(citry, content, extension)

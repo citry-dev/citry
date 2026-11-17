@@ -351,13 +351,15 @@ class TestMintGuards:
         # The key in a token is client input; it must only ever address
         # State entries, never another cache entry it happens to name.
         cache = InMemoryCache()
+        # A key of the minted shape, so the lookup happens and only the namespace stops it.
+        user_key = "u" * 43
         cache.set(
-            "user-key",
+            user_key,
             tokens._canonical_json({"v": 1, "c": CLASS_ID, "s": {"count": 1}, "t": 0, "x": None}),
             ttl=None,
         )
         with pytest.raises(StaleStateError):
-            verify_state_token("ces1.user-key", cls=FakeCounter, storage="server", secrets=[], cache=cache)
+            verify_state_token(f"ces1.{user_key}", cls=FakeCounter, storage="server", secrets=[], cache=cache)
 
     def test_missing_secret_raises_pointed_error(self):
         with pytest.raises(SigningSecretError) as exc_info:
@@ -1625,7 +1627,7 @@ class TestServerStorage:
     def test_cache_miss_stale_state_message(self):
         with pytest.raises(StaleStateError) as exc_info:
             verify_state_token(
-                "ces1.nonexistent-key", cls=FakeCounter, storage="server", secrets=[], cache=InMemoryCache()
+                "ces1." + "n" * 43, cls=FakeCounter, storage="server", secrets=[], cache=InMemoryCache()
             )
         assert exc_info.value.status == 409
         assert exc_info.value.code == "stale_state"
@@ -1684,7 +1686,7 @@ class TestServerStorage:
         # know is treated as gone, as in the signed path: the worker never
         # reads it, and the browser reports an out-of-date page.
         cache = InMemoryCache()
-        key = "some-server-key"
+        key = "k" * 43
         cache.set(
             f"citry:state:{key}",
             tokens._canonical_json({"v": 2, "c": CLASS_ID, "s": {"count": 1}, "t": 0, "x": None}),

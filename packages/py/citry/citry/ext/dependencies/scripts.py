@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 from dataclasses import dataclass
 from hashlib import md5, sha256
@@ -1002,6 +1003,31 @@ def cache_component_css_vars(comp_cls: type[Component], css_data: Mapping[str, o
     """
     capture = _cache_component_css_vars_capture(comp_cls, css_data)
     return None if capture is None else capture.variables_hash
+
+
+# A served file's extension becomes part of its URL, of the name a request
+# sends back, and of its cache key. Only these ASCII characters reach the
+# server as the page wrote them: a browser cuts the URL at `#` or `?`,
+# turns `\` into `/`, and sends other characters percent-encoded, which
+# some servers hand on undecoded (a WSGI server gives the path as latin-1).
+# None of them is a space or control character, which some backends refuse
+# in a key (memcached through Django) and would answer 500 instead of 404.
+# Memcached allows keys of up to 250 bytes, and 128 characters of extension
+# keep the whole key, with Citry's prefix and a host framework's own
+# prefix, below that.
+_ASSET_EXTENSION_SHAPE = re.compile(r"[A-Za-z0-9._~+-]{0,128}")
+_ASSET_HASH_SHAPE = re.compile(r"[0-9a-f]{12}")
+
+
+def servable_asset_extension(extension: str) -> bool:
+    """Return whether a local file with this extension can be linked as ``asset/<hash>.<extension>``."""
+    return _ASSET_EXTENSION_SHAPE.fullmatch(extension) is not None
+
+
+def servable_asset_name(file_name: str) -> bool:
+    """Return whether ``file_name`` has the ``<12 hex>.<extension>`` shape that ``cache_asset`` writes."""
+    content_hash, dot, extension = file_name.partition(".")
+    return bool(dot) and _ASSET_HASH_SHAPE.fullmatch(content_hash) is not None and servable_asset_extension(extension)
 
 
 def gen_asset_cache_key(file_name: str) -> str:

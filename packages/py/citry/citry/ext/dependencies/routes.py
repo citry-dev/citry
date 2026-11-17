@@ -23,6 +23,7 @@ Handlers are framework-neutral (they return ``RouteResponse``); the
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -35,6 +36,7 @@ from citry.ext.dependencies.scripts import (
     get_cached_component_script,
     get_component_script,
     get_script,
+    servable_asset_name,
 )
 from citry.util.routing import RouteResponse, URLRoute
 
@@ -62,6 +64,14 @@ def asset_content_type(extension: str) -> str:
 
 # A miss may succeed later, once a worker stores the file, so it is never kept.
 _NO_STORE = (("Cache-Control", "no-store"),)
+# A URL hash becomes part of a cache key. Citry names a class version with 12
+# hex characters and a `css_data()` stylesheet with 32; up to 64 leaves room
+# for a full sha256 without letting a long name through. Checking the shape
+# before any lookup keeps a long name, or one with a space or control
+# character, from reaching a backend that raises for it (memcached through
+# Django), which would answer 500 instead of 404. A served file's name is
+# checked the same way, by `servable_asset_name`.
+_SCRIPT_HASH_SHAPE = re.compile(r"[0-9a-f]{1,64}")
 
 RUNTIME_PATH = "citry.js"
 """Stable route path of the client runtime (under the mounted prefix). Pages link the hashed URL instead."""
@@ -116,7 +126,7 @@ def dependency_routes(citry: Citry) -> list[URLRoute]:
         vars_hash: str | None = None,
     ) -> RouteResponse:
         content_type = _CONTENT_TYPES.get(script_type)
-        if content_type is None:
+        if content_type is None or (vars_hash is not None and _SCRIPT_HASH_SHAPE.fullmatch(vars_hash) is None):
             return RouteResponse(status=404, headers=_NO_STORE)
 
         try:
@@ -158,6 +168,8 @@ def dependency_routes(citry: Citry) -> list[URLRoute]:
         return resource.revalidated_response(request)
 
     def serve_asset(request: RouteRequest | None, *, file_name: str) -> RouteResponse:  # noqa: ARG001 - unused
+        if not servable_asset_name(file_name):
+            return RouteResponse(status=404, headers=_NO_STORE)
         key = gen_asset_cache_key(file_name)
         content = citry.cache.get(key)
         if content is None:
