@@ -882,6 +882,29 @@
     },
     enumerable: true,
   });
+  // The tags a dynamic element may not take, the same list the server refuses
+  // (`_REFUSED_DYNAMIC_ELEMENT_TAGS` in citry/util/html.py): the browser runs or loads them, reads
+  // their contents as raw text, or changes how it reads the rest of the page.
+  const REFUSED_DYNAMIC_ELEMENT_TAGS = new Set(["applet", "base", "embed", "frame", "frameset", "iframe", "link",
+    "meta", "noembed", "noframes", "noscript", "object", "plaintext", "script", "style", "template", "xmp"]);
+  // Inside these the browser reads elements such as <style> or <noscript> as markup, so trusted HTML
+  // that stays inert in HTML can run (`FOREIGN_CONTENT_TAGS` in citry/util/html.py). Inside a MathML
+  // text element such as <mi>, `mglyph` and `malignmark` make the browser read their contents as MathML again.
+  const FOREIGN_CONTENT_TAGS = new Set(["malignmark", "math", "mglyph", "svg"]);
+  // Vue inserts an opaque HTML block with the HTML parser, which reads it as HTML even under a
+  // selected <svg> or <math>. The server refuses such a block there; refuse it here too, so a
+  // definition that slipped past the server cannot place one.
+  function refuseOpaqueHtmlUnderForeignElement(tag, children) {
+    const pending = Array.isArray(children) ? [...children] : [];
+    while (pending.length !== 0) {
+      const child = pending.pop();
+      if (child === null || typeof child !== "object") continue;
+      if (Array.isArray(child)) { pending.push(...child); continue; }
+      if (child.type === opaqueHtmlComponent || child.type === V.Static)
+        throw new Error("an opaque HTML block cannot sit inside a dynamic <" + tag + "> element");
+      if (Array.isArray(child.children)) pending.push(...child.children);
+    }
+  }
   function runtimeForDynamicElements(entries) {
     if (!Array.isArray(entries)) throw new TypeError("dynamicElements must be an array");
     if (entries.length === 0) return compilerRuntime;
@@ -891,7 +914,7 @@
       if (Object.keys(entry).sort().join(",") !== "alias,sourceEnd,sourceStart,tag" ||
           typeof entry.alias !== "string" || !/^citry-dynamic-[0-9a-f]{16}$/.test(entry.alias) ||
           typeof entry.tag !== "string" || !/^[A-Za-z][A-Za-z0-9_.-]*$/.test(entry.tag) ||
-          ["script", "style", "template"].includes(entry.tag.toLowerCase()) ||
+          REFUSED_DYNAMIC_ELEMENT_TAGS.has(entry.tag.toLowerCase()) ||
           !Number.isInteger(entry.sourceStart) || !Number.isInteger(entry.sourceEnd) ||
           entry.sourceStart < 0 || entry.sourceEnd <= entry.sourceStart || aliases.has(entry.alias))
         throw new TypeError("invalid dynamic element entry");
@@ -903,6 +926,7 @@
         if (typeof type === "string" && type.startsWith("citry-dynamic-")) {
           if (!aliases.has(type)) throw new Error("unknown prepared dynamic element alias: " + type);
           type = aliases.get(type);
+          if (FOREIGN_CONTENT_TAGS.has(type.toLowerCase())) refuseOpaqueHtmlUnderForeignElement(type, children);
         }
         return compilerCreateVNode(type, props, children, patchFlag, dynamicProps);
       }});
@@ -1071,7 +1095,7 @@
       if (Object.keys(item).sort().join(",") !== "alias,sourceEnd,sourceStart,tag" ||
           typeof item.alias !== "string" || !/^citry-dynamic-[0-9a-f]{16}$/.test(item.alias) ||
           typeof item.tag !== "string" || !/^[A-Za-z][A-Za-z0-9_.-]*$/.test(item.tag) ||
-          ["script", "style", "template"].includes(item.tag.toLowerCase()) || aliases.has(item.alias) ||
+          REFUSED_DYNAMIC_ELEMENT_TAGS.has(item.tag.toLowerCase()) || aliases.has(item.alias) ||
           !Number.isInteger(item.sourceStart) || !Number.isInteger(item.sourceEnd) ||
           item.sourceStart < 0 || item.sourceEnd <= item.sourceStart)
         throw new TypeError("invalid dynamic element entry");

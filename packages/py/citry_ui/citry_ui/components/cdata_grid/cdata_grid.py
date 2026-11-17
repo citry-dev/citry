@@ -14,6 +14,7 @@ from citry_ui.components._attrs import (
     is_vue_directive_attribute,
     merge_root_attrs,
     reject_citry_ui_reserved_attr,
+    reject_data_item_vue_name,
 )
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
@@ -276,6 +277,8 @@ def _attrs(
     owned: frozenset[str],
     class_: CClassValue | None = None,
     style: CStyleValue | None = None,
+    *,
+    data_item: bool = False,
 ) -> dict[str, object]:
     if value is not None and not isinstance(value, Mapping):
         raise TypeError(f"{owner} must be a mapping or None, got {value!r}.")
@@ -285,6 +288,11 @@ def _attrs(
         if not isinstance(key, str):
             raise TypeError(f"{owner} requires string keys, got {key!r}.")
         reject_citry_ui_reserved_attr(key, attr_value, where=owner)
+        # Rows, cells and columns are rendered by Vue in the browser, where a
+        # data-chosen `is` would name a custom element and `key` would clash
+        # with the row key this component sets.
+        if data_item:
+            reject_data_item_vue_name(key, where=owner)
         # A Vue directive could rebind an owned grid attribute, add listeners,
         # or change the table structure, so none may arrive through Python data.
         if is_vue_directive_attribute(key):
@@ -475,8 +483,12 @@ class CDataGrid(LibraryComponent):
                 _ResolvedColumn(
                     column=raw,
                     index=index,
-                    header_attrs=_attrs(f"CDataGrid column {raw.key!r} header_attrs", raw.header_attrs, _CELL_OWNED),
-                    cell_attrs=_attrs(f"CDataGrid column {raw.key!r} cell_attrs", raw.cell_attrs, _CELL_OWNED),
+                    header_attrs=_attrs(
+                        f"CDataGrid column {raw.key!r} header_attrs", raw.header_attrs, _CELL_OWNED, data_item=True
+                    ),
+                    cell_attrs=_attrs(
+                        f"CDataGrid column {raw.key!r} cell_attrs", raw.cell_attrs, _CELL_OWNED, data_item=True
+                    ),
                     sort_direction=direction,
                     sort_priority=priority,
                     editor_options=_editor_options(raw),
@@ -531,7 +543,7 @@ class CDataGrid(LibraryComponent):
                 raise ValueError(
                     f"CDataGrid row {raw.key!r} cells do not match columns; missing={missing!r}, extra={extra!r}."
                 )
-            row_attrs = _attrs(f"CDataGrid row {raw.key!r} attrs", raw.attrs, _ROW_OWNED)
+            row_attrs = _attrs(f"CDataGrid row {raw.key!r} attrs", raw.attrs, _ROW_OWNED, data_item=True)
             cells: list[_ResolvedCell] = []
             for column in columns:
                 raw_cell = raw.cells[column.column.key]
@@ -542,7 +554,10 @@ class CDataGrid(LibraryComponent):
                     )
                 editable = column.column.editable if cell.editable is None else cell.editable
                 cell_attrs = _attrs(
-                    f"CDataGrid row {raw.key!r}, column {column.column.key!r} attrs", cell.attrs, _CELL_OWNED
+                    f"CDataGrid row {raw.key!r}, column {column.column.key!r} attrs",
+                    cell.attrs,
+                    _CELL_OWNED,
+                    data_item=True,
                 )
                 cells.append(
                     _ResolvedCell(

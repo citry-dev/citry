@@ -15,6 +15,7 @@ from citry_ui.components._attrs import (
     is_vue_directive_attribute,
     merge_root_attrs,
     reject_citry_ui_reserved_attr,
+    reject_data_item_vue_name,
 )
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
@@ -202,6 +203,8 @@ def _attrs(
     owned: frozenset[str],
     class_: CClassValue | None = None,
     style: CStyleValue | None = None,
+    *,
+    data_item: bool = False,
 ) -> dict[str, object]:
     if value is not None and not isinstance(value, Mapping):
         raise TypeError(f"{owner} must be a mapping or None, got {value!r}.")
@@ -211,6 +214,11 @@ def _attrs(
         if not isinstance(key, str):
             raise TypeError(f"{owner} requires string keys, got {key!r}.")
         reject_citry_ui_reserved_attr(key, attr_value, where=owner)
+        # Rows, cells and columns are rendered by Vue in the browser, where a
+        # data-chosen `is` would name a custom element and `key` would clash
+        # with the row key this component sets.
+        if data_item:
+            reject_data_item_vue_name(key, where=owner)
         # A Vue directive could rebind an owned attribute, replace a row or
         # cell's structure, or add a listener, so none may arrive through
         # Python data. `owner` already names the exact mapping, such as one
@@ -332,8 +340,10 @@ class CTreeGrid(LibraryComponent):
                 _Column(
                     raw,
                     index,
-                    _attrs(f"CTreeGrid Column {raw.key!r} header_attrs", raw.header_attrs, _CELL_OWNED),
-                    _attrs(f"CTreeGrid Column {raw.key!r} cell_attrs", raw.cell_attrs, _CELL_OWNED),
+                    _attrs(
+                        f"CTreeGrid Column {raw.key!r} header_attrs", raw.header_attrs, _CELL_OWNED, data_item=True
+                    ),
+                    _attrs(f"CTreeGrid Column {raw.key!r} cell_attrs", raw.cell_attrs, _CELL_OWNED, data_item=True),
                 )
             )
         expanded = tuple(cast("str", item) for item in _sequence("CTreeGrid expanded", kwargs.expanded))
@@ -387,11 +397,12 @@ class CTreeGrid(LibraryComponent):
                                     f"CTreeGrid Row {raw.key!r} Cell {column.source.key!r} attrs",
                                     cell.attrs,
                                     _CELL_OWNED,
+                                    data_item=True,
                                 ),
                             ),
                         )
                     )
-                row_attrs = _attrs(f"CTreeGrid Row {raw.key!r} attrs", raw.attrs, _ROW_OWNED)
+                row_attrs = _attrs(f"CTreeGrid Row {raw.key!r} attrs", raw.attrs, _ROW_OWNED, data_item=True)
                 is_expanded = raw.key in expanded
                 flat.append(
                     _Row(

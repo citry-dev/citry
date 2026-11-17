@@ -36,6 +36,8 @@ class-definition time, so the built-ins cannot be shared).
 
 from __future__ import annotations
 
+import re
+import weakref
 from typing import TYPE_CHECKING, Any, cast
 
 from citry.attrs import (
@@ -57,16 +59,23 @@ from citry.client_directives import (
 from citry.component import Component
 from citry.component_registry import _VALID_NAME_RE, NotRegistered
 from citry.constness import _ConstMapping, _restore_const_identities, const_value
-from citry.util.html import _REFUSED_DYNAMIC_ELEMENT_TAGS, Markup
+from citry.util.html import _REFUSED_DYNAMIC_ELEMENT_TAGS, FOREIGN_CONTENT_TAGS, Markup
 from citry_core.template_parser import HTML_VOID_ELEMENTS
 
 if TYPE_CHECKING:
+    from collections.abc import Generator, Iterable, Sequence
+
     from citry.citry import Citry
     from citry.slots import Slot
 
 
 _ELEMENT_KEY_ATTR = "data-citry-key"
+# A `<script` start tag in template text, in any letter case.
+_SCRIPT_START_RE = re.compile(r"<script[\s/>]", re.IGNORECASE)
 _ELEMENT_MORPH_ATTR = "data-citry-morph"
+# Every `element` built-in class, one per Citry instance. The body check skips
+# a nested element's own tags only for these, never for a user component.
+_DYNAMIC_ELEMENT_CLASSES: weakref.WeakSet[type[Component]] = weakref.WeakSet()
 
 
 class _DynamicSelectorElement(CitryElement):
@@ -195,6 +204,14 @@ def make_dynamic_element(citry_instance: Citry) -> type[Component]:
             tag = const_value(_pop_html_attr(attrs, "is"))
             _validate_tag_name(tag)
             _reject_named_fills(self.raw_slots)
+            # on_render reads this once the body has rendered, to check what
+            # the body holds under a selected <svg> or <math>.
+            self._selected_tag = tag
+            # The node path (the older node classes, used when a slot renders
+            # outside the page render) takes the branch below that records the
+            # opening and closing tags it writes, so the check can tell them
+            # from the body. The prepared branch writes typed parts instead.
+            self._node_path_tags: tuple[str, str] | None = None
 
             resolved_attrs = _resolve_element_attrs(self, tag, attrs)
 
@@ -302,12 +319,235 @@ def make_dynamic_element(citry_instance: Citry) -> type[Component]:
                     msg = f"<c-element>: void element '{tag}' cannot have children."
                     raise ValueError(msg)
                 return {"open": Markup("<{}{}/>").format(tag, attr_str), "close": ""}
-            return {
-                "open": Markup("<{}{}>").format(tag, attr_str),
-                "close": Markup("</{}>").format(tag),
-            }
+            open_tag = Markup("<{}{}>").format(tag, attr_str)
+            close_tag = Markup("</{}>").format(tag)
+            # These two values are the element's own tags, not its body. The
+            # foreign-content check (`reject_trusted_html_in_selected_foreign_element`)
+            # skips exactly these, first and last, so a plain-text body under a
+            # selected <svg> still renders here.
+            self._node_path_tags = (str.__str__(open_tag), str.__str__(close_tag))
+            return {"open": open_tag, "close": close_tag}
 
+        def on_render(self) -> Any:
+            # Only a selected <svg> or <math> (or a MathML `mglyph` or
+            # `malignmark`, see FOREIGN_CONTENT_TAGS) changes how the browser
+            # reads the body, so every other tag skips the after-render check.
+            tag = getattr(self, "_selected_tag", None)
+            if not isinstance(tag, str) or tag.lower() not in FOREIGN_CONTENT_TAGS:
+                return None
+            # The check runs while the page renders, before Citry picks the
+            # static or the Vue writer, so no writer and no fallback between
+            # them can skip it.
+            return _check_foreign_body_after_render(tag, self)
+
+    _DYNAMIC_ELEMENT_CLASSES.add(DynamicElement)
     return DynamicElement
+
+
+def _check_foreign_body_after_render(
+    tag: str, element: Component
+) -> Generator[None, tuple[CitryRender | None, Exception | None], None]:
+    """Render the template as usual, then check the finished body of a selected `<svg>` or `<math>`."""
+    result, error = yield
+    # A failed render already carries its own error; let it bubble.
+    if error is None and result is not None:
+        # template_data sets it during the render, so read it only afterwards.
+        own_tags = getattr(element, "_node_path_tags", None)
+        reject_trusted_html_in_selected_foreign_element(tag, result.parts, node_path_tags=own_tags)
+
+
+def _node_path_element_body(
+    parts: Sequence[object], own_tags: tuple[str, str]
+) -> tuple[Sequence[object], Component | None] | None:
+    """
+    Split a `<c-element>` render from the node path into its body and the component that wrote the body.
+
+    The node path writes the element as three parts: its opening tag, its
+    default slot (the body), and its closing tag. Each tag is a `Markup`
+    value, or, once the element's own template has been compiled for the
+    page render, a `PreparedTrustedHtmlValue`. Return `None` for any other
+    shape, so the caller checks every part, tags included, and refuses
+    rather than guesses.
+    """
+    from citry._vue.direct import DirectSlotRender  # noqa: PLC0415
+
+    if len(parts) != 3:
+        return None
+    opening, body, closing = parts
+    # Compare the exact type and text, and only at the first and last place,
+    # so only the two values template_data wrote match, never a body value.
+    if _own_tag_text(opening) != own_tags[0] or _own_tag_text(closing) != own_tags[1]:
+        return None
+    # The body is the default slot, rendered in the scope of the template
+    # that wrote the `<c-element>` tag. Any other shape is not this layout.
+    if (
+        not isinstance(body, CitryRender)
+        or isinstance(body, DirectSlotRender)
+        or body.frame.is_component_root
+        or body.frame.is_transparent_root
+    ):
+        return None
+    return body.parts, body.context.component
+
+
+def _own_tag_text(part: object) -> str | None:
+    """Return the HTML of a part that can hold one of the element's own tags, or `None` for any other part."""
+    from citry._vue.capture import PreparedTrustedHtmlValue  # noqa: PLC0415
+
+    # Exact types only: a subclass is a value from somewhere else.
+    if type(part) is Markup:
+        return str.__str__(part)
+    if type(part) is PreparedTrustedHtmlValue:
+        return part.html
+    return None
+
+
+def reject_trusted_html_in_selected_foreign_element(
+    tag: str, parts: Iterable[object], *, node_path_tags: tuple[str, str] | None = None
+) -> None:
+    """
+    Raise `ValueError` when the body of a data-selected `<svg>` or `<math>` holds HTML Citry does not escape.
+
+    Inside `<svg>` or `<math>`, and inside `mglyph` or `malignmark` within a
+    MathML text element (`FOREIGN_CONTENT_TAGS`), the browser reads
+    `<style>`, `<title>`, `<textarea>`, `<noscript>` and the other elements
+    whose contents HTML keeps as text as ordinary elements, so trusted HTML
+    that stays inert inside a `<div>` can run there. A tag name chosen by
+    data must not put trusted HTML where the browser reads it this way, so
+    the body may hold only what the template wrote: text, escaped `{{ }}`
+    values, plain elements, nested `<c-element>` tags, and the control flow
+    around them. A `Markup` value
+    that holds a tag, a `<c-raw>` block, a child component, and slot content
+    are refused, because each can carry HTML that Citry writes as is. So is
+    a `<script>` the template wrote, because inside `<svg>` the browser
+    decodes the escaped values in it. The
+    Vue writer refuses `Markup` and `<c-raw>` under any `<svg>` or `<math>`.
+
+    Every render path runs this one check, from the element's `on_render`
+    hook while the page renders, before Citry picks the static or the Vue
+    writer: the ordinary render, `simple=True`, the component cache, loops,
+    components with `js`, and an Events `Render`. The older node classes
+    (the node path, used for example by `str(slot)` after the page render
+    or a slot rendered in a worker thread) write the element's own tags as
+    trusted HTML values; `node_path_tags` names those two values so the
+    check skips them and reads only the body.
+    """
+    from citry._vue.capture import (  # noqa: PLC0415
+        PreparedDynamicElementClose,
+        PreparedDynamicElementOpen,
+        PreparedElementClose,
+        PreparedElementOpen,
+        PreparedSourceText,
+        PreparedStaticRun,
+        PreparedTextValue,
+        PreparedTrustedHtmlValue,
+        PreparedVerbatimHtml,
+    )
+    from citry._vue.direct import DirectSlotRender  # noqa: PLC0415
+
+    # Template-written structure and escaped values: safe under any parent.
+    template_parts = (
+        PreparedSourceText,
+        PreparedTextValue,
+        PreparedElementOpen,
+        PreparedElementClose,
+        PreparedStaticRun,
+        PreparedDynamicElementOpen,
+        PreparedDynamicElementClose,
+    )
+    # The element's own output is its opening, its body (the default slot,
+    # which is the fill written in the calling template), and its closing.
+    top: Sequence[object] = parts if isinstance(parts, list | tuple) else list(parts)
+    # On the node path the element's own tags arrive as trusted HTML, and
+    # slot content arrives as an ordinary render from the component that
+    # wrote the fill, so the check needs the component that wrote the body.
+    on_node_path = node_path_tags is not None
+    owner: Component | None = None
+    if node_path_tags is not None:
+        split = _node_path_element_body(top, node_path_tags)
+        # An unexpected shape keeps the tags in the walk, so they are refused.
+        if split is not None:
+            top, owner = split
+    pending: list[object] = []
+    for part in top:
+        pending.extend(part.parts if isinstance(part, DirectSlotRender) else (part,))
+    while pending:
+        part = pending.pop()
+        if isinstance(part, PreparedElementOpen) and part.tag.lower() == "script":
+            # Under <svg> the browser decodes character references inside
+            # <script>, so an escaped `{{ }}` value there could leave a
+            # JavaScript string; HTML keeps them as written.
+            what = "a <script> element"
+        elif type(part) is str and _SCRIPT_START_RE.search(part):
+            # The older node classes write the template's own tags as plain
+            # text, so a <script> the template wrote shows up here.
+            what = "a <script> element"
+        elif isinstance(part, template_parts) or type(part) is str:
+            # A plain `str` is template text: the older node classes, used for
+            # example when an extension renders a template's foreign spans,
+            # write the template's own tags this way.
+            continue
+        elif isinstance(part, CitryRender):
+            nested = part.parts
+            # A nested <c-element> renders as its opening, its body (the fill
+            # written in this same template), and its closing.
+            if (
+                part.frame.is_transparent_root
+                and nested
+                and isinstance(nested[0], PreparedDynamicElementOpen)
+                and isinstance(nested[-1], PreparedDynamicElementClose)
+            ):
+                for inner in nested:
+                    pending.extend(inner.parts if isinstance(inner, DirectSlotRender) else (inner,))
+                continue
+            # The same nested <c-element> on the node path: its own tags
+            # around a body written by the same template.
+            nested_component = part.context.component
+            inner_tags = getattr(nested_component, "_node_path_tags", None)
+            if (
+                on_node_path
+                and part.frame.is_transparent_root
+                and type(nested_component) in _DYNAMIC_ELEMENT_CLASSES
+                and inner_tags is not None
+            ):
+                inner_split = _node_path_element_body(nested, inner_tags)
+                if inner_split is not None and inner_split[1] is owner:
+                    pending.extend(inner_split[0])
+                    continue
+            if isinstance(part, DirectSlotRender):
+                what = "slot content (a <c-slot> in the body)"
+            elif part.frame.is_component_root or part.frame.is_transparent_root:
+                what = "a child component"
+            elif on_node_path and part.context.component is not owner:
+                # A fill renders in the scope of the component that wrote it,
+                # so a render owned by another component is slot content.
+                what = "slot content (a <c-slot> in the body)"
+            else:
+                # Control flow such as <c-if> or <c-for> nests its output.
+                pending.extend(nested)
+                continue
+        elif isinstance(part, (PreparedTrustedHtmlValue, Markup)):
+            html = part.html if isinstance(part, PreparedTrustedHtmlValue) else str.__str__(part)
+            # HTML without a '<' is text with character references, which
+            # reads the same inside <svg> as inside a <div>. The older node
+            # classes also write each escaped `{{ }}` value as such a Markup.
+            if "<" not in html:
+                continue
+            what = "a Markup value (trusted HTML from Python)"
+        elif isinstance(part, PreparedVerbatimHtml):
+            what = "a <c-raw> block"
+        else:
+            # Anything else is a child component not written out yet, a leaf
+            # program, or HTML this check cannot read: refuse it rather than guess.
+            what = "content Citry cannot check"
+        msg = (
+            f"<c-element> rendered <{tag}> from a tag name chosen at render time, and its body holds {what}. "
+            f"Inside <{tag}> the browser reads <style>, <textarea>, <noscript> and similar elements as markup, "
+            "so HTML that is inert elsewhere can run there. Write the "
+            f"<{tag}> element directly in the template (for example in a c-if branch), or keep the body to "
+            "text, {{ }} values, and elements other than <script> written in the template."
+        )
+        raise ValueError(msg)
 
 
 def _pop_html_attr(attrs: dict[str, Any], name: str) -> Any:

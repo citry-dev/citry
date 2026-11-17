@@ -53,6 +53,17 @@
   deploy the new secret as the second entry first, and move it to the
   front in a later deploy. A worker that does not hold the new secret
   yet refuses the State and stylesheet URLs made with it.
+- When a `<c-element>` gets `svg` or `math` from `c-is` or `c-bind`, its
+  body may hold text, `{{ }}` values, nested `<c-element>` tags, and
+  elements written in the template. Citry now raises `ValueError` for a
+  `Markup` value that holds a tag, and for a `<c-raw>` block, a child
+  component, a `<c-slot>`, or a `<script>` element in that body. Write the
+  `<svg>` or `<math>` element directly in the template when it needs such
+  content, for example in a `c-if` branch.
+- Any `<c-slot>` in such a body raises, also one that only passes harmless
+  content along. So `<c-i18n>` with a `tag` of `svg`, and Citry UI layout
+  components given `attrs={"is": "svg"}`, raise when they have content.
+- The same rule applies to the MathML tags `mglyph` and `malignmark`.
 
 ### Fixes
 
@@ -97,6 +108,11 @@
 - Security: Citry no longer serves a `js_data()` script that an earlier
   release left in a shared cache. With `secret` set, it also no longer
   serves a `css_data()` stylesheet left there.
+- Security: a `<c-element>` whose tag comes from data can no longer
+  place trusted HTML inside `<svg>` or `<math>`, where the browser reads
+  elements such as `<style>` and `<noscript>` as markup. A `Markup` value
+  that is harmless in HTML, such as sanitizer output, could run script
+  there.
 - A malformed State token, or a malformed `cache/` or `asset/` URL,
   now gets a 403 or 404 instead of a server error when Citry's cache
   is a Django memcached backend.
@@ -105,6 +121,8 @@
   is now written into the page, because a link to it would not load on
   every server and cache backend.
 - Printing or logging `CitrySettings` no longer shows the `secret`.
+- Citry's browser code now refuses the same tags for a `<c-element>` as
+  the server does, such as `iframe` and `noscript`.
 
 ### Added
 

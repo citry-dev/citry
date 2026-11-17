@@ -13,6 +13,7 @@ from citry_ui.components._attrs import (
     is_vue_directive_attribute,
     merge_root_attrs,
     reject_citry_ui_reserved_attr,
+    reject_data_item_vue_name,
 )
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
@@ -303,6 +304,8 @@ class CTable(LibraryComponent):
     def _validated_attrs(
         value: Mapping[str, object] | None,
         location: str,
+        *,
+        data_item: bool = False,
     ) -> dict[str, object]:
         if value is not None and not isinstance(value, Mapping):
             msg = f"{location} must be a mapping or None, got {value!r}."
@@ -319,6 +322,11 @@ class CTable(LibraryComponent):
                 )
                 raise ValueError(msg)
             reject_citry_ui_reserved_attr(key, attr_value, where=location)
+            # Rows, cells and columns usually come from data, and the same maps
+            # on CDataGrid and CTreeGrid reach Vue, so the names Vue reads
+            # itself are refused here too, for one rule across the tables.
+            if data_item:
+                reject_data_item_vue_name(key, where=location)
         return copied
 
     @classmethod
@@ -357,14 +365,17 @@ class CTable(LibraryComponent):
             header_attrs = cls._validated_attrs(
                 column.header_attrs,
                 f"CTable column {column.key!r} header_attrs",
+                data_item=True,
             )
             cell_attrs = cls._validated_attrs(
                 column.cell_attrs,
                 f"CTable column {column.key!r} cell_attrs",
+                data_item=True,
             )
             footer_attrs = cls._validated_attrs(
                 column.footer_attrs,
                 f"CTable column {column.key!r} footer_attrs",
+                data_item=True,
             )
             for attrs, location in (
                 (header_attrs, f"CTable column {column.key!r} header_attrs"),
@@ -420,7 +431,7 @@ class CTable(LibraryComponent):
                 extra = sorted(actual_keys - expected_keys)
                 msg = f"CTable row {row.key!r} cells do not match columns; missing={missing!r}, extra={extra!r}."
                 raise ValueError(msg)
-            row_attrs = cls._validated_attrs(row.attrs, f"CTable row {row.key!r} attrs")
+            row_attrs = cls._validated_attrs(row.attrs, f"CTable row {row.key!r} attrs", data_item=True)
             reject_owned_attrs(
                 row_attrs,
                 {
@@ -440,6 +451,7 @@ class CTable(LibraryComponent):
                 cell_attrs = cls._validated_attrs(
                     cell.attrs,
                     f"CTable row {row.key!r}, column {column.key!r} attrs",
+                    data_item=True,
                 )
                 reject_owned_attrs(
                     cell_attrs,

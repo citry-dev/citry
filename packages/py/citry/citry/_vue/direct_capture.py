@@ -40,6 +40,7 @@ from citry.components.mark import repeated_mark_name_error, validate_mark_name
 from citry.serialize import _REPEATED_RENDER_MESSAGE
 from citry.util.html import (
     _REFUSED_DYNAMIC_ELEMENT_TAGS,
+    FOREIGN_CONTENT_TAGS,
     Markup,
     decode_attribute_entities,
     decode_character_references,
@@ -2954,7 +2955,8 @@ def assemble_typed_render(
                     continue
                 if isinstance(part, PreparedVerbatimHtml):
                     parent_tag = element_stack[-1] if element_stack else None
-                    if any(tag in {"svg", "math"} for tag in element_stack):
+                    # The same tags as the `<c-element>` body check (`FOREIGN_CONTENT_TAGS`).
+                    if any(tag in FOREIGN_CONTENT_TAGS for tag in element_stack):
                         raise UnsupportedPreparedView(
                             "<c-raw> cannot sit inside <svg> or <math> in an interactive component, because Vue"
                             " inserts its HTML with the HTML parser. Move the <c-raw> block outside, or write the"
@@ -3067,7 +3069,8 @@ def assemble_typed_render(
                 if isinstance(part, (PreparedTrustedHtmlValue, Markup)):
                     serialized = part.html if isinstance(part, PreparedTrustedHtmlValue) else str(part)
                     parent_tag = element_stack[-1] if element_stack else None
-                    if any(tag in {"svg", "math"} for tag in element_stack):
+                    # The same tags as the `<c-element>` body check (`FOREIGN_CONTENT_TAGS`).
+                    if any(tag in FOREIGN_CONTENT_TAGS for tag in element_stack):
                         raise UnsupportedPreparedView(
                             "A Markup value (trusted HTML from Python) cannot sit inside <svg> or <math> in an"
                             " interactive component, because Vue inserts it with the HTML parser. Write the SVG or"

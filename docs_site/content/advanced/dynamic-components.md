@@ -198,6 +198,18 @@ a `c-if` branch. A `<c-element>` with a fixed `is` and no `c-bind` renders
 like the same tag written in the template, so this check does not apply to
 it.
 
+A `<c-element>` that has `c-is` or `c-bind` can render `svg` and `math`.
+Inside `<svg>` or `<math>` the browser reads elements such as `<style>`
+and `<noscript>` as markup, so HTML that is inert elsewhere could run
+there. The body may then hold text, `{{ }}` values, nested `<c-element>`
+tags, and elements written in the template, with `c-if` or `c-for`
+around them. Citry raises `ValueError` for a `Markup` value that holds a
+tag, and for a `<c-raw>` block, a child component, a `<c-slot>`, or a
+`<script>` element in the body. When the body needs one of these, write the `<svg>` or `<math>` element directly in the template,
+for example in a `c-if` branch. The same rule applies to the MathML tags
+`mglyph` and `malignmark`: inside `<mi>` or `<mtext>` they make the
+browser read their contents as MathML again.
+
 A `<c-element>` can render `textarea` and `title`. The browser shows any
 tag inside them as text, and Citry escapes your values. In a component
 without Vue (no `js` and no server events), a tag inside shows as literal

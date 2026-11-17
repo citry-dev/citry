@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- The `attrs` of a table row, cell or column (`CTable`, `CDataGrid`,
+  `CTreeGrid`), of a `CNativeSelect` option or group, and of a
+  `CBreadcrumbItem` now raise `ValueError` for the attribute names `is`
+  and `key`, in any letter case. Vue reads both names itself when it
+  renders the rows and options of `CDataGrid`, `CTreeGrid` and
+  `CNativeSelect`. Before, `key` failed the render with an unclear
+  error, and `is` left those rows, cells and options out of the HTML
+  the server sent. Use a `data-*` name, such as `data-key`, for your
+  own value.
+
 ## [0.6.0] - 2026-11-16
 
 ### Changed

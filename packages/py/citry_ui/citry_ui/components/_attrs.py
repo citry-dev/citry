@@ -200,6 +200,47 @@ def reject_citry_ui_reserved_attrs(
         reject_citry_ui_reserved_attr(name, value, where=where, extra_prefixes=extra_prefixes)
 
 
+# Vue reads these two names on an element itself rather than writing them:
+# `is` names a custom element to create and `key` tells rows of a list apart.
+_DATA_ITEM_VUE_NAMES = frozenset({"is", "key"})
+
+
+def reject_data_item_vue_name(name: object, *, where: str) -> None:
+    """
+    Raise `ValueError` when a data item's attribute map names `is` or `key`.
+
+    `CTable`, `CDataGrid`, `CTreeGrid`, `CNativeSelect` and `CBreadcrumbs`
+    take an attribute map on each row, cell, column, option, group or item.
+    Those maps usually come from data, and `CDataGrid`, `CTreeGrid` and
+    `CNativeSelect` render their rows and options through Vue in the browser.
+    There `is` names a custom element for Vue to create and makes the server
+    leave the row out of its HTML, and `key` clashes with the key the
+    component gives each row, so neither may come from data. `CTable` and
+    `CBreadcrumbs` follow the same rule, so one rule covers every data item.
+
+    Args:
+        name: The attribute name to check. A non-string name is left to the caller's own type check.
+        where: The component and input, such as `"CTable row 'r1' attrs"`, for the message.
+
+    Raises:
+        ValueError: When `name` is `is` or `key` in any ASCII letter case.
+
+    """
+    if not isinstance(name, str):
+        return
+    # The HTML parser lowercases ASCII letters in names, so `IS` in the
+    # server's HTML is `is`; refusing every spelling keeps one rule on both
+    # paths. `str.translate` is called on the class so a `str` subclass
+    # cannot answer with its own spelling.
+    if str.translate(name, _ASCII_LOWER) in _DATA_ITEM_VUE_NAMES:
+        msg = (
+            f"{where} cannot set {name!r}. 'is' and 'key' are reserved in a data item's attrs, because Vue "
+            "reads them itself in Citry UI's grids and selects. Use a data-* name, such as 'data-key', for "
+            "your own value."
+        )
+        raise ValueError(msg)
+
+
 def html_attr_binding_target(name: str) -> str | None:
     """Return the attribute a `:name`, `.name`, or `v-bind:name` binding sets, or None for any other name."""
     normalized = name.casefold()
@@ -256,5 +297,6 @@ __all__ = [
     "pop_html_attr",
     "reject_citry_ui_reserved_attr",
     "reject_citry_ui_reserved_attrs",
+    "reject_data_item_vue_name",
     "reject_vue_directive_attrs",
 ]

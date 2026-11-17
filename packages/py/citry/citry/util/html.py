@@ -671,3 +671,14 @@ _REFUSED_DYNAMIC_ELEMENT_TAGS: frozenset[str] = frozenset(
         "xmp",
     }
 )
+
+# Tags whose contents the browser reads as SVG or MathML rather than as HTML.
+# There, `<style>`, `<title>`, `<textarea>`, `<noscript>` and the other
+# elements whose contents HTML keeps as text become ordinary elements, so
+# their contents are read as markup. HTML that stays inert inside a `<div>`
+# can then run, which is why Citry refuses trusted HTML under one of these
+# tags when data chose it, and the Vue writer refuses it under any of them.
+# `svg` and `math` do so anywhere. Inside a MathML text element such as
+# `<mi>` or `<mtext>`, where the browser otherwise reads HTML, `mglyph` and
+# `malignmark` make it read their contents as MathML again.
+FOREIGN_CONTENT_TAGS: frozenset[str] = frozenset({"malignmark", "math", "mglyph", "svg"})

@@ -13,6 +13,7 @@ from citry_ui.components._attrs import (
     is_vue_directive_attribute,
     merge_root_attrs,
     reject_citry_ui_reserved_attr,
+    reject_data_item_vue_name,
 )
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._url import check_link_url
@@ -84,11 +85,21 @@ def _copy_attrs(input_name: str, attrs: Mapping[str, object] | None) -> dict[str
     return dict(attrs)
 
 
-def _validate_attrs(input_name: str, attrs: dict[str, object], owned: frozenset[str]) -> None:
+def _validate_attrs(
+    input_name: str,
+    attrs: dict[str, object],
+    owned: frozenset[str],
+    *,
+    data_item: bool = False,
+) -> None:
     component_name = f"CBreadcrumbs {input_name}"
     reject_owned_attrs(attrs, owned, component_name)
     for key, attr_value in attrs.items():
         reject_citry_ui_reserved_attr(key, attr_value, where=component_name)
+        # Items usually come from records, and the tables' data items refuse
+        # the names Vue reads itself, so a trail item follows the same rule.
+        if data_item:
+            reject_data_item_vue_name(key, where=component_name)
         # A Vue directive could rebind an owned attribute such as `href`, add
         # listeners, or change the trail's structure, so none may arrive through Python data.
         if is_vue_directive_attribute(key):
@@ -158,7 +169,7 @@ class CBreadcrumbs(LibraryComponent):
                 # path, so the link must not be able to run script on click.
                 check_link_url(f"CBreadcrumbs items[{index}].href", href)
             item_attrs = _copy_attrs(f"items[{index}].attrs", item.attrs)
-            _validate_attrs(f"items[{index}].attrs", item_attrs, _ITEM_OWNED_ATTRS)
+            _validate_attrs(f"items[{index}].attrs", item_attrs, _ITEM_OWNED_ATTRS, data_item=True)
             current = index == len(snapshot) - 1
             normalized = CBreadcrumbItem(label=item_label, href=href, attrs=item_attrs)
             link_attrs = dict(item_attrs)
