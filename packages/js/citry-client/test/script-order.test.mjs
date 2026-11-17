@@ -298,6 +298,8 @@ async function startWhereScriptsFail(scripts, { pageUrl, baseUrl = pageUrl }) {
       const { document } = fixture.context;
       document.URL = pageUrl;
       document.baseURI = baseUrl;
+      // The runtime resolves the files it adds against the page's own address, as on a real page.
+      fixture.context.location.href = pageUrl;
       fixture.context.console = { error() {}, warn: (text) => warnings.push(text) };
       document.createElement = (tag) => ({ tag, setAttribute() {}, remove() {} });
       document.head = {

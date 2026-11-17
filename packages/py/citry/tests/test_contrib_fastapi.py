@@ -130,7 +130,7 @@ class TestFragmentRoundTrip:
             assert response.status_code == 200, url
 
         # The preloader's runtime URL is servable too.
-        preloader = re.search(r's\.src = "([^"]+)"', fragment)
+        preloader = re.search(r'var url = "([^"]+)"', fragment)
         assert preloader is not None
         preloader_url = preloader.group(1)
         assert client.get(preloader_url).status_code == 200

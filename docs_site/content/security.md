@@ -1242,6 +1242,16 @@ to these:
   new `Script` or `Style`, because Citry keeps the file's hash on the
   original object.
 
+On an interactive page, Citry's browser code adds some scripts and
+stylesheets itself, such as the files of a fragment or of a component
+that appears later, and a fragment adds Citry's script when the page
+lacks it. Citry resolves these URLs against the page's own address, so a
+`<base>` tag cannot move them. A frame made with `srcdoc` has no address
+of its own, so there Citry uses the frame's base URL only when that URL
+has the frame's own scheme, host, and port, and otherwise refuses the
+file. The tags in the page's HTML still follow `<base>`, so you still
+need `base-uri`.
+
 ### Nonces in fragments { #html-fragments }
 
 When an [HTML fragment](/advanced/html-fragments/) has components that use
@@ -1293,16 +1303,51 @@ handler's own URL gets plain HTML without Vue, so the setting only adds
 the nonce to that HTML's inline styles.
 
 Citry's browser code reads the nonce on its own script tag when it loads.
-It starts a fragment only when the fragment carries that same nonce, so
-injected markup cannot start a fake fragment that loads its own scripts. A
-fragment without the nonce does not start, and the browser console shows
-an error. When a fragment starts, Citry puts the page's nonce on every
-script, inline style, and stylesheet link the fragment adds.
+`serialize(csp_nonce=...)` puts the nonce on the fragment's tag and into
+its JSON data. Citry starts a fragment only when both the tag and the JSON
+carry the page's nonce. Injected markup cannot know the nonce, so it
+cannot start a fake fragment that loads its own scripts. A fragment
+without the nonce does not start, and the browser console shows an error.
+A nonce that something else adds to the tag alone, such as middleware
+that rewrites the HTML, is not enough. When a fragment starts, Citry puts
+the page's nonce on every script, inline style, and stylesheet link the
+fragment adds.
 
-Citry can check only a nonce that its own script tag carries. When that tag
-has none, for example under a hash-based policy, Citry starts every
-fragment in the page. Under `'strict-dynamic'`, the scripts such a fragment
-names then run too, so give pages that receive fragments a nonce policy.
+When Citry's own script tag has no nonce, for example under a hash-based
+policy or on a page without a policy, Citry has nothing to compare. It
+then starts a fragment it finds in the page only when:
+
+- every script the fragment names is a file Citry serves from the page's
+  own origin (its scheme, host, and port), under the same URL path as
+  Citry's own script: a component's code, or a file served with
+  `local_files = "serve"`;
+- the fragment sends its server events and its requests for translated
+  messages to Citry's own routes on the page's origin;
+- the fragment mounts into the element Citry wrote for it.
+
+Otherwise the fragment does not start, and the browser console shows an
+error. A fragment that names a `Script(url=...)` dependency, or any other
+file that Citry does not serve, does not start on such a page. Start it
+from your own script with
+[`Citry.fragments.load()`](/reference/browser-apis/#citry-fragments-load),
+or give the page a nonce-based CSP.
+
+Citry accepts these files only from the page's origin, even when its own
+script loaded from somewhere else. A hash-based policy lets the
+browser run Citry's script from any address whose file has the right
+hash, so injected markup could run a copy of it from another site, or
+move Citry's own tag there with a `<base>` tag. Citry's checks still hold
+then. A CDN that serves only Citry's script from another host works, as
+long as it serves the script under the same path, such as
+`/citry/citry.js`. A CDN that also rewrites the file URLs inside the
+fragment, or serves Citry's files under another path, does not. Give
+such pages a nonce-based CSP.
+
+On a page without a nonce, injected markup can still start a fake
+fragment of your own components, with data it chooses. If visitors can
+also put files on your own site, at a path they choose, injected markup
+can make such a fragment load them. Give pages that receive fragments a
+nonce-based CSP.
 
 Under `security_csp="strict"`, a fragment does not load Citry's browser
 code, so insert it only into a page that already has it.
@@ -1310,10 +1355,10 @@ code, so insert it only into a page that already has it.
 ### App data needs the nonce
 
 An interactive page sends its data, such as the rows of a table, as JSON in
-a script tag. Citry puts the nonce on that tag too. The browser does not
-need it there, but Citry's browser code does: it starts the page only from
-data that carries the same nonce as its own script, so injected markup
-cannot supply fake data.
+a script tag. Citry puts the nonce on that tag and into its JSON. The
+browser does not need it there, but Citry's browser code does: it starts
+the page only from data whose tag and JSON carry the same nonce as its own
+script, so injected markup cannot supply fake data.
 
 ## Check output for CSP { #choose-a-csp-compatibility-mode }
 
@@ -1755,6 +1800,12 @@ cross-origin:
 In both setups, the browser refuses a file whose response lacks
 `Access-Control-Allow-Origin`. Configure the proxy or CDN to pass the
 header through for Citry's file URLs, or to add it.
+
+On a page whose Citry script has no CSP nonce, a Vue fragment that
+Citry finds in the page loads Citry's files only from the page's own
+origin. A CDN that rewrites the file URLs inside the fragment, or serves
+Citry's script under another path, stops such fragments from starting;
+see [Nonces in fragments](#html-fragments).
 
 The header is safe on these routes: they return the same public files to
 every caller and never read cookies. Citry's event, message, and preview

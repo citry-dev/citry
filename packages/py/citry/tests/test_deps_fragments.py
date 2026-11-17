@@ -250,7 +250,8 @@ class TestFragmentStrategy:
         _widget(c)
         page = type("Page", (Component,), {"citry": c, "template": "<main><c-widget /></main>"})
         html = str(page().render().serialize(deps_strategy="fragment"))
-        assert f's.src = "/citry/{SHARED_RUNTIME.hashed_path}"' in html
+        assert f'var url = "/citry/{SHARED_RUNTIME.hashed_path}", src = null;' in html
+        assert "s.src = src;" in html
         # The loader removes its own tag, read through Document.prototype so a named element
         # in the page cannot stand in for it.
         assert 'var current = member("currentScript");\nif (current) current.remove();' in html
@@ -266,17 +267,18 @@ class TestFragmentStrategy:
         loader = re.search(r"<script>(\(function\(\) \{.*?\}\)\(\);)</script>", html, re.DOTALL)
         assert loader is not None
         loader_text = loader.group(1)
-        # The error handler names the URL the loader requested, as the same JSON string.
-        assert f"s.src = {url};" in loader_text
-        assert (
-            f's.onerror = function () {{ console.error("Citry could not load its runtime: " + {url}); }};'
-            in loader_text
-        )
+        # The error handler names the URL the server wrote, which the loader resolves against the
+        # page's own address rather than the document's base URL, so a <base> cannot move it.
+        assert f"var url = {url}, src = null;" in loader_text
+        assert "try { src = new URL(url, location.href).href; }" in loader_text
+        failed = 'var failed = function () { console.error("Citry could not load its runtime: " + url); };'
+        assert failed in loader_text
+        assert "s.onerror = failed;" in loader_text
         # The handler is set before the tag is added, or a fast failure would be missed.
         assert loader_text.index("s.onerror") < loader_text.index("appendChild(s)")
         # A fragment is a small part of a page, so a failed runtime is only reported, never a reason to reload it.
         assert "reload" not in loader_text
-        assert "location" not in loader_text
+        assert re.search(r"location\s*=|location\.(assign|replace)", loader_text) is None
 
     def test_vue_fragment_loader_writes_the_url_as_json_even_for_a_quoted_prefix(self):
         c = Citry()
@@ -286,8 +288,8 @@ class TestFragmentStrategy:
         html = str(page().render().serialize(deps_strategy="fragment"))
 
         url = json.dumps(f'/ci"try/{SHARED_RUNTIME.hashed_path}')
-        assert f"s.src = {url};" in html
-        assert f'console.error("Citry could not load its runtime: " + {url});' in html
+        assert f"var url = {url}, src = null;" in html
+        assert 'console.error("Citry could not load its runtime: " + url);' in html
 
     def test_fragment_inlines_local_file_entries_as_descriptors(self, tmp_path):
         (tmp_path / "helper.js").write_text("var H = 1;")

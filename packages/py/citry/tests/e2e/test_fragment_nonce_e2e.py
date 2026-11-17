@@ -5,9 +5,10 @@ A page under a nonce-based Content Security Policy runs only the scripts
 that carry the page's nonce, so markup injected into it cannot run script.
 Citry's fragment manager loads the scripts a Vue fragment data block names
 and gives them the page's nonce. These tests prove that it starts only the
-blocks the server stamped with the page's nonce, that neither a named
-element in the page nor an injected tag left open can get around that
-check, and that it refuses a data: script URL.
+blocks whose JSON carries the page's nonce, that neither a named element
+in the page nor an injected tag left open can get around that check, and
+that it refuses a data: script URL. On a page without a nonce they prove
+that a fragment block found in the page may load only Citry's own files.
 """
 
 from __future__ import annotations
@@ -62,12 +63,13 @@ def _widget(app: Citry) -> type[Component]:
     return NonceWidget
 
 
-def _page(*, clobber_current_script: bool = False) -> str:
+def _page(*, clobber_current_script: bool = False, nonce: bool = True) -> str:
     # A <form name="currentScript"> before the runtime's tag replaces
     # document.currentScript with the form, which has no nonce.
     clobber = '<form name="currentScript"></form>' if clobber_current_script else ""
+    nonce_attr = f' nonce="{NONCE}"' if nonce else ""
     return (
-        f'<html><head></head><body>{clobber}<script nonce="{NONCE}" src="/citry/citry.js"></script>'
+        f'<html><head></head><body>{clobber}<script{nonce_attr} src="/citry/citry.js"></script>'
         '<div id="target"></div></body></html>'
     )
 
@@ -279,6 +281,77 @@ def test_injected_tag_that_takes_a_genuine_nonce_does_not_run(page: Any, serve_l
     assert page.evaluate("() => window.__forged") is None
     [refusal] = page.evaluate("() => window.__refusals")
     assert "does not carry the page's CSP nonce" in refusal
+
+
+def test_injected_tag_that_takes_a_genuine_nonce_through_a_repeated_attribute_does_not_run(
+    page: Any, serve_live: Any
+) -> None:
+    app = Citry(autodiscover=False)
+    app.set_mounted_prefix("/citry")
+    fragment = _widget(app)().render().serialize(deps_strategy="fragment")
+    _open(page, serve_live, app, _page(), fragment)
+    forged = _forge(fragment, FORGED_SOURCES["external"])
+    host = fragment.split("<script", 1)[0]
+    # The injected tag `<script type=application/json data-citry-vue-fragment x=1 x=` is left
+    # open, so it takes in the app's own nonced JSON block after it. The repeated `x` drops the
+    # leftover `<script` text, so the tag carries the page's nonce and nothing odd. Its text is
+    # that block's text, which here the attacker controls in full.
+    stolen = (
+        host + '<script type="application/json" data-citry-vue-fragment x=1 x='
+        f'<script type="application/json" id="user-settings" nonce="{NONCE}">' + _manifest_text(forged) + "</script>"
+    )
+    _insert(page, stolen)
+    page.wait_for_function("() => window.__forged !== undefined || window.__refusals.length > 0")
+    assert page.evaluate("() => window.__forged") is None
+    [refusal] = page.evaluate("() => window.__refusals")
+    assert "does not carry the page's CSP nonce" in refusal
+
+
+# On a page without a nonce a policy that allows the page's own scripts
+# still stops an injected <script src>, which innerHTML never runs.
+SELF_POLICY = "script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'"
+
+
+@pytest.mark.parametrize("kind", ["owned", "external", "definition"])
+def test_injected_fragment_on_a_page_without_a_nonce_cannot_choose_its_scripts(
+    page: Any, serve_live: Any, kind: str
+) -> None:
+    app = Citry(autodiscover=False)
+    app.set_mounted_prefix("/citry")
+    fragment = _widget(app)().render().serialize(deps_strategy="fragment")
+    _open(page, serve_live, app, _page(nonce=False), fragment, SELF_POLICY)
+    if kind == "definition":
+        manifest = _manifest(fragment)
+        for definition in manifest["vue"]["prepared"]["manifest"]["definitions"]:
+            definition["url"] = "/evil.js"
+            definition["sha256"] = _EVIL_SHA256
+        text = _manifest_text(fragment)
+        forged = fragment.replace(text, json.dumps(manifest).replace("<", "\\u003c"))
+    else:
+        forged = _forge(fragment, FORGED_SOURCES[kind])
+    _insert(page, forged)
+    page.wait_for_function("() => window.__forged !== undefined || window.__refusals.length > 0")
+    assert page.evaluate("() => window.__forged") is None
+    [refusal] = page.evaluate("() => window.__refusals")
+    assert "found in a page without a CSP nonce" in refusal
+
+
+def test_fetched_fragment_on_a_page_without_a_nonce_starts(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any
+) -> None:
+    app = Citry(autodiscover=False)
+    app.set_mounted_prefix("/citry")
+    fragment = _widget(app)().render().serialize(deps_strategy="fragment")
+    _open(page, serve_live, app, _page(nonce=False), fragment, SELF_POLICY)
+
+    page.evaluate(
+        "() => fetch('/fragment').then((r) => r.text())"
+        ".then((html) => { document.getElementById('target').innerHTML = html; })"
+    )
+    wait_for_citry_ready()
+    assert page.locator("button.nonce-widget").text_content() == "fragment ready"
+    assert page.evaluate("() => globalThis.__widgetMounts") == 1
+    assert page.evaluate("() => window.__refusals") == []
 
 
 def test_events_render_on_a_nonce_page_starts(page: Any, serve_live: Any, wait_for_citry_ready: Any) -> None:

@@ -29,9 +29,9 @@ const METADATA = {
 };
 
 // Starts one app whose root uses a single definition served from `url`, on a page at `pageUrl`
-// whose base URL is `baseUrl`. With `registered`, the definition's script already ran, as a
+// whose base URL is `baseUrl` and whose origin is `pageOrigin`. With `registered`, the definition's script already ran, as a
 // document build that inlines its scripts arranges.
-async function start({ pageUrl, baseUrl = pageUrl, url, registered = false }) {
+async function start({ pageUrl, baseUrl = pageUrl, pageOrigin = new URL(pageUrl).origin, url, registered = false }) {
   class Element {}
   const app = {
     component() {},
@@ -47,7 +47,9 @@ async function start({ pageUrl, baseUrl = pageUrl, url, registered = false }) {
     CitryVueFragments: { installFragmentManager() {} },
     Element,
     Node: class {},
-    location: { assign() {} },
+    // The runtime resolves the files it adds against the page's own address, as on a real page.
+    location: { assign() {}, href: pageUrl, origin: pageOrigin },
+    origin: pageOrigin,
     history: { state: null },
     queueMicrotask,
     btoa,
@@ -136,10 +138,11 @@ test("a page served over https still loads a definition from an https: URL", asy
   await assert.rejects(start({ pageUrl: WEB_PAGE, url: "/definitions/abc.js" }), LOADING);
 });
 
-test("a page served over https refuses a file: definition URL, even with a file: base URL", async () => {
-  // An injected <base href="file:///"> changes the base URL but not the page's own address.
+test("a page served over https refuses a file: definition URL, and a file: base URL moves none", async () => {
   await assert.rejects(start({ pageUrl: WEB_PAGE, url: "file:///definitions/abc.js" }), REFUSED);
-  await assert.rejects(start({ pageUrl: WEB_PAGE, baseUrl: "file:///", url: "/definitions/abc.js" }), REFUSED);
+  // An injected <base href="file:///"> changes the base URL but not the page's own address, which
+  // the runtime resolves the file against, so the definition still loads over https.
+  await assert.rejects(start({ pageUrl: WEB_PAGE, baseUrl: "file:///", url: "/definitions/abc.js" }), LOADING);
 });
 
 for (const url of ["data:text/javascript,1", "javascript:1"]) {
@@ -148,3 +151,14 @@ for (const url of ["data:text/javascript,1", "javascript:1"]) {
     await assert.rejects(start({ pageUrl: WEB_PAGE, url }), REFUSED);
   });
 }
+
+test("an about:srcdoc page loads a relative definition URL from its base only on its own origin", async () => {
+  // A srcdoc document has no address to resolve against, so the runtime uses the base URL it took
+  // from the page that created it. A <base> element inside the document sets that base too.
+  const srcdoc = { pageUrl: "about:srcdoc", pageOrigin: "https://example.test", url: "/definitions/abc.js" };
+  await assert.rejects(start({ ...srcdoc, baseUrl: WEB_PAGE }), LOADING);
+  await assert.rejects(
+    start({ ...srcdoc, baseUrl: "https://evil.example/" }),
+    /does not resolve to this page's origin/,
+  );
+});

@@ -98,6 +98,13 @@ the runtime's `<script>` tag and serialize the fragment with the same
 nonce. Otherwise the fragment does not start, and the browser
 console shows an error. See [Nonces in fragments](/security/#html-fragments).
 
+When the runtime's tag has no nonce, a fragment that Citry finds in the
+page starts only when every script it names is a file Citry serves from
+the page's own origin. A fragment with a `Script(url=...)` dependency
+does not start; start it with
+[`Citry.fragments.load()`](/reference/browser-apis/#citry-fragments-load)
+or give the page a nonce-based CSP.
+
 The browser does not check the content of a `<script>` tag you write
 yourself. If your page has a CSP, add `base-uri 'self'` to it, so that
 injected markup cannot point this tag at another site. See
@@ -224,7 +231,9 @@ mount its Vue components, and fires `citry:fragments:stale`. See
 A fragment includes each [dependency](/advanced/dependency-files/)
 according to how you declared it:
 
-- A URL stays a URL, and the browser loads it.
+- A URL stays a URL, and the browser loads it. On a page whose Citry
+  script has no CSP nonce, such a fragment does not start by itself; see
+  [Nonces in fragments](/security/#html-fragments).
 - A local file is included in the fragment by default.
 - With `Dependencies.local_files = "serve"`, a local file becomes a URL
   served by the web framework integration.

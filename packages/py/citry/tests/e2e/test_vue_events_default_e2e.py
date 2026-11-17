@@ -1841,8 +1841,10 @@ def test_unmounted_component_js_app_runs_without_events_routes(
         js = "$component({data(){return {local: 0};}});"
 
     html = LocalCounter().render().serialize()
-    assert "ext/events/call" not in html
-    assert "data-citry-vue-document" in html
+    # The inline runtime names Citry's routes in its own code, so only the app's data is checked.
+    data = re.search(r'data-citry-vue-document="[^"]*"[^>]*>(.*?)</script>', html, re.DOTALL)
+    assert data is not None, html
+    assert "endpoint" not in json.loads(data.group(1))
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
     open_citry_page(serve_document(html))

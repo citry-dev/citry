@@ -219,7 +219,7 @@ class TestFragments:
 
         html = Widget().render().serialize(deps_strategy="fragment")
         runtime = f"/citry/{SHARED_RUNTIME.hashed_path}"
-        assert f's.src = "{runtime}"' in html
+        assert f'var url = "{runtime}"' in html
         assert f's.integrity = "{_sri(_served(app, runtime))}"' in html
         assert 's.crossOrigin = "anonymous"' in html
 

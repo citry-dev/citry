@@ -21,6 +21,13 @@ export function installFragmentManager(
   documentNonce = "",
   carriesPageNonce: (block: HTMLScriptElement) => boolean = (block) => block.nonce === documentNonce,
   reportOutOfDate: (development: boolean) => void = () => {},
+  // Checks the configuration of a block found in a page that has no nonce, and returns the
+  // configuration to start. On such a page injected markup can write a block too, so the runtime
+  // limits what the block may load and where its calls go; see `checkBlockWithoutNonce` in
+  // client.js. The default refuses every such block, so a runtime that passes no check is safe.
+  checkBlockWithoutNonce: (prepared: unknown) => unknown = () => {
+    throw new TypeError("[Citry] this page has no CSP nonce, so a Vue fragment found in it cannot be checked.");
+  },
 ): FragmentManager {
   const processed = new WeakMap<HTMLScriptElement, Promise<void>>();
   const reservedHosts = new Set<Element>();
@@ -51,7 +58,7 @@ export function installFragmentManager(
       pendingAttributeObserver = null;
     }
   };
-  const loadOnce = async (raw: unknown, tag?: HTMLScriptElement): Promise<void> => {
+  const loadOnce = async (raw: unknown, tag?: HTMLScriptElement, foundInPage = false): Promise<void> => {
     if (!raw || typeof raw !== "object" || Array.isArray(raw))
       throw new TypeError("[Citry] fragment manifest is not an object.");
     const manifest = raw as FragmentManifest;
@@ -77,6 +84,10 @@ export function installFragmentManager(
       (vue.prepared as { manifest?: { appId?: unknown } }).manifest?.appId !== vue.appId
     )
       throw new TypeError("[Citry] fragment manifest has no valid bound Vue mount descriptor.");
+    // A block found in a page without a nonce may come from injected markup, so its configuration
+    // is checked before anything loads. Page code that calls `load()` itself is trusted, and on a
+    // page with a nonce the block's JSON already proved it came from the server.
+    const prepared = foundInPage && !documentNonce ? checkBlockWithoutNonce(vue.prepared) : vue.prepared;
     const hosts = pageDocument.querySelectorAll(vue.host);
     if (hosts.length !== 1 || !pageDocument.body.contains(hosts[0]))
       throw new TypeError("[Citry] Vue fragment host must resolve once inside the document body.");
@@ -105,7 +116,7 @@ export function installFragmentManager(
     let mounted: { appId: string; app: { unmount(): void } } | null = null;
     try {
       guard();
-      mounted = await startPrepared(vue.prepared, { guard, nonce: documentNonce, signal: abort.signal });
+      mounted = await startPrepared(prepared, { guard, nonce: documentNonce, signal: abort.signal });
       guard();
       trackedHosts.set(host, { appId: mounted.appId, dispose: () => mounted?.app.unmount() });
     } catch (error) {
@@ -127,7 +138,7 @@ export function installFragmentManager(
   // listener may cancel it to replace Citry's own report. The load still rejects, so a caller of
   // `Citry.fragments.load` sees the failure.
   const load = (raw: unknown, tag?: HTMLScriptElement): Promise<void> =>
-    loadOnce(raw, tag).catch((error: unknown) => {
+    loadOnce(raw, tag, tag !== undefined).catch((error: unknown) => {
       if (isPageOutOfDate(error)) {
         // The event starts at the fragment's data block when it is still in the page, like a call's
         // notification starts at its component, and reaches a listener on `document` either way.
@@ -145,6 +156,9 @@ export function installFragmentManager(
       }
       throw error;
     });
+  // The nonce the server wrote into the block's JSON, or undefined when the JSON has none.
+  const jsonNonce = (raw: unknown): unknown =>
+    (raw as { vue?: { prepared?: { nonce?: unknown } | null } | null } | null)?.vue?.prepared?.nonce;
   const manager: FragmentManager = {
     load(raw, tag) {
       if (tag) {
@@ -152,12 +166,15 @@ export function installFragmentManager(
         if (prior) return prior;
         tag.dataset.citryProcessed = "";
         // A data block found in the page could come from injected markup, and the fragment's
-        // scripts load with the page's nonce. Under a nonce-based CSP the server stamps the
-        // page's nonce on the blocks it writes, and injected markup cannot set it, so a block
-        // without it is refused, as startDocument refuses a configuration block. When the
-        // runtime's own tag has no nonce there is nothing to compare, and every block starts.
+        // scripts load with the page's nonce. Under a nonce-based CSP the server writes the
+        // page's nonce into the block's JSON (`prepared.nonce`) and on the tag. Injected markup
+        // cannot know the nonce, so a block whose JSON lacks it is refused, as startDocument
+        // refuses a configuration block. The tag's attribute alone proves nothing: an injected
+        // tag left open takes in the attributes of the genuine tag after it, nonce included, and
+        // a repeated attribute name hides what is left of that tag. When the runtime's own tag
+        // has no nonce there is nothing to compare, and `loadOnce` checks what the block loads.
         const promise =
-          documentNonce && !carriesPageNonce(tag)
+          documentNonce && (!carriesPageNonce(tag) || jsonNonce(raw) !== documentNonce)
             ? Promise.reject(
                 new Error(
                   "[Citry] the Vue fragment's data block does not carry the page's CSP nonce." +

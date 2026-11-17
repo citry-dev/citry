@@ -2750,7 +2750,8 @@
 
   function assetPreloadKey(url, destination, integrity, attrs, nonce) {
     let resolved;
-    try { resolved = new URL(url, pageDocument.baseURI); }
+    // The same absolute URL the hint and the later request use (see assetUrl).
+    try { resolved = new URL(assetUrl(url)); }
     catch { return null; }
     if (resolved.protocol !== "http:" && resolved.protocol !== "https:") return null;
     return JSON.stringify([resolved.href, destination, integrity || null,
@@ -2770,7 +2771,7 @@
         const link = pageDocument.createElement("link");
         link.rel = "preload";
         link.as = destination;
-        link.href = url;
+        link.href = assetUrl(url);
         if (integrity) link.integrity = integrity;
         for (const name of ["crossorigin", "referrerpolicy", "fetchpriority"]) {
           const value = attrs[name];
@@ -2790,7 +2791,7 @@
         for (const asset of assets) {
           let url, integrity, attrs = {};
           if (isDefinition) {
-            if (ownGlobal("__citryRuntimeDefinitions")?.[asset.id] || loadedDefinitionUrls.has(asset.url)) continue;
+            if (ownGlobal("__citryRuntimeDefinitions")?.[asset.id] || loadedDefinitionUrls.has(assetUrl(asset.url))) continue;
             url = asset.url;
             integrity = sriFromHex(asset.sha256);
             attrs = ownedFetchAttributes(attrs);
@@ -2837,11 +2838,14 @@
   }
   function loadDefinition(asset, nonce) {
     if (ownGlobal("__citryRuntimeDefinitions")?.[asset.id]) return Promise.resolve();
-    const prior = loadedDefinitionUrls.get(asset.url);
+    // Keyed by the absolute URL, so a document's "/citry/..." and a checked fragment's
+    // "https://shop.example/citry/..." name one file and it loads once.
+    const url = assetUrl(asset.url);
+    const prior = loadedDefinitionUrls.get(url);
     if (prior) return prior;
     const promise = new Promise((resolve, reject) => {
       const script = pageDocument.createElement("script");
-      script.src = asset.url;
+      script.src = url;
       script.integrity = sriFromHex(asset.sha256);
       script.crossOrigin = ownedCrossOrigin;
       if (nonce) script.nonce = nonce;
@@ -2853,12 +2857,12 @@
       };
       script.onload = () => finish(() => resolve());
       script.onerror = () => finish(() => {
-        loadedDefinitionUrls.delete(asset.url);
+        loadedDefinitionUrls.delete(url);
         reject(new Error("Citry Vue definition failed to load: " + asset.url));
       });
       pageDocument.head.append(script);
     });
-    loadedDefinitionUrls.set(asset.url, promise);
+    loadedDefinitionUrls.set(url, promise);
     return promise;
   }
   function normalizeStyleAsset(asset, occurrenceTypes) {
@@ -2904,6 +2908,29 @@
       throw new Error("invalid prepared script asset");
     return asset;
   }
+  // The absolute URL the runtime gives a script or stylesheet it adds to the page. The browser
+  // would resolve a relative URL against document.baseURI, which a <base href> element sets, so
+  // injected markup could move a file the runtime loads, with the page's nonce, to another site.
+  // So a relative URL resolves against the page's own address, as the Events requests and
+  // `resolveOnPage` do. A document whose address cannot serve as a base (`about:srcdoc`,
+  // `about:blank`) uses the base URL it took from the page that created it, but only when that
+  // base is on the document's own origin, the same rule as `resolveOnPage`: a <base> element in
+  // such a document sets that base URL too, so otherwise it could still move the files. A URL that
+  // does not resolve at all comes back unchanged; the browser cannot load it either.
+  function assetUrl(url) {
+    if (typeof url !== "string") return url;
+    try { return new URL(url, global.location.href).href; }
+    catch {
+      let inherited;
+      // A named element such as <img name="baseURI"> replaces document.baseURI, so read the
+      // document's real base URL through `pageDocument`.
+      try { inherited = new URL(url, pageDocument.baseURI); }
+      catch { return url; }
+      if (inherited.origin === "null" || inherited.origin !== runtimePageOrigin())
+        throw new Error("[Citry] refused a file URL that does not resolve to this page's origin: " + url);
+      return inherited.href;
+    }
+  }
   // Scripts load only over http(s) or from a blob: URL. A data: URL would let a forged manifest
   // supply the script's text inline, and the element would still get the page's nonce. Only
   // script already running in the page can create a blob: URL, and the docs playground hands
@@ -2911,13 +2938,11 @@
   // file: URLs, which name a file and cannot carry the script's text, so file: is allowed on such
   // a page only. Stylesheets keep data: URLs, which cannot run script.
   function requireWebAssetUrl(url) {
-    // A named element such as <img name="baseURI"> replaces document.baseURI, so read the
-    // document's real base URL through `pageDocument`.
-    const base = pageDocument.baseURI;
     let resolved;
-    // The browser resolves the script's src against that same base URL, so a URL that does
-    // not resolve here, such as a path on an about:blank page, is one it cannot load at all.
-    try { resolved = new URL(url, base); }
+    // The runtime loads the script from the URL `assetUrl` gives, so check that same URL. A URL
+    // that does not resolve, such as a path on an about:blank page, is one the browser cannot
+    // load at all.
+    try { resolved = new URL(assetUrl(url)); }
     catch { return; }
     if (resolved.protocol === "http:" || resolved.protocol === "https:" || resolved.protocol === "blob:") return;
     // The page's own address decides, not the base URL, which an injected <base href> could set:
@@ -2981,7 +3006,9 @@
   }
   function assetIdentity(asset) {
     const source = asset.source;
-    return JSON.stringify([source.kind, source.url, source.sha256 || null, Object.entries(source.attrs || {}).sort()]);
+    // The absolute URL, so the same file written relative and absolute is one asset (see assetUrl).
+    return JSON.stringify([source.kind, assetUrl(source.url), source.sha256 || null,
+      Object.entries(source.attrs || {}).sort()]);
   }
   function assetRefs(asset) {
     return asset.owner.kind === "component" ? new Set(asset.owner.occurrenceIds) : new Set(["extension:" + asset.owner.extensionName]);
@@ -3003,7 +3030,9 @@
     return JSON.stringify([appId, url]);
   }
   function scriptRecordKey(appId, asset) {
-    return asset.owner.kind === "extension" ? JSON.stringify([appId, asset.source.url]) : asset.source.url;
+    // Keyed by the absolute URL, like loadDefinition, so a file written relative and absolute loads once.
+    const url = assetUrl(asset.source.url);
+    return asset.owner.kind === "extension" ? JSON.stringify([appId, url]) : url;
   }
   function existingStyleElement(appId, url) {
     return [...pageDocument.querySelectorAll('[data-citry-vue-style-app][data-citry-css-url]')]
@@ -3109,7 +3138,7 @@
     record.element = link;
     return new Promise((resolve, reject) => {
       link.rel = "stylesheet";
-      link.href = asset.source.url;
+      link.href = assetUrl(asset.source.url);
       link.setAttribute("data-citry-vue-style-app", appId);
       link.setAttribute("data-citry-css-url", asset.source.url);
       applyAssetSource(link, asset.source, nonce);
@@ -3148,7 +3177,10 @@
       // Set after the source attributes, which may carry their own rel or media.
       probe.rel = "stylesheet";
       probe.media = "not all";
-      probe.href = served.href;
+      // Resolved against the page's address like every file the runtime adds (see assetUrl). The
+      // served link's `href` property would resolve again against the current base URL, which a
+      // <base> element added since the page loaded could have moved.
+      probe.href = assetUrl(asset.source.url);
       const finish = loaded => {
         clearTimeout(timer);
         probe.remove();
@@ -3190,7 +3222,7 @@
     if (asset.finishKey) componentScriptResults.delete(asset.finishKey);
     record.promise = new Promise((resolve, reject) => {
       const script = pageDocument.createElement("script");
-      script.src = asset.source.url;
+      script.src = assetUrl(asset.source.url);
       applyAssetSource(script, asset.source, nonce);
       const finish = callback => {
         script.onload = null;
@@ -3390,7 +3422,13 @@
     if (lifecycle) configuration = {...configuration, nonce: lifecycle.nonce};
     plain(configuration, "prepared bootstrap");
     const manifest = plain(configuration.manifest, "prepared manifest");
-    const hostElement = typeof configuration.host === "string" ? pageDocument.querySelector(configuration.host) : configuration.host;
+    // Exactly one element must match, as the fragment manager requires, so an element that markup
+    // added earlier in the page with the same id stops the start instead of receiving the app.
+    let hostElement = configuration.host;
+    if (typeof configuration.host === "string") {
+      const matches = pageDocument.querySelectorAll(configuration.host);
+      hostElement = matches.length === 1 ? matches[0] : null;
+    }
     if (!(hostElement instanceof Element) || !plain(configuration.tags, "component tags"))
       throw new Error("prepared bootstrap needs one host element and component tags");
     const appId = manifest.appId, registered = new Set(), contexts = new Map(), sources = new Map();
@@ -5760,6 +5798,158 @@
     return !block.getAttributeNames().some(name =>
       /<(script|style)/i.test(name) || /<(script|style)/i.test(block.getAttribute(name) || ""));
   }
+  // The URL that Citry's routes start with on this page, such as "https://shop.example/citry/",
+  // worked out now from this runtime's own script URL, for the same reason as its nonce. On a page
+  // without a nonce it tells where Citry's routes live, so a Vue fragment found in the page can be
+  // held to them (see checkBlockWithoutNonce). Null when the runtime's URL names no route.
+  const runtimeRoutePrefix = routePrefixOf(runtimeScriptUrl());
+  function runtimeScriptUrl() {
+    const script = typeof document === "undefined" ? null : pageDocument.currentScript;
+    if (typeof HTMLScriptElement !== "function" || !(script instanceof HTMLScriptElement)) return "";
+    return script.src || "";
+  }
+  // The runtime's own file is `citry.js`, the hashed `citry.<sha256>.js`, or
+  // `ext/events/runtime.js`, all served under the URL path where the app mounts Citry's routes, so
+  // the prefix is that directory. It is always on the page's own origin, never the runtime's: on a
+  // page without a nonce, a hash-based CSP allows the runtime's exact bytes from any address, so
+  // injected markup could run a copy of the runtime from another site, or move Citry's own runtime
+  // tag there with a <base> element, and the runtime's origin would then let that site's files
+  // through. A CDN that serves only the runtime (docs: "Keep the CORS header") still works when it
+  // keeps the runtime's URL path, since the server writes the definition URLs and the Events routes
+  // for the app's own origin. Null for an inline runtime, a blob: URL, or a file of another name,
+  // and the checks below then fall back to any path on the page's own origin that ends with the
+  // route.
+  function routePrefixOf(url) {
+    let parsed;
+    try { parsed = new URL(url); }
+    catch { return null; }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    const match = /^(.*\/)(?:citry(?:\.[0-9a-f]{64})?\.js|ext\/events\/runtime\.js)$/.exec(parsed.pathname);
+    if (!match) return null;
+    const origin = pageOriginForRoutes();
+    return origin === null ? null : origin + match[1];
+  }
+  // The page's own http(s) origin, or null. `location` cannot be replaced by page markup, and its
+  // origin is the page address's, which is also right in a sandboxed document, whose own origin is
+  // "null". An `about:srcdoc` or `about:blank` document has no address of its own, so it takes the
+  // origin it shares with the page that created it.
+  function pageOriginForRoutes() {
+    let address = null;
+    try { address = new URL(global.location.href); }
+    catch { /* Not a URL this runtime can read an origin from. */ }
+    if (address && (address.protocol === "http:" || address.protocol === "https:")) return address.origin;
+    const origin = runtimePageOrigin();
+    return /^https?:\/\//.test(origin) ? origin : null;
+  }
+  function runtimePageOrigin() {
+    return typeof global.origin === "string" ? global.origin : global.location.origin;
+  }
+  // The absolute URL of `url` when it names the Citry route `route` (such as "ext/events/call"), or
+  // null. It resolves the way the runtime will load or request it (see assetUrl), against the page's
+  // address, so a <base> element added later cannot change what was checked. With a known prefix the
+  // URL must be exactly the route under it. Without one it must be on the page's own origin and end
+  // with the route. A query string, a `#hash`, or a user name never matches.
+  function citryRouteUrl(url, route) {
+    if (typeof url !== "string") return null;
+    let resolved;
+    try { resolved = new URL(assetUrl(url)); }
+    catch { return null; }
+    if (resolved.search || resolved.hash || resolved.username || resolved.password) return null;
+    if (runtimeRoutePrefix !== null) return resolved.href === runtimeRoutePrefix + route ? resolved.href : null;
+    return (resolved.protocol === "http:" || resolved.protocol === "https:") && resolved.origin !== "null" &&
+      resolved.origin === runtimePageOrigin() && resolved.pathname.endsWith("/" + route) ? resolved.href : null;
+  }
+  // The absolute URL of a definition or component script that loads from Citry's own definitions
+  // route, whose file name is the SHA-256 of its bytes, or from a blob: URL, which only script
+  // already running in the page can create (the docs playground does). Null for any other URL.
+  function citryScriptUrl(url, sha256) {
+    if (typeof url !== "string" || typeof sha256 !== "string" || !/^[0-9a-f]{64}$/.test(sha256)) return null;
+    try {
+      const resolved = new URL(assetUrl(url));
+      if (resolved.protocol === "blob:")
+        return resolved.origin !== "null" && resolved.origin === runtimePageOrigin() ? resolved.href : null;
+    } catch { return null; }
+    return citryRouteUrl(url, `ext/events/definitions/${sha256}.js`);
+  }
+  // The absolute URL of a component's own file that Citry serves with `local_files = "serve"`, or
+  // null. Citry's asset route serves only the files the app's components declare, each named by
+  // the hash of its content, so a URL on that route names one of the app's own scripts. The name is
+  // the first 12 lower-case hex digits of an MD5 hash and the file's own extension, kept in the case
+  // the file has (`report.JS` is served as `<hash>.JS`), so only the extension ignores case. Only
+  // script extensions pass, so a served stylesheet or data file cannot load as a script.
+  function servedLocalFileUrl(url) {
+    if (typeof url !== "string") return null;
+    let name;
+    try { name = new URL(assetUrl(url)).pathname.split("/").pop(); }
+    catch { return null; }
+    return /^[0-9a-f]{12}\.(?:[jJ][sS]|[mMcC][jJ][sS])$/.test(name) ? citryRouteUrl(url, "asset/" + name) : null;
+  }
+  // Checks the configuration of a Vue fragment block found in a page whose runtime has no nonce,
+  // and returns a copy to start. On such a page injected markup, including HTML that page code
+  // adds with innerHTML (whose script tags the browser does not run), can write a block as well as
+  // the server can. Without this check the block would choose the scripts the runtime loads, from
+  // any address the page's policy allows, and the URLs its requests go to. So:
+  // - every definition and component script must be a file Citry serves itself: a definition
+  //   file, or a component's file served with `local_files = "serve"`. A script from another
+  //   address (any other `external` source) is refused;
+  // - the Events URLs and the i18n messages URL must be Citry's own routes, so a request that
+  //   carries the page's CSRF token goes only there;
+  // - the app mounts only into the element `#citry-vue-<appId>`, the one the server writes for it,
+  //   so a forged block cannot replace other page content.
+  // What is left to such a block is starting the app's own components with data it chooses. The
+  // copy holds the absolute URL of each checked address, so nothing resolves them again later.
+  function checkBlockWithoutNonce(configuration) {
+    const refuse = what => {
+      throw new Error(`[Citry] refused a Vue fragment found in a page without a CSP nonce: ${what}. ` +
+        "Serve the page with a nonce-based CSP and serialize the fragment with csp_nonce, or start it " +
+        "from your own script with Citry.fragments.load().");
+    };
+    plain(configuration, "prepared bootstrap");
+    // The block's JSON was parsed for this load only, but the copy keeps the check's results apart
+    // from what the page passed in.
+    const checked = JSON.parse(JSON.stringify(configuration));
+    const manifest = plain(checked.manifest, "prepared manifest");
+    if (typeof manifest.appId !== "string" || !/^[0-9a-f]{32}$/.test(manifest.appId) ||
+        checked.host !== "#citry-vue-" + manifest.appId)
+      refuse("its host is not the element Citry writes for it");
+    if (!Array.isArray(manifest.definitions) || !Array.isArray(manifest.scripts))
+      refuse("its manifest lacks definitions or scripts");
+    for (const asset of manifest.definitions) {
+      const url = citryScriptUrl(asset?.url, asset?.sha256);
+      if (url === null) refuse("a definition URL is not Citry's own");
+      asset.url = url;
+    }
+    for (const asset of manifest.scripts) {
+      const source = asset?.source;
+      let url = null;
+      if (source?.kind === "owned") url = citryScriptUrl(source.url, source.sha256);
+      else if (source?.kind === "external") {
+        url = servedLocalFileUrl(source.url);
+        if (url === null) refuse("it names a script that Citry does not serve");
+      }
+      if (url === null) refuse("a component script URL is not Citry's own");
+      source.url = url;
+    }
+    // The server never writes `csrf` into a block. It would choose which cookie or token the
+    // runtime sends, so a block that has one did not come from the server.
+    if (checked.csrf !== undefined) refuse("it sets its own CSRF options");
+    for (const [field, route, what] of [["endpoint", "ext/events/call", "Events call URL"],
+        ["eventBaseUrl", "ext/events/e/", "Events base URL"]]) {
+      if (checked[field] === undefined) continue;
+      const url = citryRouteUrl(checked[field], route);
+      if (url === null) refuse(`its ${what} is not Citry's own`);
+      checked[field] = url;
+    }
+    // The i18n runtime POSTs to this URL with the page's CSRF token when the visitor switches the
+    // locale. Null means the render had no messages route, and no request is made.
+    const i18n = manifest.extensions?.i18n?.payload;
+    if (i18n && typeof i18n === "object" && i18n.messages_url !== undefined && i18n.messages_url !== null) {
+      const url = citryRouteUrl(i18n.messages_url, "ext/i18n/messages");
+      if (url === null) refuse("its i18n messages URL is not Citry's own");
+      i18n.messages_url = url;
+    }
+    return checked;
+  }
   function runtimeScriptNonce() {
     // A named element in the page, such as <form name="currentScript">, replaces
     // document.currentScript with itself, and its empty nonce would switch off every nonce
@@ -5784,11 +5974,14 @@
       .filter(block => block.getAttribute("data-citry-vue-document") === appId);
     if (blocks.length !== 1)
       throw new Error(`[Citry] expected one configuration block for app ${appId}, found ${blocks.length}`);
-    // Under a nonce-based CSP the server stamps the data block with the same nonce as this
-    // runtime. A block without it did not come from the Citry render, so it is refused.
-    if (documentNonce && !carriesPageNonce(blocks[0]))
-      throw new Error(`[Citry] the configuration block for app ${appId} does not carry the page's CSP nonce`);
+    // Under a nonce-based CSP the server writes this runtime's nonce into the block's JSON and on
+    // the tag. A block whose JSON lacks it did not come from the Citry render, so it is refused.
+    // The tag's attribute alone is not enough: an injected tag left open takes in the attributes of
+    // the genuine tag after it, nonce included.
     const configuration = JSON.parse(blocks[0].textContent);
+    if (documentNonce && (!carriesPageNonce(blocks[0]) || configuration?.nonce !== documentNonce))
+      throw new Error(`[Citry] the configuration block for app ${appId} does not carry the page's CSP nonce ` +
+        "on its tag and in its JSON data. Serialize the page with csp_nonce set to the page's nonce.");
     if (configuration?.manifest?.appId !== appId)
       throw new Error(`[Citry] the configuration block for app ${appId} describes a different app`);
     pageDevelopment ??= configuration.development === true;
@@ -5811,5 +6004,6 @@
     carriesPageNonce,
     // The page's own mode wins over the one a fragment claims; see pageDevelopment.
     (fragmentDevelopment) => reportOutOfDate(pageDevelopment ?? fragmentDevelopment),
+    checkBlockWithoutNonce,
   );
 })(window);

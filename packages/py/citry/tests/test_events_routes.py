@@ -858,8 +858,8 @@ class TestPerEventRoute:
         # The page that receives this HTML may not have the runtime yet, so the
         # result carries the loader for it, and the loader reports a runtime
         # that fails to load.
-        assert f"s.src = {url};" in action["html"]
-        assert f'console.error("Citry could not load its runtime: " + {url});' in action["html"]
+        assert f"var url = {url}, src = null;" in action["html"]
+        assert 'console.error("Citry could not load its runtime: " + url);' in action["html"]
         assert "/citry/citry.js" not in action["html"]
 
     def test_error_statuses_mirror_onto_http(self):

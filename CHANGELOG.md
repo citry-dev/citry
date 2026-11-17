@@ -2,6 +2,29 @@
 
 ## v1.0.1
 
+### Upgrading from 1.0.0
+
+- On a page whose Citry script has no CSP nonce, a Vue fragment that
+  Citry finds in the page no longer starts when it names a script Citry
+  does not serve, such as a `Script(url=...)` dependency. Start such a
+  fragment from your own script with `Citry.fragments.load()`, passing
+  only data your own server wrote, or give the page a nonce-based CSP.
+  Such a fragment also does not start when its data names Citry's files
+  on another host or under a path other than your Citry prefix, as after
+  a CDN rewrites those URLs. A CDN that serves only Citry's own script
+  still works when it keeps your Citry prefix in the script's path, such
+  as `/citry/citry.js`.
+- On a page with a nonce-based CSP, a fragment or page data block whose
+  nonce is only on its tag no longer starts. `serialize(csp_nonce=...)`
+  already writes the nonce into the JSON as well; check any middleware
+  that adds nonces by rewriting the HTML.
+- Citry's browser code now resolves a relative URL of a script or
+  stylesheet it adds against the page's address, not against a `<base>`
+  tag. A `Script(url="static/app.js")` without a leading `/` on a page
+  with a `<base>` tag now loads from the page's own folder. Write such a
+  URL from the site root, such as `Script(url="/app/static/app.js")`, so
+  it loads from the same place on every page.
+
 ### Fixes
 
 - Security: Citry now escapes rendered markup that a template writes
@@ -22,6 +45,28 @@
   it could end the attribute and add another one, such as `onmouseover`.
   A component with Vue bindings also no longer fails with a `TypeError`
   on such a value.
+- Security: Citry now starts a Vue fragment or page data block only when
+  both its tag and its JSON data carry the page's CSP nonce. A nonce on
+  the tag used to be enough, and injected markup could take that
+  attribute from the next tag that has one.
+- Security: on a page whose Citry script has no nonce, a Vue fragment
+  found in the page now starts only when every script it names is a
+  file Citry serves from the page's own origin, it sends its server
+  events and its requests for translated messages to Citry's own
+  routes, and it mounts into the element Citry wrote for it. Injected
+  markup could start a fragment that loaded any script the page's CSP
+  allowed, which under a hash-based CSP with `'strict-dynamic'` meant a
+  script from any site.
+- Security: an injected `<base>` tag can no longer move the scripts and
+  stylesheets that Citry's browser code adds to the page, or the Citry
+  script that a fragment adds, to another site, even when the page's
+  CSP has no `base-uri`.
+
+### Added
+
+- You can now start a Vue fragment from your own script with
+  `Citry.fragments.load()`. Citry does not check the data you pass, so
+  pass only data your own server wrote.
 
 ## v1.0.0
 

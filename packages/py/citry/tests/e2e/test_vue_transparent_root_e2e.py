@@ -710,8 +710,11 @@ def test_fragment_startup_styles_survive_other_unmount_and_release_on_own_cancel
     # Once both delayed stylesheets have been answered, a cancelled startup
     # that still held its stylesheet would mount or keep its link right away.
     wait_for_count(answered_styles, 2)
+    # The runtime writes the absolute URL into a link's `href` and keeps the manifest URL in
+    # `data-citry-css-url`, so the links are found by that attribute.
     page.wait_for_function(
-        'url => document.querySelectorAll(`link[href="${url}"]`).length === 0', arg=cancelled_style_urls[0]
+        'url => document.querySelectorAll(`link[data-citry-css-url="${url}"]`).length === 0',
+        arg=cancelled_style_urls[0],
     )
     # Checking that the cancelled startup did not mount needs a short wait for
     # something that should not happen; one timer and two frames cover it.
@@ -721,8 +724,10 @@ def test_fragment_startup_styles_survive_other_unmount_and_release_on_own_cancel
     assert page.evaluate("() => window.__replacementMounted") is True
     assert page.evaluate("() => window.__cancelledMounted") is not True
     assert page.locator(".cancelled-startup").count() == 0
-    assert page.locator(f'link[href="{replacement_style_urls[0]}"]').count() == 1
-    assert page.locator(f'link[href="{cancelled_style_urls[0]}"]').count() == 0
+    # The same selector finds the replacement's link, so the absence checks above and below would
+    # see a cancelled link that stayed.
+    assert page.locator(f'link[data-citry-css-url="{replacement_style_urls[0]}"]').count() == 1
+    assert page.locator(f'link[data-citry-css-url="{cancelled_style_urls[0]}"]').count() == 0
     assert page.locator(".slow-replacement").evaluate("node => getComputedStyle(node).color") == "rgb(4, 5, 6)"
     assert page_errors == []
     assert len(console_errors) == 1

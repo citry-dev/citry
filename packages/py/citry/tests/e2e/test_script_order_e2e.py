@@ -366,12 +366,17 @@ def test_skipped_third_party_script_is_tried_again_by_a_later_fragment(
     wait_for_count(skips, 1)
 
     # The fragment lists the same file. The page kept no record of the skipped one, so the browser asks again.
+    # This page has no CSP nonce, so Citry refuses a fragment block in the page that names a script from
+    # another address; page code starts this one itself.
     page.evaluate(
         """async () => {
           const html = await (await fetch('/fragment')).text();
           const target = document.createElement('div');
           document.body.append(target);
-          target.innerHTML = html;
+          target.innerHTML = html.split('<script', 1)[0];
+          const parsed = new DOMParser().parseFromString(html, 'text/html');
+          const block = parsed.querySelector('script[data-citry-vue-fragment]');
+          await Citry.fragments.load(JSON.parse(block.textContent));
         }"""
     )
     wait_for_count(skips, 2)

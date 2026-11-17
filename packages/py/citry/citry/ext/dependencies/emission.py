@@ -847,30 +847,50 @@ def _preloader_script(
     url_literal = json.dumps(resource.url).replace("<", "\\u003c")
     # The browser checks integrity only on a CORS response, and Citry's
     # runtime route sends the header that allows one.
-    integrity_line = f"  s.integrity = {json.dumps(resource.integrity)};\n"
-    crossorigin_line = f"  s.crossOrigin = {json.dumps(OWNED_ASSET_CROSSORIGIN)};\n"
+    integrity_line = f"    s.integrity = {json.dumps(resource.integrity)};\n"
+    crossorigin_line = f"    s.crossOrigin = {json.dumps(OWNED_ASSET_CROSSORIGIN)};\n"
     nonce_line = ""
     if script_security is not None and script_security.csp_nonce is not None:
-        nonce_line = f"  s.nonce = {json.dumps(script_security.csp_nonce)};\n"
+        nonce_line = f"    s.nonce = {json.dumps(script_security.csp_nonce)};\n"
     # Page markup can take over names this script reads: `<div id="Citry">` is found as
     # `window.Citry`, and `<form name="createElement">` hides `document.createElement`. So the
     # script reads `Citry` only as an own property of `window` (an element's id never is one)
     # and calls the document's members from `Document.prototype`, which markup cannot change.
+    #
+    # The runtime URL resolves against the page's own address, not the document's base URL: a
+    # `<base href>` element injected before the fragment would otherwise move the runtime to
+    # another site, and on a page without a nonce the runtime takes its route prefix from the
+    # address it loaded from. An `about:srcdoc` or `about:blank` document has no address to
+    # resolve against, so it uses its base URL only when that is on its own origin, the same rule
+    # as `assetUrl` in `_vue/client.js`. `baseURI` is read from `Node.prototype`, since a named
+    # element such as `<img name="baseURI">` hides `document.baseURI`.
     content = (
         "var own = Object.prototype.hasOwnProperty, d = Document.prototype;\n"
         "var member = function (name) { return Object.getOwnPropertyDescriptor(d, name).get.call(document); };\n"
         'var citry = own.call(window, "Citry") ? window.Citry : undefined;\n'
         "if (!citry || !citry.fragments) {\n"
-        '  var s = d.createElement.call(document, "script");\n'
-        f"  s.src = {url_literal};\n"
-        f"{integrity_line}"
-        f"{crossorigin_line}"
-        f"{nonce_line}"
+        f"  var url = {url_literal}, src = null;\n"
+        "  try { src = new URL(url, location.href).href; } catch (e) {\n"
+        "    try {\n"
+        '      var base = Object.getOwnPropertyDescriptor(Node.prototype, "baseURI").get.call(document);\n'
+        "      var inherited = new URL(url, base);\n"
+        '      if (inherited.origin !== "null" && inherited.origin === window.origin) src = inherited.href;\n'
+        "    } catch (e2) {}\n"
+        "  }\n"
         # Name the missing file in the console; without this the browser
         # shows only a failed request, and the fragment's components never
         # start, with no message.
-        f'  s.onerror = function () {{ console.error("Citry could not load its runtime: " + {url_literal}); }};\n'
-        '  member("head").appendChild(s);\n'
+        '  var failed = function () { console.error("Citry could not load its runtime: " + url); };\n'
+        "  if (src === null) failed();\n"
+        "  else {\n"
+        '    var s = d.createElement.call(document, "script");\n'
+        "    s.src = src;\n"
+        f"{integrity_line}"
+        f"{crossorigin_line}"
+        f"{nonce_line}"
+        "    s.onerror = failed;\n"
+        '    member("head").appendChild(s);\n'
+        "  }\n"
         "}\n"
         'var current = member("currentScript");\n'
         "if (current) current.remove();"

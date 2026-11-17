@@ -10,7 +10,7 @@ for, what it takes and returns, and when it fails. Vue still provides
 component state, props, events, and lifecycle hooks. This page covers only
 what Citry adds on top.
 
-The names fall into five groups:
+The names fall into six groups:
 
 - **Component JavaScript:** [`$component`](#component),
   [`onServerRender`](#on-server-render), and
@@ -22,6 +22,7 @@ The names fall into five groups:
 - **Page-wide events API:** [`Citry.events`](#citry-events), the
   [`citry:events:*` events](#events-fired-around-each-call), and how to
   [handle out-of-date pages](#out-of-date-pages).
+- **Fragments:** [`Citry.fragments.load`](#citry-fragments-load).
 - **Vue and translations:** [`Citry.vue`](#citry-vue),
   [`Citry.vue.use`](#citry-vue-use), and [`$i18n`](#i18n).
 
@@ -713,6 +714,61 @@ The Events guides cover [State](/events/state/),
 [template bindings](/events/bindings/),
 [returned actions](/events/actions/), and
 [event routes](/events/routes/).
+
+## Fragments
+
+<h3 class="doc-heading" id="citry-fragments-load"><code>Citry.fragments.load</code></h3>
+
+Start a [Vue fragment](/advanced/html-fragments/) from your own script.
+Usually you do not need it: Citry starts the fragments it finds in the
+page by itself. Call it when Citry refuses to start a fragment on a page
+whose Citry script has no CSP nonce, because the fragment names a script
+that Citry does not serve itself, such as a `Script(url=...)` dependency
+(see [Nonces in fragments](/security/#html-fragments)).
+
+```text
+Citry.fragments.load(data)
+```
+
+`data` is the parsed JSON of the fragment's
+`<script type="application/json" data-citry-vue-fragment>` tag. Insert
+the fragment's HTML without that tag first, so the element the fragment
+mounts into is in the page:
+
+```js
+const html = await (await fetch("/chart-fragment")).text();
+const template = document.createElement("template");
+template.innerHTML = html;
+const block = template.content.querySelector(
+  "script[data-citry-vue-fragment]",
+);
+block.remove();
+document.getElementById("chart").append(template.content);
+await Citry.fragments.load(JSON.parse(block.textContent));
+```
+
+The call returns a Promise that resolves once the fragment's Vue app has
+mounted. It rejects with an `Error` when:
+
+- the data is not a fragment;
+- it comes from another Citry release (it then also fires
+  [`citry:fragments:stale`](#out-of-date-pages));
+- the element the fragment mounts into is missing, appears more than
+  once, or sits inside another Vue app;
+- or a script fails to load.
+
+Citry trusts data passed to this call as it trusts its own server. It
+does not run the checks it runs on a fragment it finds in the page:
+
+- **It does not check the nonce.** On a page with a nonce-based CSP,
+  Citry still gives the page's nonce to every script and stylesheet the
+  fragment loads, so they run under the policy.
+- **It does not check the URLs.** The fragment may load scripts from any
+  site, and send its server events and its requests for translated
+  messages wherever its data says.
+
+So pass only data your own server wrote for this page, never text that
+came from a visitor, a URL, or storage that visitors can write to.
 
 ## Vue and translations
 
