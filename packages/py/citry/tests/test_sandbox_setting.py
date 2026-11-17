@@ -277,3 +277,13 @@ def test_root_package_reexports_the_sandbox_helpers():
     # objects citry-core defines, not copies that could drift.
     assert citry.safe_eval is safe_eval
     assert citry.unsafe is unsafe
+
+
+@pytest.mark.parametrize("value", [None, 0, 1, "", "false", [], "yes"])
+def test_a_sandbox_setting_that_is_not_a_bool_fails_at_construction(value):
+    # Rendering reads the flag for truth, so None from an unset environment
+    # variable, or 0 or "", would turn the sandbox off without an error.
+    with pytest.raises(
+        TypeError, match=rf"sandbox_expressions must be a bool \(True or False\), got {type(value).__name__}"
+    ):
+        Citry(sandbox_expressions=value)

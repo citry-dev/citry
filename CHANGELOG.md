@@ -85,6 +85,9 @@
   plain form post, or to a link that opens a `GET` handler, now fails
   with a 500 error when the page it renders needs JavaScript, as a
   normal render does. Before, Citry served that page with a warning.
+- `Citry(sandbox_expressions=...)` accepts only `True` or `False`. A
+  value such as `1`, `"yes"` or `None` now raises `TypeError` when the
+  app is built.
 
 ### Fixes
 
@@ -159,6 +162,10 @@
   does.
   Citry used to serve it with only a warning, including a `javascript:`
   link built from request data or an `onclick` written in the template.
+- Security: `Citry(...)` now raises `TypeError` when
+  `sandbox_expressions` is not `True` or `False`. Such a value, like
+  `None` from an unset environment variable, `""` or `0`, used to turn
+  the expression sandbox off without an error.
 - A malformed State token, or a malformed `cache/` or `asset/` URL,
   now gets a 403 or 404 instead of a server error when Citry's cache
   is a Django memcached backend.

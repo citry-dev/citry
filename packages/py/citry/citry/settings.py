@@ -907,6 +907,14 @@ class CitrySettings:
         _validate_security_script_integrity(self.security_script_integrity)
         if type(self.ssr) is not bool:
             raise TypeError("Citry ssr must be a bool.")
+        # Rendering treats any value Python reads as false as "off", so None
+        # from an unset environment variable, 0 or "" would turn the sandbox
+        # off silently. An exact type check makes such a value fail here.
+        if type(self.sandbox_expressions) is not bool:
+            raise TypeError(
+                "Citry sandbox_expressions must be a bool (True or False),"
+                f" got {type(self.sandbox_expressions).__name__}."
+            )
         # An exact int check keeps True/False and floats from passing as a
         # count, and a negative count has no meaning as a page size.
         if type(self.ssr_element_threshold) is not int:
