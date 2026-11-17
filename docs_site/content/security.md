@@ -539,6 +539,31 @@ A form that shows only the message next to each field shows nothing when
 Citry sends `fieldErrors._args` or `fieldErrors._state`, so show those
 messages too ([how](/events/forms/#eventerror-field-errors)).
 
+Citry refuses a `Decimal` whose size, ignoring the sign, is 1e309 or
+more, or that has more than 308 decimal places. A zero with more than
+308 decimal places is refused too, since `f"{amount:f}"` writes every
+one of them. The call fails with the usual 422 `invalid_args` error, and
+the field's message says which range is allowed. A short value with a
+large exponent describes a number with a huge number of digits, and a
+fixed-point format such as `f"{amount:.2f}"`, `"%d" % amount`, or
+`int(amount)` writes or computes every one of them.
+
+The check covers `data` that Citry or Pydantic checks, sent as JSON or
+from a form, including the items of an `Iterable[...]` field, and
+browser writes to a Pydantic State. Citry also checks the State that a
+State token holds each time it reads the token, and refuses the call the
+same way. That includes a token signed by an earlier release and a value
+your own code put in State, so keep such numbers out of State or store
+them as text.
+
+The check runs after Pydantic has built the value, so a validator of
+yours sees the value first. To refuse most such numbers before your
+validator runs, give the Pydantic field `max_digits`. To accept a larger
+number, declare the field as `str` and convert it in your handler. The
+check does not read into your own classes or run your code, so check a
+`Decimal` that your own type wraps, or that your code builds from text,
+such as in a computed field or a plain dataclass's `__post_init__`.
+
 Citry refuses data that nests more than 64 levels of models, dataclasses,
 TypedDicts, unions, wrap validators, and `Iterable` fields, when a
 Pydantic v2 class checks it. Each model, dataclass, TypedDict, wrap
@@ -1045,7 +1070,13 @@ not guaranteed to block every way out:
   functions and types, not a guarantee.
 - **Time and memory are not limited.** An expression can run as long
   and use as much memory as the server process allows. To cap them, set
-  limits on the worker process that renders pages.
+  limits on the worker process that renders pages. A `Decimal` can hold
+  a huge exponent in a few characters, and a fixed-point format such as
+  `.2f`, or `%d`, writes or computes every digit. Citry refuses such
+  values in Events arguments and State writes
+  ([how](#check-event-data)); check a `Decimal` that you build from
+  other sources, such as your database or `i18n.parse.number()`, before
+  a template formats it.
 
 Put only objects and functions in the render context that you are
 comfortable letting template authors use.

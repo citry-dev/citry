@@ -75,6 +75,12 @@
 - A `<c-element>` with `c-is` or `c-bind` raises for `ref_for` and
   `ref_key` written in its template. A plain text `ref="name"` on it
   still works.
+- Events now refuses a `Decimal` argument, State write or State value
+  of 1e309 or more (either sign), or with more than 308 decimal places,
+  with a 422 `invalid_args` error. This also applies to a State token
+  that an earlier release signed, and to a State your own code filled
+  with such a number. Keep such numbers out of State, or store them as
+  text.
 
 ### Fixes
 
@@ -134,6 +140,15 @@
   value from data no longer reaches Vue. Vue stored the element in the
   component's own `setup()` value of that name, so data could replace a
   value that the component showed with `v-html`, and run script.
+- Security: Citry now refuses, with the usual 422 `invalid_args` error,
+  a `Decimal` event argument, State write or State value whose size is
+  1e309 or more (either sign), or that has more than 308 decimal
+  places. Such a short value could make one request use gigabytes of
+  memory or hours of CPU time when a template formatted it with `.2f`
+  or `%d`, or app code called `int()` on it. A State token signed by an
+  earlier release, or a State your own code filled with such a number,
+  now gets the same error, so keep such numbers out of State or store
+  them as text.
 - A malformed State token, or a malformed `cache/` or `asset/` URL,
   now gets a 403 or 404 instead of a server error when Citry's cache
   is a Django memcached backend.

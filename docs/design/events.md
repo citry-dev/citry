@@ -1086,7 +1086,10 @@ fills `dict[int, ...]`), and `Literal[...]`, which accepts a value equal to
 one of its listed values after that value's own type rule, so a form
 post's `"2"` binds to `Literal[1, 2]` and `true` never matches `1`; any
 other value is the per-field 422 "Expected one of ..."); extra keys are a 422, missing required fields are
-a 422 with per-field messages, never a host 500. A JSON payload sending
+a 422 with per-field messages, never a host 500. Citry refuses a
+`Decimal` whose size is 1e309 or more, or that has more than 308 decimal
+places, whether Citry or Pydantic built it (`citry/util/decimals.py`).
+A JSON payload sending
 a string where the schema declares `int`, `float`, or `bool` is a 422,
 not a coercion: JSON can express those types natively, so a mistyped
 field there is a client bug worth surfacing (the audit rationale

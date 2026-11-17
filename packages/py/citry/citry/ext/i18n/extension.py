@@ -16,6 +16,7 @@ from citry._class_introspection import _component_declaration_generation
 from citry.browser_render import BrowserPluginDescriptor, BrowserRenderContribution
 from citry.ext.dependencies.types import Script
 from citry.extension import Extension, ExtensionCommand, StagedRenderCacheContribution, TemplateNamespaceContribution
+from citry.util.decimals import decimal_in_range
 from citry_core.i18n import CatalogCompiler, CompiledCatalog, I18nCompileError, canonicalize_locale
 
 from .commands import I18N_COMMANDS
@@ -2661,10 +2662,13 @@ def _plain_decimal_text(value: Decimal, subject: str) -> str:
     # The `int` check is for the type checker: `as_tuple()` types the
     # exponent as `int | Literal["n", "N", "F"]` to cover NaN and infinity.
     last = sign_digits_exponent.exponent
-    # `adjusted()` is the power of ten of the first digit and the tuple
-    # exponent that of the last one, so both are known without writing any
-    # digits out.
-    if not isinstance(last, int) or value.adjusted() > _DECIMAL_MAX_MAGNITUDE or last < _DECIMAL_MIN_MAGNITUDE:
+    # The shared check reads only the exponents of the first and last digit,
+    # so it knows the size without writing any digits out. Event arguments
+    # and State writes get the same check with the smaller range a float
+    # accepts (see `citry.util.decimals`).
+    if not isinstance(last, int) or not decimal_in_range(
+        value, largest=_DECIMAL_MAX_MAGNITUDE, smallest=_DECIMAL_MIN_MAGNITUDE
+    ):
         # The message gives the size, never the value, so a refused number
         # cannot become a huge log line.
         raise ValueError(

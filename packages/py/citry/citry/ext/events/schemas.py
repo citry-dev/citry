@@ -18,7 +18,10 @@ The coercion table, exactly (anything else is a per-field error):
 - ``int`` / ``float`` cross-coercion (a whole ``float`` for an ``int`` field,
   any ``int`` for a ``float`` field; ``bool`` counts as neither),
 - ``str`` to ``UUID`` / ``datetime`` / ``date`` / ``time`` / ``Decimal`` /
-  ``Enum`` (ISO strings, by enum value),
+  ``Enum`` (ISO strings, by enum value); a ``Decimal`` whose size, ignoring
+  the sign, is ``1e309`` or more, or that has more than 308 decimal places,
+  is refused, so a short text cannot hold a number with millions of digits
+  (``citry.util.decimals``),
 - ``list`` to ``tuple`` / ``set``,
 - nested annotated classes from objects,
 - a ``Literal[...]`` field accepts a value equal to one of its listed
@@ -82,6 +85,12 @@ from citry.ext.events.errors import PYDANTIC_EXTRA_TYPES, FieldErrors, PydanticT
 from citry.ext.events.files import UploadedFile
 from citry.ext.events.handlers import _is_schema_class
 from citry.ext.events.state import convert_state_class
+from citry.util.decimals import (
+    REQUEST_DECIMAL_MESSAGE,
+    find_oversized_decimal,
+    request_decimal_in_range,
+    shared_walk,
+)
 from citry.util.logger import logger
 
 if TYPE_CHECKING:
@@ -327,7 +336,10 @@ def _validate_payload(schema_cls: type, args: Mapping[str, Any], *, bind_strings
     # One error total for the whole payload, so every Pydantic call inside it
     # (a nested model in a plain dataclass, one per list item) shares it, and
     # one work budget for the request, which a direct caller gets too.
-    with bounded.request_work(), bounded.validation_scope(args):
+    # The size check of Decimal values walks each Pydantic result as it is
+    # built, so the walks share what they have read, and an outer level does
+    # not walk again what an inner level already checked.
+    with bounded.request_work(), bounded.validation_scope(args), shared_walk() as walks:
         try:
             instance = _validate_object(schema_cls, args, None, errors, bind_strings=bind_strings)
         except bounded.ValidationTooCostly as stop:
@@ -341,6 +353,12 @@ def _validate_payload(schema_cls: type, args: Mapping[str, Any], *, bind_strings
             # traceback, which would list every frame, and comes once per class.
             bounded.warn_work_spent(schema_cls, "depth")
             return ValidationResult(value=None, fields={"_args": bounded.TOO_DEEP_MESSAGE})
+    if instance is not _INVALID and walks.needs_final_walk(instance):
+        # The walks above skip an object an inner level already read, but an
+        # outer `__post_init__` or validator may have written a Decimal into
+        # it since. One more walk of the finished value, now that the shared
+        # scope has ended, reads everything once before the handler sees it.
+        instance = _without_oversized_decimals(instance, None, errors)
     if instance is _INVALID:
         # The payload alone decides how many undeclared keys and how many
         # list or dict items it sends, so only those messages are limited,
@@ -678,8 +696,9 @@ def _validate_object(
         return _INVALID
     try:
         if checker is None:
-            return converted(**values)
-        return bounded.validate_init(checker, converted, values)
+            built = converted(**values)
+        else:
+            built = bounded.validate_init(checker, converted, values)
     except pydantic.ValidationError as err:
         _record_pydantic_errors(err, converted, parent, errors)
         return _INVALID
@@ -689,6 +708,9 @@ def _validate_object(
         logger.exception(f"A validator raised while checking event data for {schema_cls.__qualname__}.")
         errors.add(trimmed_path(parent, "_args"), bounded.NOT_CHECKABLE_MESSAGE)
         return _INVALID
+    # The Pydantic dataclass may hold values Citry did not parse itself, such
+    # as a Decimal a validator built, so they get the same size check.
+    return _without_oversized_decimals(built, parent, errors)
 
 
 def _validate_pydantic(schema_cls: type, mapping: Mapping[str, Any], parent: Any, errors: FieldErrors) -> Any:
@@ -698,9 +720,10 @@ def _validate_pydantic(schema_cls: type, mapping: Mapping[str, Any], parent: Any
         return _INVALID
     try:
         if checker is None:
-            return schema_cls.model_validate(dict(mapping))  # type: ignore[attr-defined]
-        # A stop raised inside goes up to validate_args, which ends the whole validation.
-        return bounded.validate_python(checker, dict(mapping))
+            result = schema_cls.model_validate(dict(mapping))  # type: ignore[attr-defined]
+        else:
+            # A stop raised inside goes up to validate_args, which ends the whole validation.
+            result = bounded.validate_python(checker, dict(mapping))
     except pydantic.ValidationError as err:
         _record_pydantic_errors(err, schema_cls, parent, errors)
         return _INVALID
@@ -718,6 +741,31 @@ def _validate_pydantic(schema_cls: type, mapping: Mapping[str, Any], parent: Any
         logger.exception(f"A validator raised while checking event data for {schema_cls.__qualname__}.")
         errors.add(trimmed_path(parent, "_args"), bounded.NOT_CHECKABLE_MESSAGE)
         return _INVALID
+    return _without_oversized_decimals(result, parent, errors)
+
+
+def _without_oversized_decimals(result: Any, parent: Any, errors: FieldErrors) -> Any:
+    """
+    Return ``result``, or ``_INVALID`` when it holds a ``Decimal`` outside the request range.
+
+    Pydantic accepts a ``Decimal`` such as ``"1e999999999"``, which a
+    fixed-point format or ``int()`` would write out digit by digit, so a
+    model's result gets the same size check as a ``Decimal`` Citry parses
+    itself. The check runs as soon as Pydantic returns, before an object
+    that holds the model is built.
+    """
+    found = find_oversized_decimal(result)
+    if found is None:
+        return result
+    path = parent
+    for part in found:
+        # A set item or a dict key has no key of its own, so it and
+        # anything inside it are reported at its container's path.
+        if part is None:
+            break
+        path = (path, part)
+    errors.add(path if path is not None else trimmed_path(parent, "_args"), REQUEST_DECIMAL_MESSAGE)
+    return _INVALID
 
 
 def _refuse_pydantic_v1(schema_cls: type, parent: Any, errors: FieldErrors) -> Any:
@@ -1393,6 +1441,10 @@ def _coerce(value: Any, annotation: Any, path: Any, errors: FieldErrors, *, bind
         if isinstance(value, annotation):
             if not value.is_finite():
                 return _fail(errors, path, f"Not a valid Decimal: {value!r}.")
+            # A codec may build Decimal values itself, so they get the same
+            # size check as the ones parsed from text below.
+            if not request_decimal_in_range(value):
+                return _fail(errors, path, REQUEST_DECIMAL_MESSAGE)
             return value
         # From strings only: JSON floats would defeat the point of Decimal.
         if isinstance(value, str):
@@ -1406,6 +1458,12 @@ def _coerce(value: Any, annotation: Any, path: Any, errors: FieldErrors, *, bind
             # same per-field error.
             if not parsed_decimal.is_finite():
                 return _fail(errors, path, f"Not a valid Decimal: {_short_repr(value)}.")
+            # A short text such as "1e999999999" holds a number with a
+            # billion digits, which a fixed-point format or int() would
+            # write out in full. Refused here, before a `__post_init__` or
+            # the handler can see it.
+            if not request_decimal_in_range(parsed_decimal):
+                return _fail(errors, path, REQUEST_DECIMAL_MESSAGE)
             return parsed_decimal
         return _fail(errors, path, _mismatch("Decimal", value))
     if issubclass(annotation, UploadedFile):

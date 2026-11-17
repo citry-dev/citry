@@ -107,6 +107,7 @@ from citry.ext.events.schemas import (
 )
 from citry.ext.events.state import restore_state, state_field_names, state_model_kind, state_wire_values
 from citry.settings import is_usable_secret
+from citry.util.decimals import REQUEST_DECIMAL_MESSAGE, find_oversized_decimal
 from citry.util.logger import logger
 
 if TYPE_CHECKING:
@@ -123,6 +124,7 @@ __all__ = [
     "VerifiedState",
     "apply_state_updates",
     "mint_state_token",
+    "oversized_state_decimals",
     "verify_state_token",
 ]
 
@@ -1064,6 +1066,11 @@ def _set_on_pydantic_dataclass(state: Any, to_apply: list[tuple[str, Any]], erro
                             bounded.validate_assignment(checker, state, name, value)
                         except ValueError as error:
                             _record_model_errors(error, errors, state_cls)
+                    # The class built the fields' values from the writes, and
+                    # a validator may have changed other fields too, so every
+                    # field is checked; a refused batch is undone below.
+                    if not errors:
+                        _check_state_decimals(state, state_cls, errors)
                 elif checker is not None:
                     _check_dataclass_batch(state, to_apply, errors)
                 if not errors and not checks_assignment:
@@ -1158,6 +1165,11 @@ def _check_dataclass_batch(state: Any, to_apply: list[tuple[str, Any]], errors: 
         except ValueError as error:
             _record_model_errors(error, errors, state_cls)
             continue
+        # The State keeps the browser's text here, but the next call's
+        # restore builds this checked value from it, so the size check reads
+        # the checked value.
+        if not _check_field_decimals(name, checked, errors):
+            continue
         if check.reads_other_fields:
             current[name] = checked
     if errors or not check.checks_across_fields:
@@ -1170,9 +1182,13 @@ def _check_dataclass_batch(state: Any, to_apply: list[tuple[str, Any]], errors: 
     merged.update(to_apply)
     init_names = {item.name for item in dataclass_fields(state) if item.init}
     try:
-        restore_state(state_cls, {key: item for key, item in merged.items() if key in init_names})
+        rebuilt = restore_state(state_cls, {key: item for key, item in merged.items() if key in init_names})
     except ValueError as error:
         _record_model_errors(error, errors, state_cls)
+        return
+    # A model validator or `__post_init__` may derive a field from the
+    # writes, so every field of the State the next restore builds is checked.
+    _check_state_decimals(rebuilt, state_cls, errors)
 
 
 # The field message when an author's validator fails with an error Pydantic
@@ -1371,11 +1387,76 @@ def _apply_model_state_updates(state: Any, updates: Mapping[str, Any], writable:
             "Some state updates were rejected; see the field messages.",
             fields={"_state": _NOT_CHECKED_MESSAGE},
         ) from error
+    # Pydantic accepted the writes, but a Decimal it built from them may be
+    # far too large to write out, so every field is checked before the
+    # State changes: the written fields, and any field a validator derived
+    # from them. Every field, not only the ones that compare unequal,
+    # because `Decimal("0E-1000000") == Decimal(0)`.
+    _check_state_decimals(checked, state_cls, errors)
+    if errors:
+        raise _rejected_updates(errors)
     # Every field takes the checked model's value, so a value a validator
     # derives from a written field is current too. The values are copied
     # without assignment validation, which already ran.
     state.__dict__.update({name: checked.__dict__[name] for name in state_field_names(type(state))})
     return tuple(sorted(updates))
+
+
+def oversized_state_decimals(state: Any, state_cls: type) -> dict[str, str] | None:
+    """
+    Return the field messages for a restored State that holds a ``Decimal`` outside the request range.
+
+    A State token signed by an earlier release, a State the server stored
+    before it checked browser writes, or a value the app's own code put in
+    State may hold such a value. The dispatcher refuses the call before any
+    handler runs, and a cached render is not replayed, so the value is never
+    written out and the token is never signed again with a new expiry.
+
+    Returns:
+        ``None`` when every field fits, else the per-field messages.
+
+    """
+    errors = FieldErrors()
+    _check_state_decimals(state, state_cls, errors)
+    if not errors:
+        return None
+    fields, _unlisted = errors.limited()
+    return fields
+
+
+def _check_state_decimals(state: Any, state_cls: type, errors: FieldErrors) -> None:
+    """Record an error for each field of ``state`` that holds a ``Decimal`` outside the request range."""
+    for name in state_field_names(state_cls):
+        # A field with `init=False` may still be unset.
+        if hasattr(state, name):
+            _check_field_decimals(name, getattr(state, name), errors)
+
+
+def _check_field_decimals(name: str, value: Any, errors: FieldErrors) -> bool:
+    """
+    Record an error when the value of State field ``name`` holds a ``Decimal`` outside the request range.
+
+    A State field is often shown on the page, so a ``Decimal`` such as
+    ``"1e999999999"`` that a template formats with ``.2f`` would be written
+    out digit by digit on every render. Event arguments get the same check
+    (see ``citry.util.decimals``).
+
+    Returns:
+        ``True`` when the value fits.
+
+    """
+    found = find_oversized_decimal(value)
+    if found is None:
+        return True
+    path: Any = (None, name)
+    for part in found:
+        # A set item or a dict key has no key of its own, so it and
+        # anything inside it are reported at its container's path.
+        if part is None:
+            break
+        path = (path, part)
+    errors.add(path, REQUEST_DECIMAL_MESSAGE)
+    return False
 
 
 def _is_pydantic_v1_config_error(error: BaseException) -> bool:

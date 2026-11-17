@@ -98,6 +98,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, NamedTuple, cast
 from weakref import WeakKeyDictionary
 
+from citry.util.decimals import REQUEST_DECIMAL_MESSAGE, find_oversized_decimal
 from citry.util.logger import logger
 
 if TYPE_CHECKING:
@@ -1159,7 +1160,7 @@ def _read_items_now(items: Any) -> Any:
     """
     tally = _current_tally()
     if tally is None:
-        return iter(list(items))
+        return iter(_without_oversized_decimals(list(items)))
     # Each item is checked by a new call into pydantic-core on top of this
     # frame, which the counting wrappers do not see when the items are not
     # objects, so this counts as one level of nesting, as an object does.
@@ -1167,9 +1168,24 @@ def _read_items_now(items: Any) -> Any:
         raise _stopped("nesting", tally.depth_limit)
     tally.depth += 1
     try:
-        return iter(list(items))
+        return iter(_without_oversized_decimals(list(items)))
     finally:
         tally.depth -= 1
+
+
+def _without_oversized_decimals(items: list[Any]) -> list[Any]:
+    """
+    Refuse checked items that hold a ``Decimal`` too large to write out, as Citry refuses one in any other field.
+
+    The handler gets an iterator over these items, which the size check
+    after Pydantic cannot read without using it up, so the items are
+    checked here, while they are still a list.
+    """
+    if find_oversized_decimal(items) is not None:
+        # A Pydantic error, so it is reported at the field's own path with
+        # the same message as every other refused Decimal.
+        raise pydantic_core.PydanticCustomError("decimal_size", REQUEST_DECIMAL_MESSAGE)
+    return items
 
 
 def _items_read_now(copied: dict[str, Any]) -> dict[str, Any]:

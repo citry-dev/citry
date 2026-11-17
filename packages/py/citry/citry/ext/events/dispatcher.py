@@ -94,6 +94,7 @@ from citry.ext.events.tokens import (
     StateUpdateError,
     apply_state_updates,
     mint_state_token,
+    oversized_state_decimals,
     state_bytes,
     state_growth_error,
     verify_state_token,
@@ -915,6 +916,27 @@ class EventsDispatcher:
             # a list. Restore it before the fingerprint, so the handler and any
             # component it renders from this State see the declared type.
             _restore_json_tuples(state, info.state_cls)
+            # A token signed by an earlier release, or State the app filled
+            # itself, may hold a Decimal far too large to write out.
+            # Refusing the call here, before the handler, keeps the value off
+            # the page and stops the server from signing such a token again
+            # with a new expiry.
+            oversized = oversized_state_decimals(state, info.state_cls)
+            if oversized is not None:
+                # The field names are the author's own, so the log can name
+                # them and point the author at a value their code put there.
+                logger.warning(
+                    f"Component {comp_cls.__name__}: a verified State token holds a Decimal outside the range"
+                    f" Citry accepts from a request in {sorted(oversized)}, so the call answers invalid_args."
+                )
+                error = build_error(
+                    422,
+                    "invalid_args",
+                    f"The State of component {comp_cls.__name__!r} holds a number that is too large"
+                    " or has too many decimal places.",
+                    oversized,
+                )
+                return build_error_result(error, send_sequence)
             state_fingerprint = _state_fingerprint(state)
             if state_fingerprint is None and _too_deep_to_write(state):
                 # Pydantic's limit on writing nested values depends on the

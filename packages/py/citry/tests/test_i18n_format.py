@@ -33,6 +33,7 @@ from citry import (
 )
 from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
 from citry.ext.i18n import I18nRuntimeUnavailableError
+from citry.util.decimals import REQUEST_DECIMAL_MESSAGE
 
 from ._memory import requires_tracemalloc, tracemalloc
 
@@ -839,11 +840,12 @@ def test_a_tr_argument_inside_the_range_renders(kind: str) -> None:
     assert "Total \u20680\u2069" in str(total(amount=Decimal("0e-10000000")))
 
 
-def test_an_events_handler_showing_a_submitted_huge_decimal_logs_a_short_error(
+def test_an_events_handler_never_sees_a_submitted_huge_decimal(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    # Showing a submitted amount in the reply is an ordinary pattern, and the
-    # form's text becomes a Decimal with whatever exponent it names.
+    # Showing a submitted amount in the reply is an ordinary pattern. Events
+    # refuses a Decimal outside the float range before the handler runs, so
+    # the formatter never receives the huge value from a request.
     app = configured_app()
     app.set_mounted_prefix("/citry")
 
@@ -876,10 +878,8 @@ def test_an_events_handler_showing_a_submitted_huge_decimal_logs_a_short_error(
         result = EventsDispatcher().dispatch(envelope, TransportContext(transport="http", citry=app))
     [item] = result["results"]
     assert item["ok"] is False
-    assert item["error"]["code"] == "handler_error"
-    # The logged error, traceback included, must not repeat the digits.
+    assert item["error"]["code"] == "invalid_args"
+    assert item["error"]["fieldErrors"] == {"amount": REQUEST_DECIMAL_MESSAGE}
+    # Nothing logged, traceback included, repeats the digits.
     formatter = logging.Formatter()
-    assert caplog.records
-    logged = [formatter.format(record) for record in caplog.records]
-    assert any("digits all lie between" in text for text in logged)
-    assert all(len(text) < 20_000 for text in logged)
+    assert all(len(formatter.format(record)) < 20_000 for record in caplog.records)

@@ -10,12 +10,14 @@ from citry.ext.events.state import restore_state, state_field_names, state_model
 from citry.extension import RenderCacheWrite, StagedRenderCacheContribution
 
 from .emission import EXTRA_KEY, EventInstanceEntry
+from .schemas import _is_pydantic_dataclass
 from .tokens import (
     _SERVER_PREFIX,
     StateTokenError,
     _prepare_state_token_values,
     _resolve_hints,
     _value_matches,
+    oversized_state_decimals,
     verify_state_token,
 )
 
@@ -132,11 +134,12 @@ def stage_events_cache(
             state_fields = state_field_names(info.state_cls)
             if set(verified.state_kwargs) != set(state_fields):
                 raise CacheArtifactError(f"{path}.state.token fields do not match the current State class.")
+            restored = None
             if state_model_kind(info.state_cls) is not None:
                 # A model State's token holds its JSON form, so the model
                 # itself says whether the values still fit.
                 try:
-                    restore_state(info.state_cls, dict(verified.state_kwargs))
+                    restored = restore_state(info.state_cls, dict(verified.state_kwargs))
                 except Exception as err:
                     raise CacheArtifactError(f"{path}.state.token no longer fits the current State class.") from err
             else:
@@ -146,6 +149,23 @@ def stage_events_cache(
                         raise CacheArtifactError(
                             f"{path}.state.token field {field_name!r} does not match its current type."
                         )
+                if _is_pydantic_dataclass(info.state_cls):
+                    # A Pydantic dataclass State, like a model State, builds
+                    # typed values such as a Decimal from the token's text,
+                    # so it is built here for the size check below. A plain
+                    # State holds JSON values only, which hold no Decimal.
+                    try:
+                        restored = restore_state(info.state_cls, dict(verified.state_kwargs))
+                    except Exception as err:
+                        raise CacheArtifactError(
+                            f"{path}.state.token no longer fits the current State class."
+                        ) from err
+            # A token signed by an earlier release may hold a Decimal far too
+            # large to write out. Replaying the render would sign it again
+            # with a new expiry, so the render is built afresh instead, as
+            # the dispatcher refuses an Events call with such a token.
+            if restored is not None and oversized_state_decimals(restored, info.state_cls) is not None:
+                raise CacheArtifactError(f"{path}.state.token holds a Decimal outside the request range.")
             expected_public = {name: verified.state_kwargs[name] for name in info.state_meta.public}
             if not _exact_json_equal(public_values, expected_public):
                 raise CacheArtifactError(f"{path}.state.values do not match the protected token.")
