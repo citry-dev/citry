@@ -1,5 +1,20 @@
 # Release notes
 
+## v1.0.1
+
+### Fixes
+
+- Security: Citry now escapes rendered markup that a template writes
+  into an HTML attribute in every case, such as
+  `c-title="<>{{ value }}</>"` or a component input that holds such
+  markup and is passed to `c-title`. Before, three kinds of render wrote
+  it unescaped: a template that holds another template language's syntax
+  through an extension that uses the experimental
+  `on_template_foreign_spans` hook (for example, to use Django template
+  tags); a slot rendered with `str(slot)` after the page render; and a
+  slot rendered in a worker thread. A component inside such markup now
+  raises in those renders, as it already did elsewhere.
+
 ## v1.0.0
 
 Citry 1.0.0 is the first stable release. Code that uses what the docs

@@ -1437,7 +1437,7 @@ class ElementAttrsNode(Node):
     def _format(
         self,
         resolved: Mapping[str, Any],
-        context: CitryContext,
+        context: CitryContext,  # noqa: ARG002 - the capture subclass overrides this signature and uses it
         *,
         validate_keys: bool = True,
     ) -> RenderPart:
@@ -1481,54 +1481,29 @@ class ElementAttrsNode(Node):
                 validate_html_attr_name(key, where=f"attributes resolved for <{self.tag_name}>")
         formatter = format_attrs if validate_keys else _format_resolved_attrs_to_str
 
-        # Common case: no attribute value is a nested-template render, so the
-        # whole dict formats in a single pass. Doing it per key (the mixed-case
-        # path below) would escape, join, and concatenate once per attribute,
-        # which is the dominant per-element cost on a big page.
-        if not any(isinstance(value, CitryRender) for value in resolved.values()):
-            chunk = formatter(resolved)
-            result = (" " + chunk) if chunk else ""
-            if (
-                cache_key is not None
-                and type(result) is str
-                and _has_default_attr_formatting(_format_resolved_attrs_to_str)
-            ):
-                # Only misses take the lock. Eviction/insertion must be one
-                # operation so simultaneous misses retain at most 256 entries.
-                with _attrs_output_cache_lock:
-                    if cache_key not in _attrs_output_cache and len(_attrs_output_cache) >= 256:
-                        _attrs_output_cache.pop(next(iter(_attrs_output_cache)))
-                    _attrs_output_cache[cache_key] = result
-            return result
-
-        # Mixed: a nested-template value (`c-foo="<div>...</div>"`) keeps its
-        # parts so components inside it stay deferred and render through the
-        # queue. Format the runs of plain attributes around it in one call each.
-        parts: list[RenderPart] = []
-        plain: dict[str, Any] = {}
-
-        def flush_plain() -> None:
-            if plain:
-                chunk = formatter(plain)
-                if chunk:
-                    parts.append(" " + chunk)
-                plain.clear()
-
-        for key, value in resolved.items():
-            if isinstance(value, CitryRender):
-                flush_plain()
-                parts.append(f' {escape(key)}="')
-                parts.append(value)
-                parts.append('"')
-            else:
-                plain[key] = value
-        flush_plain()
-
-        if not parts:
-            return ""
-        if all(isinstance(part, str) for part in parts):
-            return "".join(str(part) for part in parts)
-        return CitryRender(parts=parts, context=context)
+        # The whole dict formats in a single pass. A rendered-markup value (a
+        # `CitryRender`, such as `c-foo="<>...</>"` or a component input that
+        # holds one) goes through the same formatter as every other value, as
+        # on the capture path. The formatter escapes its HTML as attribute
+        # text, so a `"` from `Markup` or a slot inside it cannot end the
+        # attribute and add a new one. Every route onto these nodes (foreign
+        # spans, a slot rendered outside a component render) writes its
+        # attribute values here; only `#c-key` has its own writer,
+        # `ElementKeyNode`.
+        chunk = formatter(resolved)
+        result = (" " + chunk) if chunk else ""
+        if (
+            cache_key is not None
+            and type(result) is str
+            and _has_default_attr_formatting(_format_resolved_attrs_to_str)
+        ):
+            # Only misses take the lock. Eviction/insertion must be one
+            # operation so simultaneous misses retain at most 256 entries.
+            with _attrs_output_cache_lock:
+                if cache_key not in _attrs_output_cache and len(_attrs_output_cache) >= 256:
+                    _attrs_output_cache.pop(next(iter(_attrs_output_cache)))
+                _attrs_output_cache[cache_key] = result
+        return result
 
     def __repr__(self) -> str:
         return f"ElementAttrsNode(attrs={len(self.attrs)}, used_vars={self.used_vars})"
