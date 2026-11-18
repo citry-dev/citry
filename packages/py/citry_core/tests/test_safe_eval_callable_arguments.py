@@ -209,6 +209,10 @@ class TestDjangoLazyStrings:
     def test_format_on_a_lazy_string_is_refused(self, source):
         assert_refused(source, lazy=FakePromise, obj=Holder())
 
+    @pytest.mark.usefixtures("fake_django")
+    def test_a_bound_lazy_format_from_the_context_is_refused(self):
+        assert_refused("[obj].sort(key=fmt)", fmt=FakePromise("{0._trigger}").format, obj=Holder())
+
     def test_with_real_django(self):
         functional = pytest.importorskip("django.utils.functional")
         assert_refused("[obj].sort(key=lazy('{0._trigger}').format)", lazy=functional.lazystr, obj=Holder())
@@ -216,7 +220,9 @@ class TestDjangoLazyStrings:
 
 class TestArgumentsTheCheckCannotRead:
     def test_an_argument_whose_lookup_raises_is_refused(self):
-        assert_refused("apply(f, 1)", apply=lambda f, x: f(x), f=RaisingLookup())
+        error = assert_refused("apply(f, 1)", apply=lambda f, x: f(x), f=RaisingLookup())
+        # The object's own error stays attached, so the reason is not lost.
+        assert isinstance(error.__cause__, KeyError)
 
 
 class TestValidateCallableHook:

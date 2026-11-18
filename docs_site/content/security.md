@@ -1144,9 +1144,9 @@ not guaranteed to block every way out:
   functions it finds in its arguments (`map`, `functools.reduce`,
   `sorted`, `operator.call`) or reads an attribute from a string (a
   `getattr`-style helper, `inspect`, `importlib`, Django's
-  `format_html`) does that work unchecked. The sandbox blocks a call that
-  is handed a blocked function directly, but not one inside a list. Do
-  not put such helpers in the context.
+  `format_html` or `format_lazy`) does that work unchecked. The sandbox
+  blocks a call that is handed a blocked function directly, but not one
+  inside a list. Do not put such helpers in the context.
 - **Dict keys that start with `_` are not hidden.** `data['_key']` is
   blocked, but `data.get('_key')`, looping over `data`, and
   `'%(_key)s' % data` read the same item.

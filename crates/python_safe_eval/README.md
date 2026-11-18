@@ -229,7 +229,7 @@ Custom validators are run **in addition to** the rules defined in [What is unsaf
 | `validate_variable`  | `(var_name: str) -> bool`             |
 | `validate_attribute` | `(obj: Any, attr: str) -> bool`       |
 | `validate_subscript` | `(obj: Any, key: str) -> bool`        |
-| `validate_callable`  | `(obj: Any) -> bool`                  |
+| `validate_callable`  | `(obj: Any) -> bool`, also called for every function or class passed as an argument |
 | `validate_assign`    | `(var_name: str, value: Any) -> bool` |
 
 ```python
@@ -305,7 +305,7 @@ Here's a list of all unsafe scenarios that will trigger `SecurityError`:
 It is a second layer of protection, not a promise that a template from a stranger is safe to run, and it CANNOT protect against all forms of misuse:
 
 - **It does not limit the objects you pass in.** An expression can read every attribute and call every method of a context object whose name does not start with `_`. A secret in a public attribute is readable, and a public method that deletes data can be called.
-- **It checks only what the expression text writes.** A function you pass in that calls other functions or looks up names from text (`map`, `functools.reduce`, `sorted`, `operator.call`, a `getattr`-style helper, `inspect`, `importlib`) does so without these checks. A call that is handed a refused function directly is refused; one inside a list or other container is not checked.
+- **It checks only what the expression text writes.** A function you pass in that calls other functions or looks up names from text (`map`, `functools.reduce`, `sorted`, `operator.call`, a `getattr`-style helper, Django's `format_lazy`, `inspect`, `importlib`) does so without these checks. A call that is handed a refused function directly is refused; one inside a list or other container is not checked.
 - **Item keys that start with `_` are not hidden.** `data["_key"]` is refused, but `data.get("_key")` and `"%(_key)s" % data` read the same item.
 
 ### Denial of service (DoS) attacks

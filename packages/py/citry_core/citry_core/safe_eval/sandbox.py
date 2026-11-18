@@ -16,8 +16,9 @@ It refuses:
   name, or wrapped in `functools.partial`, is refused too.
 - Text formatting that follows paths written inside the string: `format` and `format_map`
   of any string type (`str`, its subclasses such as `markupsafe.Markup`,
-  `collections.UserString`, and Django lazy strings), every method of a `string.Formatter`, and building an
-  `operator.attrgetter` or `operator.methodcaller`. Use f-strings instead. Reading
+  `collections.UserString`, and Django lazy strings), every method of a
+  `string.Formatter`, and building an `operator.attrgetter` or
+  `operator.methodcaller`. Use f-strings instead. Reading
   `format` or `format_map` from a string is refused too, not only calling it, so the
   method cannot be handed to something else that calls it.
 - Functions marked with `@unsafe` or `alters_data = True`.
@@ -275,7 +276,8 @@ def _string_types() -> tuple[type, ...]:
     `lazystr(...)`). They are not `str` instances, but Django copies the methods of `str`
     onto them, so their `format` follows paths too. A template can choose the text when
     the app passes a lazy-string function such as `gettext_lazy` in the context. Django's
-    class is looked up only when Django is already imported, so other apps never import it.
+    class is looked up only when Django is already imported, so an app that does not use
+    Django never imports it.
     """
     functional = sys.modules.get("django.utils.functional")
     promise = getattr(functional, "Promise", None)
@@ -355,7 +357,15 @@ def _formatting_method_message(obj: Any) -> str | None:
     # part in the same path lookup as `format`.
     if isinstance(owner, string.Formatter):
         return _FORMAT_MESSAGE
-    if isinstance(owner, (str, UserString)) and getattr(obj, "__name__", None) in _FORMAT_METHOD_NAMES:
+    string_types = _string_types()
+    if not isinstance(owner, string_types):
+        return None
+    if getattr(obj, "__name__", None) in _FORMAT_METHOD_NAMES:
+        return _FORMAT_MESSAGE
+    # Django names every method of a lazy string `__wrapper__`, so the name does not say
+    # which method it is. The function is the one stored on the class under that name.
+    function = getattr(obj, "__func__", None)
+    if function is not None and any(getattr(type(owner), name, None) is function for name in _FORMAT_METHOD_NAMES):
         return _FORMAT_MESSAGE
     return None
 
@@ -390,8 +400,8 @@ def is_safe_callable(obj: Any) -> tuple[bool, str | None]:
     - Decorated with `@unsafe`
     - Marked with `obj.alters_data = True` (Django convention)
     - Unsafe builtins (e.g. `eval`)
-    - `format` or `format_map` of any `str` instance, subclasses included, and of
-      `collections.UserString` (use f-strings instead)
+    - `format` or `format_map` of any `str` instance, subclasses included, of
+      `collections.UserString`, and of a Django lazy string (use f-strings instead)
     - Every method of a `string.Formatter` instance
     - `operator.attrgetter` and `operator.methodcaller`, which would let the template name
       the attribute to read
@@ -445,7 +455,9 @@ def is_safe_callable(obj: Any) -> tuple[bool, str | None]:
     return (True, None)
 
 
-def find_unsafe_callable_argument(args: tuple[Any, ...], kwargs: dict[str, Any]) -> tuple[Any, str | None] | None:
+def find_unsafe_callable_argument(
+    args: tuple[Any, ...], kwargs: dict[str, Any]
+) -> tuple[Any, str | None, Exception | None] | None:
     """
     Find an argument that is a function the sandbox refuses to call.
 
@@ -459,8 +471,9 @@ def find_unsafe_callable_argument(args: tuple[Any, ...], kwargs: dict[str, Any])
     function only as a direct argument (`list.sort(key=...)` is the only one).
 
     Returns:
-        `(argument, replacement_message)` for the first refused argument, or None when
-        every argument is safe.
+        `(argument, replacement_message, error)` for the first refused argument, or None
+        when every argument is safe. `error` is the exception the check raised, when it
+        could not check the argument at all.
 
     """
     for value in (*args, *kwargs.values()):
@@ -468,13 +481,14 @@ def find_unsafe_callable_argument(args: tuple[Any, ...], kwargs: dict[str, Any])
         if callable(value):
             try:
                 is_safe, replacement_message = is_safe_callable(value)
-            except Exception:  # noqa: BLE001
+            except Exception as error:  # noqa: BLE001
                 # The check reads attributes of the object, and an object's own
                 # `__getattr__` or `__hash__` can raise anything. An object the sandbox
-                # cannot check is refused rather than handed on.
-                return (value, None)
+                # cannot check is refused with a `SecurityError`, and the caller keeps
+                # the object's own error as its cause.
+                return (value, None, error)
             if not is_safe:
-                return (value, replacement_message)
+                return (value, replacement_message, None)
     return None
 
 

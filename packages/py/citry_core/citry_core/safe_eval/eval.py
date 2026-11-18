@@ -49,7 +49,7 @@ def safe_eval(
         validate_attribute: Optional extra validation for attribute access.
         validate_subscript: Optional extra validation for subscript access.
         validate_callable: Optional extra validation for function calls. It also receives
-            every function passed as an argument to a call, because the receiving function
+            every function or class passed as an argument to a call, because the receiving function
             may call it.
         validate_assign: Optional extra validation for variable assignments.
 
@@ -459,11 +459,13 @@ def call(
     # `key=`, would call it without passing through this check.
     refused = find_unsafe_callable_argument(args, kwargs)
     if refused is not None:
-        argument, replacement_message = refused
+        argument, replacement_message, check_error = refused
         error_msg = f"function '{argument!r}' is unsafe and cannot be passed to '{func!r}'"
         if replacement_message:
             error_msg += f". {replacement_message}"
-        raise SecurityError(error_msg)
+        if check_error is not None:
+            error_msg += f". Checking it raised {type(check_error).__name__}"
+        raise SecurityError(error_msg) from check_error
     return func(*args, **kwargs)
 
 
