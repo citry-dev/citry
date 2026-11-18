@@ -1,7 +1,7 @@
 # Who may supply each input that reaches the page
 
-**Status (2026-11-15): written against `main` for the citry 1.0.0
-release** (the `citry` package was at 0.9.0). Line numbers are from the
+**Status (2026-11-18): written against `main` after the citry 1.0.1
+release.** Line numbers are from the
 last commit that changed each row. Every row names the function that does the
 work; when that function changes, the row changes in the same pull request
 (see [Keeping this doc accurate](#keeping-this-doc-accurate)).
