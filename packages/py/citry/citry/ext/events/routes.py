@@ -669,13 +669,13 @@ def _resolve_redirect_url(url: str, request: RouteRequest) -> str:
     resolves the URL against the posting page first. The page comes from
     the ``Referer`` header, the only place a plain form post names it.
 
-    A URL that does not depend on the page (it has a scheme, or starts with
-    ``/`` or ``\``, which browsers read like ``/``) passes through as is.
-    One kind of URL with a scheme still depends on the page: ``http:next``
-    on an ``http:`` page (or ``https:next`` on an ``https:`` page) has no
-    ``//`` or ``\`` after the colon, so the browser reads it as the
-    relative URL ``next``. It is resolved like one when the Referer has the
-    same scheme.
+    A URL that does not depend on the page passes through as is: it starts
+    with ``/`` or ``\`` (which browsers read like ``/``), or it has a scheme
+    other than the page's own, or a ``/`` or ``\`` right after its scheme.
+    A URL with the page's own scheme and nothing like that after the colon,
+    such as ``http:next`` on an ``http:`` page, is relative: the browser
+    reads it as ``next``. It is resolved like a relative URL when the
+    Referer has the same scheme.
 
     When the request has no Referer, or one from another host, the URL also
     passes through unchanged and the browser resolves it against the handler
@@ -693,7 +693,7 @@ def _resolve_redirect_url(url: str, request: RouteRequest) -> str:
     scheme_and_rest = url_scheme_and_rest(stripped)
     # The scheme a URL such as "http:next" must share with the page to be
     # relative to it; None for a URL written without a scheme.
-    relative_with_scheme: str | None = None
+    shared_scheme: str | None = None
     if scheme_and_rest is not None:
         scheme, rest = scheme_and_rest
         # A "/" or "\" right after the colon does not depend on the page's
@@ -702,7 +702,9 @@ def _resolve_redirect_url(url: str, request: RouteRequest) -> str:
         # URL. Redirect refuses every other scheme before this runs.
         if scheme not in ("http", "https") or rest.startswith(("/", "\\")):
             return url
-        relative_with_scheme = scheme
+        shared_scheme = scheme
+        # The text after the colon, with tab, LF and CR already removed, is
+        # the relative URL the browser reads.
         reference = rest
     elif stripped.startswith(("/", "\\")):
         return url
@@ -723,7 +725,7 @@ def _resolve_redirect_url(url: str, request: RouteRequest) -> str:
     if base.scheme in ("http", "https") and base.netloc and base.netloc.lower() == host:
         # "http:next" on an https page names the host "next", so it does not
         # depend on the page; the browser reads the Location the same way.
-        if relative_with_scheme is not None and relative_with_scheme != base.scheme:
+        if shared_scheme is not None and shared_scheme != base.scheme:
             return url
         # Answer with the absolute URL: the base is the visitor's own page on
         # this host, and an absolute Location keeps a page path such as

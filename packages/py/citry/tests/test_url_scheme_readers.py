@@ -60,7 +60,7 @@ def test_a_redirect_accepts_a_row_only_with_an_http_scheme_or_none(row: dict[str
 @pytest.mark.parametrize("row", _ROWS, ids=_row_id)
 def test_the_form_redirect_resolves_a_row_only_when_it_depends_on_the_page(row: dict[str, Any]) -> None:
     # A Referer from the same host makes the resolver join every URL that
-    # depends on the page, so an unchanged URL means it read a scheme (or a
+    # depends on the page, so an unchanged URL means the resolver read a scheme (or a
     # leading `/` or `\`). The one scheme exception is the page's own scheme
     # with no `/` or `\` after the colon, which the browser reads as relative.
     request = RouteRequest(

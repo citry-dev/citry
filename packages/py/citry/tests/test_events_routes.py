@@ -1876,17 +1876,51 @@ class TestCompatMode:
         assert response.headers["location"] == expected
 
     @pytest.mark.parametrize(
+        ("host", "referer", "expected"),
+        [
+            # A Referer with no path is a page at the site root.
+            ("testserver", "http://testserver", "http://testserver/next"),
+            ("testserver:8080", "http://testserver:8080/shop/list", "http://testserver:8080/shop/next"),
+        ],
+    )
+    def test_scheme_relative_url_resolves_against_any_same_host_referer(self, host, referer, expected):
+        c = _citry()
+        jumper = _jumper(c)
+        response = _mounted(c).post(
+            _event_url(jumper, "go"),
+            data={"to": "http:next"},
+            headers={"Host": host, "Referer": referer},
+            follow_redirects=False,
+        )
+        assert response.headers["location"] == expected
+
+    def test_scheme_relative_url_without_a_referer_passes_through_and_warns(self, caplog, monkeypatch):
+        # Without a Referer the browser reads "http:next" against the handler
+        # URL, the same mistake a plain relative URL makes, so it warns too.
+        monkeypatch.setattr(events_routes, "_WARNED_REDIRECTS", set())
+        c = _citry()
+        jumper = _jumper(c)
+        with caplog.at_level("WARNING", logger="citry"):
+            response = _mounted(c).post(_event_url(jumper, "go"), data={"to": "http:next"}, follow_redirects=False)
+        assert response.headers["location"] == "http:next"
+        warnings = [r.getMessage() for r in caplog.records if r.name == "citry" and r.levelname == "WARNING"]
+        assert len(warnings) == 1
+        assert "actions.Redirect('http:next') is a relative URL" in warnings[0]
+
+    @pytest.mark.parametrize(
         ("target", "expected"),
         [
-            # Each URL below is one that browsers, urllib.parse and other URL
-            # parsers can read with different hosts: a backslash in or after
-            # the authority, credentials, a scheme without "//", percent
+            # Most URLs below are ones that browsers, urllib.parse and other
+            # URL parsers can read with different hosts: a backslash in or
+            # after the authority, credentials, a scheme without "//", percent
             # escapes or full-width characters in place of "/" and "\". The
             # server judges no host, so each Location keeps the URL the app
-            # returned (encoded), or resolves it against the page when the
-            # browser would read it as relative. Node's WHATWG URL resolves
-            # each Location against the handler URL to the same address as
-            # location.assign() on the page, so both paths land in one place.
+            # returned (non-ASCII characters percent-encoded), or resolves it
+            # against the page when the browser would read it as relative.
+            # The expected values were checked with Node's URL class, which
+            # follows the browsers' URL standard: each Location, read against
+            # the handler URL, reaches the same address as location.assign()
+            # on the page.
             ("http://cdn.example\\@testserver/x", "http://cdn.example\\@testserver/x"),
             ("http://testserver\\@cdn.example/x", "http://testserver\\@cdn.example/x"),
             ("http://cdn.example\\@testserver", "http://cdn.example\\@testserver"),
