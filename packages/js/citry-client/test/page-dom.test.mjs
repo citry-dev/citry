@@ -26,7 +26,8 @@ const pageDom = await import(
 
 // Pull the helpers out of the coordinator, so the copy it ships is the one under test.
 const client = await readFile(new URL("../../../py/citry/citry/_vue/client.js", import.meta.url), "utf8");
-// `ownGlobal` is one line; each other helper ends where its body closes at the declaration's indent.
+// `ownGlobal` and `callBuiltIn` are one line each; each other helper ends where its body closes
+// at the declaration's indent.
 const helperSource = (name, terminator) => {
   const start = client.indexOf(`  const ${name} = `);
   assert.ok(start >= 0, `client.js declares ${name}`);
@@ -38,7 +39,8 @@ const clientHelpers = (global) => {
     [
       helperSource("ownGlobal", ";\n"),
       helperSource("builtInMember", "\n  };\n"),
-      helperSource("callBuiltIn", "\n  };\n"),
+      helperSource("readBuiltIn", "\n  };\n"),
+      helperSource("callBuiltIn", ";\n"),
       helperSource("documentMembers", "\n  };\n"),
       "this.helpers = {ownGlobal, callBuiltIn, documentMembers};",
     ].join("\n"),

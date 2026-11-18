@@ -38,6 +38,39 @@
     elementHasAttribute ? elementHasAttribute.call(element, name) : element.hasAttribute(name);
   const closestOf = (element, selector) =>
     elementClosest ? elementClosest.call(element, selector) : element.closest(selector);
+  // Any other member the checks read from a node, found on its prototypes so a form field with the
+  // same name cannot stand in for it (`<input name="localName">` would otherwise change which tag
+  // the form seems to be). A member no prototype defines (a test's plain-object node) is read
+  // directly. The comparison reads members millions of times on a large page, so the search up the
+  // prototype chain runs once per prototype and member, and its answer is kept for the rest of the
+  // page: a prototype is shared by every node of its kind, and a field's name only ever adds a
+  // property to the form itself, never to a prototype.
+  const memberDescriptors = new WeakMap();
+  const descriptorOf = (proto, key) => {
+    let descriptors = memberDescriptors.get(proto);
+    if (descriptors === undefined) memberDescriptors.set(proto, (descriptors = new Map()));
+    let descriptor = descriptors.get(key);
+    if (descriptor === undefined) {
+      // `null` records "no prototype defines it", so a later miss skips the walk as well.
+      descriptor = null;
+      for (let owner = proto; owner !== null; owner = Object.getPrototypeOf(owner)) {
+        const own = Object.getOwnPropertyDescriptor(owner, key);
+        if (own !== undefined) {
+          descriptor = own;
+          break;
+        }
+      }
+      descriptors.set(key, descriptor);
+    }
+    return descriptor;
+  };
+  const memberOf = (node, key) => {
+    const proto = Object.getPrototypeOf(node);
+    const descriptor = proto === null ? null : descriptorOf(proto, key);
+    if (descriptor === null) return node[key];
+    return descriptor.get !== undefined ? descriptor.get.call(node) : descriptor.value;
+  };
+  const getAttributeOf = (element, name) => memberOf(element, "getAttribute").call(element, name);
   const SHELL_SELECTOR = '[data-allow-mismatch="children"]';
   const ALLOW_ATTRIBUTE = "data-allow-mismatch";
   // Past this many element pairs in one parent the best-match search would be slow, and pairing
@@ -57,8 +90,9 @@
   // component's type key (its class name plus a short code) when the author gave no name.
   const CITRY_NAME_PREFIX = "CitryComponent_";
 
-  const isElement = node => node !== null && typeof node === "object" && node.nodeType === 1;
-  const isText = node => node !== null && typeof node === "object" && node.nodeType === 3;
+  const nodeKind = node => (node !== null && typeof node === "object" ? memberOf(node, "nodeType") : 0);
+  const isElement = node => nodeKind(node) === 1;
+  const isText = node => nodeKind(node) === 3;
 
   // Whitespace never decides a difference: the server and Vue condense it the same way, and the
   // browser's parser merges neighboring text nodes that Vue keeps apart.
@@ -82,11 +116,12 @@
     if (kind === "text" || kind === "children")
       while (current && current !== boundary && !hasAttributeOf(current, ALLOW_ATTRIBUTE)) current = parentElementOf(current);
     if (!current || current === boundary) return false;
-    return allowsKind(current.getAttribute(ALLOW_ATTRIBUTE), kind);
+    return allowsKind(getAttributeOf(current, ALLOW_ATTRIBUTE), kind);
   };
 
-  const sameTag = (served, browser) =>
-    served.localName === browser.localName && served.namespaceURI === browser.namespaceURI;
+  // An element's tag and namespace as one string, so two elements have the same tag exactly when
+  // these strings are equal.
+  const tagOf = element => memberOf(element, "namespaceURI") + " " + memberOf(element, "localName");
 
   // Group a node list into runs of text that the browser's parser would read as one text node:
   // text nodes with nothing but comments or other text between them. Vue keeps an empty text node
@@ -96,13 +131,16 @@
     const runs = [];
     let current = null;
     for (const node of nodes) {
-      if (isText(node)) {
+      // One read of the node's type serves both tests: this loop runs for every pair the
+      // pairing scores, so it is among the hottest code here.
+      const kind = nodeKind(node);
+      if (kind === 3) {
         if (current === null) {
           current = [];
           runs.push(current);
         }
         if (withoutSpace(node.data)) current.push(node.data);
-      } else if (isElement(node)) {
+      } else if (kind === 1) {
         current = null;
       }
     }
@@ -201,7 +239,7 @@
   const UNREFLECTED_PROPERTIES = new Set(["value", "checked", "selected", "muted"]);
   const propertyAgrees = (element, name, served) => {
     if (!(name in element)) return false;
-    const value = element[name];
+    const value = memberOf(element, name);
     if (typeof value === "boolean") return value === true;
     return value !== null && value !== undefined && String(value) === served;
   };
@@ -212,20 +250,20 @@
   // only the parts of a class or style it knows, so each served class and each served style
   // property must appear in the browser, and a browser-only class or property is not a difference.
   const attributeDifference = (served, browser, boundary) => {
-    for (const attribute of Array.from(served.attributes)) {
+    for (const attribute of Array.from(memberOf(served, "attributes"))) {
       const name = attribute.name;
       if (name === ALLOW_ATTRIBUTE) continue;
       if (name === "class") {
         if (allowedHere(browser, "class", boundary)) continue;
-        const present = new Set(classTokens(browser.getAttribute("class") || ""));
+        const present = new Set(classTokens(getAttributeOf(browser, "class") || ""));
         const missing = classTokens(attribute.value).filter(token => !present.has(token));
         if (missing.length)
-          return {kind: "attribute", name, served: attribute.value, browser: browser.getAttribute("class")};
+          return {kind: "attribute", name, served: attribute.value, browser: getAttributeOf(browser, "class")};
         continue;
       }
       if (name === "style") {
         if (allowedHere(browser, "style", boundary)) continue;
-        const servedStyle = served.style, browserStyle = browser.style;
+        const servedStyle = memberOf(served, "style"), browserStyle = memberOf(browser, "style");
         if (!servedStyle || !browserStyle) continue;
         for (let index = 0; index < servedStyle.length; index++) {
           const property = servedStyle[index];
@@ -233,14 +271,14 @@
           // place, and Vue then hides it, so a browser-only `display: none` is not a difference.
           if (property === "display" && browserStyle.getPropertyValue(property) === "none") continue;
           if (servedStyle.getPropertyValue(property) !== browserStyle.getPropertyValue(property))
-            return {kind: "attribute", name, served: attribute.value, browser: browser.getAttribute("style")};
+            return {kind: "attribute", name, served: attribute.value, browser: getAttributeOf(browser, "style")};
         }
         continue;
       }
       if (allowedHere(browser, "attribute", boundary)) continue;
       // Look the attribute up by its written name: the parser puts `xmlns` and `xlink:href` in
       // their XML namespaces, while Vue may set the same name without one.
-      const browserValue = browser.getAttribute(name);
+      const browserValue = getAttributeOf(browser, name);
       if (browserValue === attribute.value) continue;
       if (browserValue === null && propertyAgrees(browser, attribute.localName, attribute.value)) continue;
       if (browserValue !== null && sameBooleanValue(name, attribute.value, browserValue)) continue;
@@ -248,7 +286,7 @@
       // "no checked" would misdescribe the page: name the property's value instead.
       const property = attribute.localName;
       if (browserValue === null && UNREFLECTED_PROPERTIES.has(property) && property in browser)
-        return {kind: "attribute", name, served: attribute.value, browser: browser[property], property: true};
+        return {kind: "attribute", name, served: attribute.value, browser: memberOf(browser, property), property: true};
       return {kind: "attribute", name, served: attribute.value, browser: browserValue};
     }
     return null;
@@ -265,9 +303,9 @@
   // whole-subtree scores is spent. `meter`, when given, is charged for the text searches.
   const shallowDifference = (served, browser, boundary, meter = null) =>
     attributeDifference(served, browser, boundary) ||
-    (OPAQUE_CHILDREN.has(browser.localName) || allowedHere(browser, "text", boundary)
+    (OPAQUE_CHILDREN.has(memberOf(browser, "localName")) || allowedHere(browser, "text", boundary)
       ? null
-      : textDifference(Array.from(served.childNodes), Array.from(browser.childNodes), meter));
+      : textDifference(Array.from(memberOf(served, "childNodes")), Array.from(memberOf(browser, "childNodes")), meter));
 
   // How a served element and a browser element pair: not at all (different tags), agreeing, or
   // differing. TEXT_DIFFERS is a differing pair that only the quick text check (textCouldAgree)
@@ -307,8 +345,8 @@
           if (isText(node)) {
             const piece = withoutSpace(node.data);
             if (piece) pieces.push(piece);
-          } else if (isElement(node) && !OPAQUE_CHILDREN.has(node.localName)) {
-            const children = node.childNodes;
+          } else if (isElement(node) && !OPAQUE_CHILDREN.has(memberOf(node, "localName"))) {
+            const children = memberOf(node, "childNodes");
             for (let index = children.length - 1; index >= 0; index--) stack.push(children[index]);
           }
         }
@@ -342,9 +380,9 @@
       const own = attributeDifference(served, browser, boundary);
       const difference = own
         ? {...own, element: browser}
-        : OPAQUE_CHILDREN.has(browser.localName)
+        : OPAQUE_CHILDREN.has(memberOf(browser, "localName"))
           ? null
-          : childrenDifference(Array.from(served.childNodes), Array.from(browser.childNodes), browser);
+          : childrenDifference(Array.from(memberOf(served, "childNodes")), Array.from(memberOf(browser, "childNodes")), browser);
       row.set(browser, difference);
       return difference;
     };
@@ -382,6 +420,10 @@
         budget.left -= rows * columns;
         stopIfSpent();
       }
+      // Each element's tag is read once here: classify compares every served element with every
+      // browser element, and reading the tag from the prototypes for each pair would cost more
+      // than all the other work for a pair whose tags differ.
+      const servedTags = servedElements.map(tagOf), browserTags = browserElements.map(tagOf);
       // Two branches of a browser-only v-if can share a tag and attributes and differ only
       // further down, and the browser's branch must pair with its own served copy, not with the
       // first one. That needs the whole subtree, but only for a tag the served side has more of.
@@ -392,23 +434,18 @@
       // wrong way.
       const extra = new Set();
       const counts = new Map();
-      for (const element of servedElements) {
-        const tag = element.namespaceURI + " " + element.localName;
-        counts.set(tag, (counts.get(tag) || 0) + 1);
-      }
-      for (const element of browserElements) {
-        const tag = element.namespaceURI + " " + element.localName;
-        counts.set(tag, (counts.get(tag) || 0) - 1);
-      }
+      for (const tag of servedTags) counts.set(tag, (counts.get(tag) || 0) + 1);
+      for (const tag of browserTags) counts.set(tag, (counts.get(tag) || 0) - 1);
       for (const [tag, count] of counts) if (count > 0) extra.add(tag);
-      const classify = (served, browser) => {
-        if (!sameTag(served, browser)) return UNPAIRED;
+      const classify = (row, column) => {
+        if (servedTags[row] !== browserTags[column]) return UNPAIRED;
+        const served = servedElements[row], browser = browserElements[column];
         // A difference in the pair's own attributes or text is also one in its subtree, and
         // costs far less to find, so only a pair that agrees there may be compared further.
         const shallow = shallowDifference(served, browser, boundary, scoreMeter());
         stopIfSpent();
         if (shallow !== null) return DIFFERS;
-        if (!extra.has(served.namespaceURI + " " + served.localName) || budget.left <= 0) return AGREES;
+        if (!extra.has(servedTags[row]) || budget.left <= 0) return AGREES;
         if (subtreeDepth >= MAX_SUBTREE_DEPTH) return AGREES;
         budget.left--;
         const textAgreesHere = textCouldAgree(served, browser);
@@ -419,7 +456,7 @@
         // The own attributes and text agree, which is all a shallow score would read.
         return subtreeDiffers(served, browser, false) ? DIFFERS : AGREES;
       };
-      const kinds = servedElements.map(served => browserElements.map(browser => classify(served, browser)));
+      const kinds = servedTags.map((_, row) => browserTags.map((_, column) => classify(row, column)));
       // Agreeing pairs come first: one counts for more than every differing pair the pairing
       // could hold, so a pairing never gives up an agreeing pair to pair more elements. Among
       // pairings with the most agreeing pairs, a differing pair still beats leaving both
@@ -536,11 +573,11 @@
   };
 
   const describeElement = element => {
-    const id = element.getAttribute("id");
-    if (id) return "<" + element.localName + ' id="' + id + '">';
-    const firstClass = classTokens(element.getAttribute("class") || "")[0];
-    if (firstClass) return "<" + element.localName + ' class="' + firstClass + '">';
-    return "<" + element.localName + ">";
+    const id = getAttributeOf(element, "id");
+    if (id) return "<" + memberOf(element, "localName") + ' id="' + id + '">';
+    const firstClass = classTokens(getAttributeOf(element, "class") || "")[0];
+    if (firstClass) return "<" + memberOf(element, "localName") + ' class="' + firstClass + '">';
+    return "<" + memberOf(element, "localName") + ">";
   };
 
   const quoted = value => (value === null ? "nothing" : JSON.stringify(value));
@@ -586,7 +623,7 @@
         // server never writes one there, so this is only a guard.
         const shellParent = parentElementOf(shell);
         if (shellParent && closestOf(shellParent, SHELL_SELECTOR)) continue;
-        const served = Array.from(shell.childNodes);
+        const served = Array.from(memberOf(shell, "childNodes"));
         // A shell the server sent empty (its contents would run twice, the parser would move
         // them, or they were too large) has nothing to compare.
         if (!served.some(node => isElement(node) || (isText(node) && withoutSpace(node.data)))) continue;
@@ -605,8 +642,8 @@
           for (const {shell, served} of captured) {
             // Vue replaced the shell itself (a mismatch it reports on its own), so there is no
             // first render of its children to compare.
-            if (!shell.isConnected) continue;
-            const difference = childrenDifference(served, Array.from(shell.childNodes), shell, shell);
+            if (!memberOf(shell, "isConnected")) continue;
+            const difference = childrenDifference(served, Array.from(memberOf(shell, "childNodes")), shell, shell);
             if (difference) console.warn(warningText(ownerName(difference.element, index, shell), difference));
           }
         } catch (error) {

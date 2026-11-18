@@ -22,6 +22,7 @@ import pytest
 pytest.importorskip("pytest_playwright")
 
 from citry import Citry, Component
+from citry.ext.events import actions
 
 pytestmark = pytest.mark.e2e
 
@@ -304,3 +305,87 @@ def test_fragment_preloader_ignores_data_chosen_ids_and_names(page: Any, serve_l
     except Exception as error:  # noqa: BLE001 - report the page's errors with the timeout
         pytest.fail(f"the fragment did not start: {error}; page errors: {errors}")
     assert errors == []
+
+
+# Members of a form that Citry's runtime reads or calls on a component's root
+# element. A control with one of these names hides the member, so the runtime
+# reads each of them from the element's prototype.
+FORM_MEMBERS = ["dispatchEvent", "contains", "isConnected", "querySelectorAll", "removeEventListener"]
+
+
+def test_a_form_root_with_member_named_fields_keeps_events_working(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any
+) -> None:
+    app = Citry(autodiscover=False, secret="s" * 40)
+    app.set_mounted_prefix("/citry")
+
+    # Each call renders the form again with the number of calls so far.
+    calls: list[int] = []
+
+    class NamedForm(Component):
+        citry = app
+
+        class Kwargs:
+            count: int = 0
+
+        # The form sends its controls as the call's data, so the schema names each one.
+        class FormFields:
+            dispatchEvent: str = ""  # noqa: N815 - the control's name
+            contains: str = ""
+            isConnected: str = ""  # noqa: N815
+            querySelectorAll: str = ""  # noqa: N815
+            removeEventListener: str = ""  # noqa: N815
+
+        class Events:
+            def save(self, data: FormFields) -> Any:  # noqa: F821
+                calls.append(1)
+                # Replace the form with a fresh server render, so the runtime also
+                # walks the form's controls and listeners on a re-render.
+                return actions.Render(NamedForm(count=len(calls)))
+
+        def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:
+            return {"names": FORM_MEMBERS, "count": kwargs.count}
+
+        template = """
+            <form
+              id="named-form"
+              @c-submit.prevent="save"
+            >
+              <input
+                c-for="name in names"
+                c-name="name"
+              >
+              <b id="probe-n">{{ count }}</b>
+              <button
+                id="probe-btn"
+                type="submit"
+              >
+                save
+              </button>
+            </form>
+        """
+
+    html = NamedForm().render().serialize()
+    base = serve_live(app, html, "")
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    # The lifecycle events start at the component's root, the form, and bubble to `document`.
+    page.add_init_script(
+        "window.__lifecycle = [];"
+        "for (const kind of ['before', 'after', 'error'])"
+        " document.addEventListener('citry:events:' + kind, () => window.__lifecycle.push(kind));"
+    )
+    page.set_default_timeout(5000)
+    page.goto(base + "/")
+    wait_for_citry_ready()
+    page.click("#probe-btn")
+    page.wait_for_function(f"() => {_FIND}('#probe-n')?.textContent === '1'")
+    # The re-rendered form still sends: the runtime removed the old listener past the field named
+    # `removeEventListener` and attached the new one.
+    page.click("#probe-btn")
+    page.wait_for_function(f"() => {_FIND}('#probe-n')?.textContent === '2'")
+    # `Citry.events.send` finds the component that holds an element through the root's `contains`.
+    page.evaluate(f"() => Citry.events.send({_FIND}('#probe-btn'), 'save')")
+    page.wait_for_function(f"() => {_FIND}('#probe-n')?.textContent === '3'")
+    assert errors == []
+    assert page.evaluate("window.__lifecycle") == ["before", "after"] * 3

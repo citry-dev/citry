@@ -637,8 +637,11 @@ test(".outside skips the handler while the element is hidden, checked when the e
 test(".outside falls back to the element's boxes where checkVisibility is missing", async () => {
   const page = await createPage();
   const rects = [];
-  const element = new FakeNode("legacy", page.body);
-  element.checkVisibility = undefined;
+  // A browser without the method has none on the element's prototype. The runtime reads built-in
+  // members from the prototype, past a form field of the same name, so the stand-in removes it there.
+  class LegacyNode extends FakeNode {}
+  LegacyNode.prototype.checkVisibility = undefined;
+  const element = new LegacyNode("legacy", page.body);
   element.getClientRects = () => rects;
   const listener = page.mount({ modifiers: ["outside"], element });
   page.fire(page.outer, "click");

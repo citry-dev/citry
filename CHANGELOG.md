@@ -4,6 +4,20 @@
 
 ### Fixes
 
+- The browser i18n runtime now reports a format profile, parser or
+  message ID named after a built-in JavaScript object member, such as
+  `constructor` or `__proto__`, as unknown, with the same error code as
+  any other unknown name. Before, such a name could format with default
+  options or fail with a plain `TypeError`
+  ([#701](https://github.com/citry-dev/citry/issues/701)).
+- A form control named after a built-in form method or property, such
+  as `contains` or `dispatchEvent`, no longer breaks Citry's event
+  bindings on that form or the `citry:events:*` events fired from it
+  ([#703](https://github.com/citry-dev/citry/issues/703)). Vue itself
+  can still fail on such a name; see
+  [Check form field names](https://citry.dev/security/#check-form-field-names).
+- Citry's browser code now skips a CSRF cookie whose value has a broken
+  `%` escape and uses the next cookie with the same name.
 - An Events `Render` of a region that contains `<c-i18n c-client>` no
   longer fails with "an i18n fragment uses a different project
   configuration" when the server lists the same formats and parsers in
