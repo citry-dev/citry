@@ -123,10 +123,10 @@ eviction policy. A browser write that would make the stored
 State larger than `State._max_bytes` (64 KiB by default) gets a 422
 before the handler runs. With the default signed storage, Citry makes
 the same check when the call gets a new token. The limit covers only
-browser writes, so when a handler copies request data into State, limit
-its size yourself. The
-default `InMemoryCache` counts such State against a 64 MiB budget and
-drops the entry used longest ago when it is full; see
+browser writes, so when a handler copies request data (anything a visitor
+sends) into State, limit its size yourself. The default `InMemoryCache`
+counts such State against a 64 MiB budget and drops the entry used longest
+ago when it is full; see
 [Server-stored State](/performance/cache-backends/#server-stored-state).
 One client that sends many calls can push other visitors' State out, and
 those visitors' next calls then fail with `stale_state`, so rate-limit
