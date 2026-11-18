@@ -279,7 +279,7 @@ On an HTML element, a key the browser reads as code or markup (`on*`,
 `innerHTML`, `outerHTML`, `srcdoc`), or one Vue uses to store the
 element in a component value (`ref`, `ref_for`, `ref_key`), raises
 `ValueError`; see
-[Write handlers in the template](/advanced/html-attributes/#write-handlers-in-the-template).
+[Add event handlers](/advanced/html-attributes/#write-handlers-in-the-template).
 So does a key that is one of the
 [names Citry reserves](/advanced/html-attributes/#names-citry-reserves),
 such as `c-render-id` or `data-cid-x`.

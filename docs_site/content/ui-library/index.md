@@ -27,7 +27,7 @@ you want these components.
 
 ## Pass request data safely { #pass-request-data-safely }
 
-Request data is any value a visitor controls, such as a query
+Request data is anything a visitor sends, such as a query
 parameter, form field, or header. A plain string you pass to a
 component, such as a label or a cell value, shows as text.
 

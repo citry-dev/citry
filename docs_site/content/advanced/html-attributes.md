@@ -226,31 +226,37 @@ for the component-boundary rules, and
 [Attributes](/syntax/attributes/) for static, dynamic, and spread
 values in templates.
 
-## Write handlers in the template
+## Add event handlers { #write-handlers-in-the-template }
 
 `c-bind` refuses a name that starts with `on`, such as `onclick`, and the
 names `innerHTML`, `outerHTML`, and `srcdoc`, in any letter case. The
-browser reads those values as code or markup. It also refuses `ref`,
-`ref_for`, and `ref_key`: in a component with `js`, Vue reads them and
-stores the element in the component's own value of that name, which could
-replace a value the component shows with `v-html`. Citry raises
-`ValueError` for these names, also when an `on_attrs_resolved` hook adds
-one. For the same reason `c-ref="..."` raises `ValueError`: write
-`ref="name"` with a plain text value.
+browser reads those values as code or markup. Citry raises `ValueError`
+for these names, also when an extension's `on_attrs_resolved` hook adds
+one. A hook may change the value of a handler the template wrote, but it
+cannot add one.
 
-Write the handler in the template instead: `@click` on a Vue page,
-`@c-click` to call a handler of your component, or `onclick="..."`. A
-handler you write in the template is allowed, because you chose its name.
-`c-onclick="handler"` sets the attribute to the value of `handler`, and
-that value runs as JavaScript, so choose it in your own code.
+Write the handler in the template instead: `@click`, `@c-click` to call a
+handler of your component, or `onclick="..."`. A handler you write in the
+template is allowed, because you chose its name.
 
-In a component with `js`, `c-onclick` raises `TypeError` when the
-component renders, so use `@click` there. A hook may change the value of
-a handler the template wrote, but it cannot add one.
-
-A `<c-element>` with `c-is` or `c-bind` is the exception. It cannot tell a
+The exception is a `<c-element>` with `c-is` or `c-bind`. It cannot tell a
 name you wrote from one passed in as data, so it refuses both. See
 [`<c-element>` limits](/advanced/dynamic-components/#c-element-limits).
+
+`c-onclick="handler"` sets the attribute to the value of `handler`, and
+that value runs as JavaScript, so choose it in your own code. On a page
+that uses Vue, it raises `TypeError` when the page renders, so use
+`@click` there. A page uses Vue when one of its components has its own
+JavaScript (`js`) or uses a Vue directive such as `@click`; see
+[When Vue turns on](/vue/#when-vue-turns-on) for the full list.
+
+`c-bind` also refuses `ref`, `ref_for`, and `ref_key`. In a component
+with its own JavaScript (`js`), Vue reads these names and stores the
+element in the component's own value of that name, which could replace a
+value the component shows with `v-html`. Citry raises `ValueError` for
+them, also when an extension's `on_attrs_resolved` hook adds one.
+`c-ref="..."` raises `ValueError` for the same reason: write `ref="name"`
+with a plain text value.
 
 !!! warning "Request data can run as code"
 
