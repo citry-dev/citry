@@ -269,7 +269,7 @@ SCRIPT_CAPABLE_ATTR_FIX = (
 
 C_ELEMENT_HANDLER_FIX = (
     "<c-element> cannot tell a name written in the template from one passed in as data, so it refuses both. "
-    "Use a Vue @click in a component with js, or write a plain tag in a c-if branch."
+    "Use @click (Citry then adds Vue to the page), or write a plain tag in a c-if branch."
 )
 """The fix for a `<c-element>` with `c-is` or `c-bind`, which refuses a template-written handler too."""
 
