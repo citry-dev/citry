@@ -1,6 +1,10 @@
 # Release notes
 
-## Unreleased
+## v1.0.2
+
+Citry 1.0.2 is a patch release with browser runtime, Events and render-cache
+fixes. It still requires citry-core 2.1.1. citry-ui 0.7.0 is released at the
+same time.
 
 ### Fixes
 
