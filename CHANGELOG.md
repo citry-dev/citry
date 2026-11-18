@@ -29,6 +29,14 @@
   code that awaits `applyActions()` may now need a `catch`. A redirect
   marked `wait: false` is still only logged. An event call whose result
   holds such a redirect now fails the same way.
+- Without JavaScript, `actions.Redirect("http:next")` on an `http:` page
+  (or `"https:next"` on an `https:` page) now lands next to the page, as
+  it does with JavaScript. Before, it landed next to the handler's URL,
+  usually on a "not found" page.
+- A 405 answer from the ASGI and WSGI adapters now carries an `Allow`
+  header that names the methods the route accepts, as HTTP requires. On
+  every adapter, including Django, the list names `HEAD` wherever the
+  route accepts `GET`.
 
 ## v1.0.1
 

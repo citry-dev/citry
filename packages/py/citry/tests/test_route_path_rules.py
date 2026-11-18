@@ -22,7 +22,7 @@ import pytest
 from citry import Citry, Component, Extension, RouteResponse, URLRoute
 from citry.contrib.asgi import asgi_app
 from citry.contrib.wsgi import wsgi_app
-from citry.util.routing import match_path_below_mount, match_route, route_allows_method
+from citry.util.routing import match_path_below_mount, match_route, route_allowed_methods, route_allows_method
 
 # Request paths below the `/citry` prefix that must answer 404. The decoded
 # `%2F` and `%0a` spellings are what servers put in the path they hand on.
@@ -106,9 +106,23 @@ class TestSharedRule:
         route = URLRoute("x", handler=lambda _r: RouteResponse(), methods=methods)
         assert route_allows_method(route, method) is allowed
 
+    @pytest.mark.parametrize(
+        ("methods", "allowed"),
+        [
+            (("GET",), ("GET", "HEAD")),
+            (("POST",), ("POST",)),
+            (("GET", "POST"), ("GET", "POST", "HEAD")),
+            (("HEAD", "GET"), ("HEAD", "GET")),
+        ],
+    )
+    def test_allowed_methods_name_head_where_get_is(self, methods, allowed):
+        # The Allow list of a 405 names exactly what route_allows_method accepts.
+        route = URLRoute("x", handler=lambda _r: RouteResponse(), methods=methods)
+        assert route_allowed_methods(route) == allowed
 
-def _asgi_status(app: Any, method: str, path: str, root_path: str, *, path_keeps_prefix: bool = True) -> int:
-    """Send one bodyless request to an ASGI app and return the response status."""
+
+def _asgi_start(app: Any, method: str, path: str, root_path: str, *, path_keeps_prefix: bool = True) -> dict[str, Any]:
+    """Send one bodyless request to an ASGI app and return its response start message."""
     sent: list[dict[str, Any]] = []
 
     async def receive() -> dict[str, Any]:
@@ -128,7 +142,12 @@ def _asgi_status(app: Any, method: str, path: str, root_path: str, *, path_keeps
         "headers": [],
     }
     asyncio.run(app(scope, receive, send))
-    return next(message["status"] for message in sent if message["type"] == "http.response.start")
+    return next(message for message in sent if message["type"] == "http.response.start")
+
+
+def _asgi_status(app: Any, method: str, path: str, root_path: str, *, path_keeps_prefix: bool = True) -> int:
+    """Send one bodyless request to an ASGI app and return the response status."""
+    return _asgi_start(app, method, path, root_path, path_keeps_prefix=path_keeps_prefix)["status"]
 
 
 class TestAsgiAdapter:
@@ -156,10 +175,21 @@ class TestAsgiAdapter:
         assert _asgi_status(asgi_app(engine), "HEAD", "/ext/probe/hit", "/citry") == 405
         assert calls == []
 
+    @pytest.mark.parametrize(
+        ("method", "path", "allow"), [("HEAD", "/ext/probe/hit", b"POST"), ("POST", "/ext/probe/page", b"GET, HEAD")]
+    )
+    def test_405_names_the_allowed_methods(self, method, path, allow):
+        engine, _calls = _counting_engine()
+        start = _asgi_start(asgi_app(engine), method, path, "/citry")
+        assert start["status"] == 405
+        assert (b"allow", allow) in [(name.lower(), value) for name, value in start["headers"]]
 
-def _wsgi_status(app: Any, method: str, path_info: str, body: bytes = b"", **extra: str) -> str:
-    """Send one request to a WSGI app and return its status line."""
-    captured: list[str] = []
+
+def _wsgi_response(
+    app: Any, method: str, path_info: str, body: bytes = b"", **extra: str
+) -> tuple[str, list[tuple[str, str]]]:
+    """Send one request to a WSGI app and return its status line and headers."""
+    captured: list[tuple[str, list[tuple[str, str]]]] = []
     environ = {
         "REQUEST_METHOD": method,
         "SCRIPT_NAME": "/citry",
@@ -170,8 +200,13 @@ def _wsgi_status(app: Any, method: str, path_info: str, body: bytes = b"", **ext
         "wsgi.input": io.BytesIO(body),
         **extra,
     }
-    b"".join(app(environ, lambda status, _headers, *_exc: captured.append(status)))
+    b"".join(app(environ, lambda status, headers, *_exc: captured.append((status, headers))))
     return captured[0]
+
+
+def _wsgi_status(app: Any, method: str, path_info: str, body: bytes = b"", **extra: str) -> str:
+    """Send one request to a WSGI app and return its status line."""
+    return _wsgi_response(app, method, path_info, body, **extra)[0]
 
 
 class TestWsgiAdapter:
@@ -192,6 +227,15 @@ class TestWsgiAdapter:
         engine, calls = _counting_engine()
         assert _wsgi_status(wsgi_app(engine), "HEAD", "/ext/probe/hit", b'{"a": 1}') == "405 Method Not Allowed"
         assert calls == []
+
+    @pytest.mark.parametrize(
+        ("method", "path", "allow"), [("HEAD", "/ext/probe/hit", "POST"), ("POST", "/ext/probe/page", "GET, HEAD")]
+    )
+    def test_405_names_the_allowed_methods(self, method, path, allow):
+        engine, _calls = _counting_engine()
+        status, headers = _wsgi_response(wsgi_app(engine), method, path)
+        assert status == "405 Method Not Allowed"
+        assert ("allow", allow) in [(name.lower(), value) for name, value in headers]
 
 
 class TestFlaskMount:
@@ -287,6 +331,11 @@ class TestDjangoPatterns:
         # ...but skips HEAD, so only the method rule keeps HEAD from the handler.
         assert client.generic("HEAD", "/citry/ext/probe/hit", b'{"a": 1}', "application/json").status_code == 405
         assert calls == []
+
+    def test_405_names_head_where_get_is_allowed(self, client_and_calls):
+        client, _calls = client_and_calls
+        assert client.post("/citry/ext/probe/page")["Allow"] == "GET, HEAD"
+        assert client.generic("HEAD", "/citry/ext/probe/hit")["Allow"] == "POST"
 
     def test_methods_follow_the_shared_rule(self, client_and_calls):
         client, calls = client_and_calls
