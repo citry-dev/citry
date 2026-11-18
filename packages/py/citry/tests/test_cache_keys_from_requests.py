@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import re
+import sys
 from typing import TYPE_CHECKING
 from urllib.parse import unquote_to_bytes
 
@@ -212,7 +213,12 @@ def test_a_served_file_whose_extension_reaches_the_server_unchanged_is_linked(tm
         pytest.param("c ss", id="space"),
         pytest.param("café", id="non_ascii"),
         pytest.param("c#ss", id="fragment_mark"),
-        pytest.param("c?ss", id="query_mark"),
+        pytest.param(
+            "c?ss",
+            id="query_mark",
+            # Windows refuses "?" in a file name, so no such file can exist there.
+            marks=pytest.mark.skipif(sys.platform == "win32", reason="Windows file names cannot hold '?'"),
+        ),
         pytest.param("c%2fss", id="percent_escape"),
         pytest.param("x" * 129, id="over_128_characters"),
     ],
