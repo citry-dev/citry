@@ -186,13 +186,24 @@ cache:
 2. Share an entry only among users allowed to see the same output.
 3. Include CSRF tokens, CSP nonces, `template_globals`, and provided
    values when they appear in the cached HTML.
-4. After each deploy that changes output, change the deployment
+4. If a component's [Events State](/events/state/) holds a value that
+   depends on the user, such as a user id, put that value into the key
+   too, even when the visible HTML is the same for everyone. Citry
+   stores the State that `state_data()` builds with the HTML. The next
+   user who gets the entry gets the first user's State and sends it
+   back in their event calls.
+5. After each deploy that changes output, change the deployment
    generation, a value set up in
    [Cache backends](/performance/cache-backends/#share-cached-output-between-workers)
    that you change on every deploy.
-5. Protect the cache store like your database. Anyone who can write to
-   it can inject HTML that Citry trusts, and stored entries can contain
-   private HTML, Events state, and JavaScript or CSS data.
+6. Protect the cache store like your database. Stored entries can
+   contain private HTML, Events State, and JavaScript or CSS data, and
+   anyone who can write to the store can put scripts into your pages.
+   Some stores load entries with Python's `pickle`, which runs code
+   from whatever it loads, so write access to them also means running
+   code on your server. Django's built-in cache backends, which
+   `DjangoCache` uses, and the `diskcache` store behind `DiskCache` work
+   this way; `RedisCache` stores plain text.
 
 Citry stores keys as hashes, so logs do not show the raw values or region
 names. The stored entries themselves still need protection.
@@ -202,6 +213,10 @@ names. The stored entries themselves still need protection.
 When Citry finds a stored entry, a cached component skips its data methods, render hooks,
 template, child components, and slots. A `<c-cache>` region skips its
 whole body.
+
+If you write an extension, the output its render hooks added is stored
+with the entry and reused as it was, so it must depend only on values
+in the key. See [Support caching](/advanced/extensions/#support-caching).
 
 Some work still runs on every call, because Citry needs the inputs to
 build the key: input hooks, defaults, factories, type conversion,
