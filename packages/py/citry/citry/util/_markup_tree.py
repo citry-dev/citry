@@ -1,5 +1,5 @@
 """
-A parser that tracks which elements a browser keeps open, for Citry's checks of rendered output.
+A parser that tracks which elements a browser keeps open, for Citry's checks of the HTML it renders.
 
 Some checks of rendered HTML need to know which elements sit inside which,
 the way a browser builds the page. For example, before Citry writes the Vue
@@ -347,8 +347,9 @@ class MarkupTreeParser(LongReferenceSafeParser, Generic[T]):
       table cell sits between the end tag and its match. ``</br>`` and a
       ``</p>`` with no open paragraph create an empty element, and
       ``</form>`` closes only the form, leaving the elements inside it open.
-      Inside an open ``<select>``, only the end tags of the select and its
-      options close anything.
+      Inside an open ``<select>``, an end tag other than ``</br>`` and
+      ``</p>`` closes only an element opened inside the select, and
+      ``</select>`` closes the select and everything opened inside it.
     - A start tag closes what the browser closes for it: an open ``<p>``
       before ``<div>`` and the other block elements, an open ``<li>``,
       ``<dd>``, ``<dt>``, ``<button>`` or heading before another of its
@@ -579,12 +580,27 @@ class MarkupTreeParser(LongReferenceSafeParser, Generic[T]):
 
     def _html_end(self, tag: str) -> None:
         """Apply the HTML rules for an end tag to the open elements."""
-        # Inside an open ``<select>``, browsers ignore every end tag except
-        # those of the select and its options, so ``</div>`` there leaves the
-        # select and the elements around it open.
+        # Inside an open ``<select>``, an end tag closes only an element
+        # opened inside the select, so ``</div>`` whose ``<div>`` is outside
+        # leaves the select and the elements around it open. ``</select>``
+        # closes the select and everything opened inside it.
         select = self._last("html:select")
-        if select >= 0 and select >= self._last("scope") and tag not in {"select", "option", "optgroup"}:
-            return
+        if select >= 0 and select >= self._last("scope"):
+            if tag == "select":
+                self._close_to(select)
+                return
+            # ``</br>`` creates a ``<br>`` there too, and a ``</p>`` with no
+            # paragraph opened inside the select creates an empty one inside
+            # it, leaving a paragraph around the select open.
+            if tag == "br":
+                self._start("br", [], self_closing=False)
+                return
+            if tag == "p" and self._last("html:p") < select:
+                self._start("p", [], self_closing=False)
+                self._close_to(len(self.open_elements) - 1)
+                return
+            if self._last(f"html:{tag}") < select:
+                return
         if tag in VOID_ELEMENTS:
             # The browser ignores a void end tag, except that ``</br>`` creates
             # a ``<br>``.

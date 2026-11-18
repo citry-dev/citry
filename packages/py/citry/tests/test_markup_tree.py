@@ -1,4 +1,4 @@
-"""The parser behind Citry's output checks opens and closes elements where a browser does."""
+"""The parser behind the Vue mount host check opens and closes elements where a browser does."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import time
 
 import pytest
 
+from citry import Citry, Component, Extension, OnSerializeContext
 from citry._vue.serialization import _HostValidator
 from citry.util._markup_tree import MarkupTreeParser, Namespace
 
@@ -129,6 +130,18 @@ BROWSER_TREES = {
         "<div><select></div><span></span></select></div>",
         ["div", "div/select", "div/select/span"],
     ),
+    "select-closes-its-own-div": (
+        "<div><select><option><div>i</div>a</option></select><b></b></div>",
+        ["div", "div/select", "div/select/option", "div/select/option/div", "div/b"],
+    ),
+    "select-end-tag-closes-everything-inside": (
+        "<div><select><div><p><span></select><b></b></div>",
+        ["div", "div/select", "div/select/div", "div/select/div/p", "div/select/div/p/span", "div/b"],
+    ),
+    "p-end-tag-in-select-keeps-outer-p": (
+        "<p><select></p><b></b></select>",
+        ["p", "p/select", "p/select/p", "p/select/b"],
+    ),
     "image-is-img": ("<div><image src=x><span></span></div>", ["div", "div/img", "div/span"]),
 }
 
@@ -191,6 +204,9 @@ HOST_PAGES = {
     "form-end-tag-without-form": ('<div id="app"></form>x</div>', False, False),
     "form-around-host-keeps-it-open": ('<form><div id="app"></form><b>x</b></div>', False, False),
     "unmatched-end-tag-inside-host": ('<div id="app"></span>x</div>', False, False),
+    "select-inside-host": ('<div id="app"><select><option><div>i</div>a</option></select></div>', False, False),
+    "p-end-tag-in-select-inside-host": ('<select><div id="app"></p></div>', False, False),
+    "br-end-tag-in-select-inside-host": ('<select><option><div id="app"></br></div>', False, False),
     "empty-host": ('<div id="app"></div><b>x</b>', True, False),
     "host-without-end-tag": ('<div id="app"><b>x</b>', False, True),
 }
@@ -211,3 +227,36 @@ def test_the_vue_host_check_refuses_a_host_inside_the_host() -> None:
     validator.close()
     assert validator.count == 2
     assert not validator.valid_attrs
+
+
+class _AddContentToHost(Extension):
+    """Put ``<b>`` into the mount host behind an end tag a browser ignores, keeping the host's written form."""
+
+    name = "add_content_to_host"
+
+    def on_serialize(self, ctx: OnSerializeContext) -> str:
+        start = ctx.html.index('<div id="citry-vue-')
+        end = ctx.html.index(">", start) + 1
+        return ctx.html[:end] + "</link><b>x</b>" + ctx.html[end:]
+
+
+@pytest.mark.parametrize(("ssr", "refused"), [(False, True), (True, False)], ids=["empty-host", "server-html-host"])
+def test_a_hook_result_is_checked_with_the_host_content_a_browser_builds(ssr: bool, refused: bool) -> None:
+    registry = Citry(autodiscover=False, extensions=[_AddContentToHost])
+
+    class Page(Component):
+        citry = registry
+        template = """
+            <!doctype html><html><head></head><body>
+            <button :title="'ready'">ready</button>
+            </body></html>
+        """
+
+    # A page without server HTML keeps its host empty, so the ``<b>`` the
+    # browser puts inside the host fails the check; a host that carries
+    # server HTML may hold anything, because Vue replaces its content.
+    if refused:
+        with pytest.raises(ValueError, match="preserve exactly one empty Citry mount host"):
+            Page().render().serialize(ssr=ssr)
+    else:
+        assert "</link><b>x</b>" in Page().render().serialize(ssr=ssr)

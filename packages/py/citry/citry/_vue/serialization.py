@@ -504,7 +504,11 @@ class _HostValidator(MarkupTreeParser[bool]):
     carry the host id, whether the host has exactly the shape Citry wrote,
     whether it holds any content, and whether it is still open at the end.
     It opens and closes elements where a browser does, so an end tag that a
-    browser ignores, such as ``</link>``, does not end the host early.
+    browser ignores, such as ``</link>``, does not end the host early. Like
+    the parser, it does not model the elements a browser moves: when the
+    host sits inside a formatting element such as ``<b>`` and that
+    element's end tag comes inside the host, the browser puts a copy of the
+    formatting element into the host, which this check does not see.
     """
 
     def __init__(self, host_id: str) -> None:
@@ -553,10 +557,10 @@ class _HostValidator(MarkupTreeParser[bool]):
         if self._host_open and data:
             self.empty = False
 
-    # An entity, a character reference, and a comment each
-    # count as content for the emptiness test, and the parser hands each of
-    # them a different string (a name rather than text), so they delegate
-    # rather than alias: only presence matters.
+    # An entity, a character reference, and a comment each count as content
+    # for the emptiness test, and the parser hands each of them a different
+    # string (a name rather than text), so they delegate rather than alias:
+    # only presence matters.
     def handle_entityref(self, name: str) -> None:
         self.handle_data(name)
 
