@@ -1,5 +1,18 @@
 # Release notes
 
+## Unreleased
+
+### Fixes
+
+- Without JavaScript, `actions.Redirect("http:next")` on an `http:` page
+  (or `"https:next"` on an `https:` page) now leads next to the page, as
+  it does with JavaScript. Before, the browser landed next to the
+  handler's URL, usually on a "not found" page.
+- A 405 answer from the ASGI and WSGI adapters now carries an `Allow`
+  header that names the methods the route accepts, as HTTP requires. On
+  every adapter, including Django, the list names `HEAD` wherever the
+  route accepts `GET`.
+
 ## v1.0.1
 
 Citry 1.0.1 is a security release. It requires citry-core 2.1.1, which

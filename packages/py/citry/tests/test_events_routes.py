@@ -1827,6 +1827,21 @@ class TestCompatMode:
             ("//cdn.example/x", "//cdn.example/x"),
             ("/\\cdn.example/x", "/\\cdn.example/x"),
             ("https://other.example/", "https://other.example/"),
+            # The page's own scheme with no "/" or "\" after the colon is
+            # relative too: location.assign("http:next") on this http page
+            # goes to "next" beside it.
+            ("http:next", "http://testserver/shop/next"),
+            ("HTTP:next", "http://testserver/shop/next"),
+            ("http:?page=2", "http://testserver/shop/list?page=2"),
+            ("http:#top", "http://testserver/shop/list?x=1#top"),
+            ("http:", "http://testserver/shop/list?x=1"),
+            # One "/" or "\" after the scheme starts a path from the root,
+            # two start a host, and the other scheme names a host either
+            # way, so none of these depends on the page.
+            ("http:/abs", "http:/abs"),
+            ("http:\\abs", "http:\\abs"),
+            ("http:\\\\cdn.example/x", "http:\\\\cdn.example/x"),
+            ("https:cdn.example/x", "https:cdn.example/x"),
         ],
     )
     def test_redirect_resolves_a_relative_url_against_the_referer(self, target, expected):
@@ -1836,6 +1851,79 @@ class TestCompatMode:
             _event_url(jumper, "go"),
             data={"to": target},
             headers={"Referer": "http://testserver/shop/list?x=1"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert response.headers["location"] == expected
+
+    @pytest.mark.parametrize(
+        ("target", "expected"),
+        [
+            ("https:next", "https://testserver/shop/next"),
+            # On an https page "http:next" names the host "next".
+            ("http:next", "http:next"),
+        ],
+    )
+    def test_scheme_relative_url_follows_the_referer_scheme(self, target, expected):
+        c = _citry()
+        jumper = _jumper(c)
+        response = _mounted(c).post(
+            _event_url(jumper, "go"),
+            data={"to": target},
+            headers={"Referer": "https://testserver/shop/list"},
+            follow_redirects=False,
+        )
+        assert response.headers["location"] == expected
+
+    @pytest.mark.parametrize(
+        ("target", "expected"),
+        [
+            # Each URL below is one that browsers, urllib.parse and other URL
+            # parsers can read with different hosts: a backslash in or after
+            # the authority, credentials, a scheme without "//", percent
+            # escapes or full-width characters in place of "/" and "\". The
+            # server judges no host, so each Location keeps the URL the app
+            # returned (encoded), or resolves it against the page when the
+            # browser would read it as relative. Node's WHATWG URL resolves
+            # each Location against the handler URL to the same address as
+            # location.assign() on the page, so both paths land in one place.
+            ("http://cdn.example\\@testserver/x", "http://cdn.example\\@testserver/x"),
+            ("http://testserver\\@cdn.example/x", "http://testserver\\@cdn.example/x"),
+            ("http://cdn.example\\@testserver", "http://cdn.example\\@testserver"),
+            ("http://testserver\\.cdn.example/x", "http://testserver\\.cdn.example/x"),
+            ("http:/\\cdn.example/x", "http:/\\cdn.example/x"),
+            ("http:\\/cdn.example/x", "http:\\/cdn.example/x"),
+            ("https:\\\\cdn.example/x", "https:\\\\cdn.example/x"),
+            ("\\\\cdn.example/x", "\\\\cdn.example/x"),
+            ("\\/cdn.example/x", "\\/cdn.example/x"),
+            ("/\\/cdn.example/x", "/\\/cdn.example/x"),
+            (" //cdn.example/x", "//cdn.example/x"),
+            ("  /\\cdn.example/x", "/\\cdn.example/x"),
+            ("/%5ccdn.example/x", "/%5ccdn.example/x"),
+            ("%5c%5ccdn.example/x", "http://testserver/shop/%5c%5ccdn.example/x"),
+            ("/%5C%5Ccdn.example/x", "/%5C%5Ccdn.example/x"),
+            ("http://cdn.example%5c@testserver/x", "http://cdn.example%5c@testserver/x"),
+            ("http://testserver%5c@cdn.example/x", "http://testserver%5c@cdn.example/x"),
+            ("\uff3c\uff3ccdn.example/x", "http://testserver/shop/%EF%BC%BC%EF%BC%BCcdn.example/x"),
+            ("/\uff3ccdn.example/x", "/%EF%BC%BCcdn.example/x"),
+            ("http:\uff0f\uff0fcdn.example/x", "http://testserver/shop/%EF%BC%8F%EF%BC%8Fcdn.example/x"),
+            ("http://cdn.example\uff3c@testserver/x", "http://cdn.example%EF%BC%BC@testserver/x"),
+            ("http://testserver\uff0f@cdn.example/x", "http://testserver%EF%BC%8F@cdn.example/x"),
+            ("http://\uff43\uff44\uff4e.example/x", "http://%EF%BD%83%EF%BD%84%EF%BD%8E.example/x"),
+            ("http://testserver@cdn.example/x", "http://testserver@cdn.example/x"),
+            ("http://cdn.example#@testserver/x", "http://cdn.example#@testserver/x"),
+            ("http://cdn.example?@testserver/x", "http://cdn.example?@testserver/x"),
+            ("HTTP://cdn.example/x", "HTTP://cdn.example/x"),
+            ("https://user:pw@cdn.example/x", "https://user:pw@cdn.example/x"),
+        ],
+    )
+    def test_redirect_keeps_urls_that_parsers_read_differently(self, target, expected):
+        c = _citry()
+        jumper = _jumper(c)
+        response = _mounted(c).post(
+            _event_url(jumper, "go"),
+            data={"to": target},
+            headers={"Referer": "http://testserver/shop/list"},
             follow_redirects=False,
         )
         assert response.status_code == 303
