@@ -12,9 +12,10 @@ from citry_ui.components._attrs import (
     CStyleValue,
     merge_root_attrs,
     reject_citry_ui_reserved_attr,
+    reject_data_item_vue_name,
     reject_vue_directive_attrs,
 )
-from citry_ui.components._i18n import uses_catalog_default
+from citry_ui.components._i18n import fill_label, uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_html_id
 
 CTransferListSize = Literal["sm", "md", "lg"]
@@ -157,6 +158,8 @@ def _attrs(
     owned: frozenset[str],
     class_: CClassValue | None,
     style: CStyleValue | None,
+    *,
+    refuse_vue_names: bool = False,
 ) -> dict[str, object]:
     if attrs is not None and not isinstance(attrs, Mapping):
         raise TypeError(f"{owner} attrs must be a mapping or None, got {attrs!r}.")
@@ -169,6 +172,10 @@ def _attrs(
         if not isinstance(key, str):
             raise TypeError(f"{owner} attrs require string keys, got {key!r}.")
         reject_citry_ui_reserved_attr(key, attr_value, where=f"{owner} attrs")
+        # Vue reads `is` and `key` on an element itself, so every list item
+        # refuses both names, as data items do.
+        if refuse_vue_names:
+            reject_data_item_vue_name(key, where=f"{owner} attrs")
     return merge_root_attrs(copied, class_, style)
 
 
@@ -461,7 +468,14 @@ class CTransferListItem(LibraryComponent):
                 value=value,
                 label=cast("str", _plain("CTransferListItem label", kwargs.label)),
                 disabled=bool(kwargs.disabled),
-                attrs=_attrs("CTransferListItem", kwargs.attrs, _OPTION_OWNED, kwargs.class_, kwargs.style),
+                attrs=_attrs(
+                    "CTransferListItem",
+                    kwargs.attrs,
+                    _OPTION_OWNED,
+                    kwargs.class_,
+                    kwargs.style,
+                    refuse_vue_names=True,
+                ),
                 content=(cast("Slot[CTransferListItemDefaultSlotData]", slots.default) if slots.default else None),
             )
         )
@@ -596,12 +610,12 @@ class CInternalTransferList(LibraryComponent):
         count_available = (
             self.i18n.tr("citry-ui-transfer-list-count", selected=str(0), total=str(available_total))
             if kwargs.catalog["count"]
-            else kwargs.labels["count"].format(selected=0, total=available_total)
+            else fill_label(kwargs.labels["count"], selected=0, total=available_total)
         )
         count_chosen = (
             self.i18n.tr("citry-ui-transfer-list-count", selected=str(0), total=str(chosen_total))
             if kwargs.catalog["count"]
-            else kwargs.labels["count"].format(selected=0, total=chosen_total)
+            else fill_label(kwargs.labels["count"], selected=0, total=chosen_total)
         )
         native_size = min(10, max(4, len(items)))
         return {

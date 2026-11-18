@@ -26,6 +26,7 @@ from citry_ui.components._attrs import (
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
 from citry_ui.components._form_control_runtime import FORM_CONTROL_RUNTIME_DEPENDENCY, FORM_CONTROL_STYLE_DEPENDENCY
+from citry_ui.components._i18n import fill_label
 from citry_ui.components._validation import validate_optional_boolean
 
 CTagsInputVariant = Literal["outline", "filled", "plain"]
@@ -589,7 +590,7 @@ class CTagsInput(LibraryComponent):
                 value=value,
                 remove_label=self.i18n.tr("citry-ui-tags-input-remove", value=value)
                 if catalog_messages["remove_label"]
-                else cast("str", messages.remove_label).format(value=value),
+                else fill_label(cast("str", messages.remove_label), value=value),
             )
             for value in values
         )

@@ -26,7 +26,7 @@ from citry_ui.components._form_control_runtime import (
     FORM_CONTROL_RUNTIME_DEPENDENCY,
     FORM_CONTROL_STYLE_DEPENDENCY,
 )
-from citry_ui.components._i18n import uses_catalog_default
+from citry_ui.components._i18n import fill_label, uses_catalog_default
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -365,7 +365,7 @@ class CRating(LibraryComponent):
             choice_label = (
                 self.i18n.tr("citry-ui-rating-value", value=formatted_value, max=formatted_max)
                 if catalog_value_label
-                else value_label_pattern.format(value=formatted_value, max=formatted_max)
+                else fill_label(value_label_pattern, value=formatted_value, max=formatted_max)
             )
             choices.append(
                 {

@@ -88,6 +88,40 @@ def test_invalid_inputs_fail(input_name, bad_value, error):
         _render(CSkeleton(**{input_name: bad_value}))
 
 
+@pytest.mark.parametrize("input_name", ["width", "height", "last_line_width"])
+@pytest.mark.parametrize("value", ["12px", "1.5rem", ".8em", "20ch", "50vw", "10vh", "5vmin", "5vmax", "42%"])
+def test_size_inputs_accept_one_positive_length(input_name, value):
+    root = _root(_render(CSkeleton(kind="text", lines=2, **{input_name: value})))
+    assert f": {value}" in root
+
+
+@pytest.mark.parametrize("input_name", ["width", "height", "last_line_width"])
+@pytest.mark.parametrize(
+    "value",
+    [
+        "0px",
+        "0%",
+        "-1rem",
+        "10",
+        "10 px",
+        "10px 20px",
+        "10PX",
+        "auto",
+        "calc(10px + 1rem)",
+        "var(--x)",
+        "url(a.png)",
+        "10px\n",
+        "10px!important",
+        "\uff11\uff10px",
+    ],
+)
+def test_size_inputs_refuse_anything_but_one_length(input_name, value):
+    # The value becomes a CSS custom property, so only a single number and
+    # unit may reach it: no function, keyword, second value or anything else.
+    with pytest.raises(ValueError, match=f"CSkeleton {input_name} must be one positive"):
+        _render(CSkeleton(kind="text", lines=2, **{input_name: value}))
+
+
 def test_multiple_lines_require_text_kind():
     with pytest.raises(ValueError, match="require kind='text'"):
         _render(CSkeleton(lines=2))

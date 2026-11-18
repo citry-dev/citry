@@ -105,6 +105,19 @@ def test_a_component_can_reserve_more_prefixes() -> None:
         reject_citry_ui_reserved_attr("data-cni-step", "1", where="CNumberInput attrs", extra_prefixes=("data-cni",))
 
 
+def test_a_str_subclass_name_cannot_hide_a_reserved_prefix() -> None:
+    """A `str` subclass that answers `translate` with another spelling is still read as its real text."""
+
+    class Disguised(str):
+        __slots__ = ()
+
+        def translate(self, table: object) -> str:
+            return "title"
+
+    with pytest.raises(ValueError, match=REFUSED):
+        reject_citry_ui_reserved_attr(Disguised("data-citry-dialog-trigger"), "", where="CButton attrs")
+
+
 def test_the_map_check_reads_every_entry() -> None:
     reject_citry_ui_reserved_attrs(None, "CButton attrs")
     with pytest.raises(ValueError, match="'data-citry-tour-trigger'"):

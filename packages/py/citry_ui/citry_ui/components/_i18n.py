@@ -26,4 +26,19 @@ def inline_translation_value(value: str) -> str:
     )
 
 
-__all__ = ["inline_translation_value", "uses_catalog_default"]
+def fill_label(pattern: str, **values: object) -> str:
+    """
+    Put each value in place of its `{name}` in an app-supplied label, such as `"{count} items added"`.
+
+    Where Citry UI's browser code fills a label again, it uses this same
+    plain text replacement, one name at a time in the order given, so the
+    server and the browser show the same text. `str.format` would read a
+    format spec in the label, such as `{total:>99}`, and pad the text or
+    look up attributes instead.
+    """
+    for name, value in values.items():
+        pattern = pattern.replace(f"{{{name}}}", str(value))
+    return pattern
+
+
+__all__ = ["fill_label", "inline_translation_value", "uses_catalog_default"]

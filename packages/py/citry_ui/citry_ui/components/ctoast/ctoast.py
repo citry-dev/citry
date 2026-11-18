@@ -15,7 +15,7 @@ from citry_ui.components._attrs import (
     reject_citry_ui_reserved_attr,
     reject_vue_directive_attrs,
 )
-from citry_ui.components._i18n import inline_translation_value, uses_catalog_default
+from citry_ui.components._i18n import fill_label, inline_translation_value, uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_html_id
 
 CToastIntent = Literal["neutral", "info", "success", "warn", "error"]
@@ -274,13 +274,13 @@ class CToastRegion(LibraryComponent):
                     title=inline_translation_value(cast("str", message["title"])),
                 )
                 if catalog_dismiss
-                else dismiss_pattern.format(title=message["title"]),
+                else fill_label(dismiss_pattern, title=message["title"]),
                 "actionAnnouncement": self.i18n.tr(
                     "citry-ui-toast-action-available",
                     action_label=inline_translation_value(cast("str", message["actionLabel"])),
                 )
                 if catalog_action_announcement and message["actionLabel"] is not None
-                else action_pattern.format(action_label=message["actionLabel"])
+                else fill_label(action_pattern, action_label=message["actionLabel"])
                 if message["actionLabel"] is not None
                 else None,
             }

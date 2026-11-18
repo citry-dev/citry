@@ -170,7 +170,6 @@ def _validate_attrs(
     attrs: dict[str, object],
     *,
     owned: frozenset[str],
-    data_item: bool = False,
 ) -> None:
     component_name = f"CNativeSelect {input_name}"
     reject_owned_attrs(attrs, owned, component_name)
@@ -179,11 +178,9 @@ def _validate_attrs(
     reject_vue_directive_attrs(attrs, component_name.removesuffix(" attrs"))
     for key, attr_value in attrs.items():
         reject_citry_ui_reserved_attr(key, attr_value, where=component_name)
-        # Options and groups are rendered by Vue in the browser, where a
-        # data-chosen `is` would name a custom element and `key` would clash
-        # with the option key this component sets.
-        if data_item:
-            reject_data_item_vue_name(key, where=component_name)
+        # Vue renders the select and its options in the browser and reads
+        # `is` and `key` itself, so no map may take either name from data.
+        reject_data_item_vue_name(key, where=component_name)
 
 
 def _morph_key(value: str) -> str:
@@ -218,7 +215,7 @@ def _normalize_options(
             msg = f"CNativeSelect option disabled must be a bool, got {option.disabled!r}."
             raise TypeError(msg)
         attrs = _copy_attrs("option attrs", option.attrs)
-        _validate_attrs("option attrs", attrs, owned=_OPTION_OWNED_ATTRS, data_item=True)
+        _validate_attrs("option attrs", attrs, owned=_OPTION_OWNED_ATTRS)
         disabled = group_disabled or option.disabled
         return _NormalizedOption(
             kind="option",
@@ -248,7 +245,7 @@ def _normalize_options(
             raise TypeError(msg)
         group_options = tuple(normalize_option(option, group_disabled=item.disabled) for option in tuple(item.options))
         attrs = _copy_attrs("group attrs", item.attrs)
-        _validate_attrs("group attrs", attrs, owned=_GROUP_OWNED_ATTRS, data_item=True)
+        _validate_attrs("group attrs", attrs, owned=_GROUP_OWNED_ATTRS)
         group = _NormalizedGroup(
             kind="group",
             label=label,

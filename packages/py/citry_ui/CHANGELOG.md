@@ -1,5 +1,39 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- `CSkeleton` `width`, `height` and `last_line_width` now raise
+  `ValueError` unless the value is one positive CSS length or
+  percentage, such as `12rem` or `50%`, in `px`, `rem`, `em`, `ch`,
+  `vw`, `vh`, `vmin`, `vmax` or `%`, the units `CGrid(min_col=)`
+  takes plus `%`. Values such as `auto`, `calc(...)`, `var(...)` and a
+  bare `0` now fail; before, any CSS text without `;`, braces or a
+  comment was accepted.
+- The `attrs` of `CListItem` (and its `surface_attrs`), `CTimelineItem`,
+  `CTreeItem`, `CSortableItem`, `CTransferListItem`, `CVirtualListItem`
+  and the `CNativeSelect` root now raise `ValueError` for the attribute
+  names `is` and `key`, in any letter case, as the attrs of table rows
+  and select options do. Before, `key` failed the render of several of
+  these items with an unclear error. Use a `data-*` name, such as
+  `data-key`, for your own value.
+- Labels with placeholders, such as `CTransferList(count_label=)` and
+  the labels of `CSortable`, `CFormCollection`, `CTreeGrid`, `CRating`,
+  `CCascader`, `CTagsInput` and `CToast`, are now filled on the server
+  by replacing each `{name}` as plain text, as the browser code does. A
+  format spec such as `{total:>5}`, or a literal `{{x}}`, now stays in
+  the label as typed, so the server and the browser show the same text.
+
+### Fixed
+
+- A `Markup` or Django `SafeString` value in `CButton(href=)` or in a
+  `tabindex` in `CButton(attrs=)`, and a `SafeString` value in
+  `CAvatar(img_attrs=)`, no longer fails the render with a `TypeError`.
+- A `Markup` value in `CAvatar(img_attrs=)` now reaches the browser
+  code decoded, as the server writes it, so `&amp;` in it reads as `&`
+  whether the server or the browser creates the image.
+
 ## [0.6.1] - 2026-11-18
 
 ### Changed

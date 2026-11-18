@@ -86,7 +86,7 @@ def _page(component: str, attrs: dict[str, object]) -> str:
 @pytest.mark.parametrize("component", list(BUILDERS))
 def test_rows_and_options_refuse_is_and_key_from_data(page: Any, component: str, name: str) -> None:
     """The page does not render with `is` or `key` in an item map, and the rows Vue builds keep other names."""
-    with pytest.raises(ValueError, match="reserved in a data item's attrs"):
+    with pytest.raises(ValueError, match="'is' and 'key' are reserved"):
         _page(component, {name: "svg"})
 
     errors: list[str] = []

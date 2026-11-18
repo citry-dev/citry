@@ -91,6 +91,21 @@ def _get_case_insensitive(attrs: Mapping[str, object] | None, name: str) -> obje
     return value
 
 
+def _client_attribute_value(value: object) -> str | None:
+    """Return the text the browser reads from `value` once the server writes it into an attribute."""
+    # `None` and `False` write no attribute. The Button renders through Vue,
+    # which writes `True` on a non-boolean attribute such as `tabindex` as
+    # the text `true`, so the browser data says the same.
+    if value is None or value is False:
+        return None
+    if value is True:
+        return "true"
+    # `attribute_text` decodes a `Markup` value's character references and
+    # always returns a plain `str`, so the browser data matches the server
+    # HTML and never holds a `str` subclass that cannot be sent as JSON.
+    return attribute_text(value)
+
+
 def _build_button_snapshot(component: Any, kwargs: Any) -> dict[str, Any]:
     """Build the native Button render record shared by Button facades."""
     validate_choice("CButton", "type", kwargs.type, ("button", "submit", "reset"))
@@ -243,9 +258,11 @@ class CButton(LibraryComponent):
     ) -> dict[str, object]:
         return {
             # The browser runtime writes this back into the link, so it gets
-            # the same check as the server-rendered href.
-            "href": None if kwargs.href is None else check_link_url("CButton href", kwargs.href),
-            "tabIndex": _get_case_insensitive(kwargs.attrs, "tabindex"),
+            # the same check as the server-rendered href, and the same text.
+            "href": (
+                None if kwargs.href is None else _client_attribute_value(check_link_url("CButton href", kwargs.href))
+            ),
+            "tabIndex": _client_attribute_value(_get_case_insensitive(kwargs.attrs, "tabindex")),
             "serverDefaults": {
                 "disabled": kwargs.disabled,
                 "loading": kwargs.loading,

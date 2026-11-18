@@ -170,7 +170,9 @@ def reject_citry_ui_reserved_attr(
         return
     # Browsers compare attribute names after lowercasing ASCII letters only,
     # so `DATA-CITRY-X` is the same attribute and a non-ASCII lookalike is not.
-    folded = name.translate(_ASCII_LOWER)
+    # `str.translate` is called on the class so a `str` subclass cannot answer
+    # with another spelling than the text it renders as.
+    folded = str.translate(name, _ASCII_LOWER)
     reserved = _RESERVED_ATTR_PREFIXES + extra_prefixes
     if not folded.startswith(reserved):
         return
@@ -207,7 +209,7 @@ _DATA_ITEM_VUE_NAMES = frozenset({"is", "key"})
 
 def reject_data_item_vue_name(name: object, *, where: str) -> None:
     """
-    Raise `ValueError` when a data item's attribute map names `is` or `key`.
+    Raise `ValueError` when an item's attribute map names `is` or `key`.
 
     `CTable`, `CDataGrid`, `CTreeGrid`, `CNativeSelect` and `CBreadcrumbs`
     take an attribute map on each row, cell, column, option, group or item.
@@ -217,6 +219,13 @@ def reject_data_item_vue_name(name: object, *, where: str) -> None:
     leave the row out of its HTML, and `key` clashes with the key the
     component gives each row, so neither may come from data. `CTable` and
     `CBreadcrumbs` follow the same rule, so one rule covers every data item.
+
+    The item components `CListItem`, `CTimelineItem`, `CTreeItem`,
+    `CSortableItem`, `CTransferListItem` and `CVirtualListItem`, and the
+    `CNativeSelect` root, follow the same rule for their own `attrs`.
+    `CTreeItem`, `CSortableItem`, `CTransferListItem` and `CVirtualListItem`
+    get a `key` from their parent, which a `key` from `attrs` would clash
+    with.
 
     Args:
         name: The attribute name to check. A non-string name is left to the caller's own type check.
@@ -234,9 +243,8 @@ def reject_data_item_vue_name(name: object, *, where: str) -> None:
     # cannot answer with its own spelling.
     if str.translate(name, _ASCII_LOWER) in _DATA_ITEM_VUE_NAMES:
         msg = (
-            f"{where} cannot set {name!r}. 'is' and 'key' are reserved in a data item's attrs, because Vue "
-            "reads them itself in Citry UI's grids and selects. Use a data-* name, such as 'data-key', for "
-            "your own value."
+            f"{where} cannot set {name!r}. 'is' and 'key' are reserved here, because Vue reads them itself in "
+            "Citry UI's lists, grids and selects. Use a data-* name, such as 'data-key', for your own value."
         )
         raise ValueError(msg)
 

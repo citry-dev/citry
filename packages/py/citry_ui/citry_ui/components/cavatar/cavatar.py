@@ -15,7 +15,7 @@ from citry_ui.components._attrs import (
     merge_root_attrs,
     reject_citry_ui_reserved_attr,
 )
-from citry_ui.components._url import check_image_url
+from citry_ui.components._url import attribute_text, check_image_url
 from citry_ui.components._validation import reject_owned_attrs
 
 CAvatarVariant = Literal["soft", "solid", "outline"]
@@ -148,10 +148,11 @@ def _client_image_attrs(attrs: Mapping[str, object] | None) -> dict[str, str]:
             continue
         if value is True:
             client_attrs[key] = ""
-        elif hasattr(value, "__html__"):
-            client_attrs[key] = str(value.__html__())
         else:
-            client_attrs[key] = str(value)
+            # The server decodes a `Markup` value's character references
+            # before it writes the attribute, so the browser code gets the
+            # same decoded text, always as a plain `str` it can send as JSON.
+            client_attrs[key] = attribute_text(value)
     return client_attrs
 
 
