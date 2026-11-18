@@ -206,3 +206,17 @@ class TestDjangoLazyStrings:
 class TestArgumentsTheCheckCannotRead:
     def test_an_argument_whose_lookup_raises_is_refused(self):
         assert_refused("apply(f, 1)", apply=lambda f, x: f(x), f=RaisingLookup())
+
+
+class TestValidateCallableHook:
+    def test_the_hook_sees_functions_passed_as_arguments(self):
+        def refuse_label(func: Any) -> bool:
+            return getattr(func, "__name__", "") != "label"
+
+        with pytest.raises(SecurityError, match="cannot be passed to"):
+            safe_eval("[1].sort(key=obj.label)", validate_callable=refuse_label)({"obj": Holder()})
+
+    def test_the_hook_allows_what_it_allows(self):
+        items = [2, 1]
+        safe_eval("items.sort(key=obj.label)", validate_callable=lambda _func: True)({"items": items, "obj": Holder()})
+        assert items == [1, 2]

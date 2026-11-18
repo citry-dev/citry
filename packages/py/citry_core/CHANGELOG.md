@@ -9,7 +9,9 @@
   as it already refused calling them. It also refuses a call when one of
   its arguments is a function the sandbox would not call itself, such as
   an `@unsafe` method, an `alters_data` method, or `eval`. Both raise
-  `SecurityError`. Use an f-string instead of `format`. See
+  `SecurityError`. A `validate_callable` hook passed to `safe_eval()` now
+  also receives the functions passed as arguments. Use an f-string
+  instead of `format`. See
   [GHSA-c42m-36vw-xvm3](https://github.com/citry-dev/citry/security/advisories/GHSA-c42m-36vw-xvm3).
 
 ## v2.1.1

@@ -48,7 +48,9 @@ def safe_eval(
         validate_variable: Optional extra validation for variable lookups.
         validate_attribute: Optional extra validation for attribute access.
         validate_subscript: Optional extra validation for subscript access.
-        validate_callable: Optional extra validation for function calls.
+        validate_callable: Optional extra validation for function calls. It also receives
+            every function passed as an argument to a call, because the receiving function
+            may call it.
         validate_assign: Optional extra validation for variable assignments.
 
     Returns:
@@ -138,6 +140,11 @@ def safe_eval(
         ) -> Any:
             if not validate_callable(func):
                 raise SecurityError(f"function '{func!r}' is unsafe")
+            # A function passed as an argument can be called by the function that receives
+            # it, such as `list.sort` with `key=`, so the hook sees those functions too.
+            for value in (*args, *kwargs.values()):
+                if callable(value) and not validate_callable(value):
+                    raise SecurityError(f"function '{value!r}' is unsafe and cannot be passed to '{func!r}'")
             return call(__context, __source, __token, func, *args, **kwargs)
     else:
         call_fn = call
