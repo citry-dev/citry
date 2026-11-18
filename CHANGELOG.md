@@ -4,6 +4,13 @@
 
 ### Fixes
 
+- The check that an extension's `on_serialize` hook kept the element
+  Vue mounts on now reads the elements inside it the way a browser
+  does. A hook result that a browser reads correctly, such as one
+  with a `<p>` that a later `<div>` closes, no longer fails with
+  "Vue serialization hooks must preserve exactly one empty Citry
+  mount host", and an end tag that a browser ignores, such as
+  `</link>`, no longer ends that element early.
 - The browser i18n runtime now reports a format profile, parser or
   message ID named after a built-in JavaScript object member, such as
   `constructor` or `__proto__`, as unknown, with the same error code as
