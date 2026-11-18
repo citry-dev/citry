@@ -37,6 +37,7 @@ from citry.util.routing import (
     body_read_limit,
     check_route_table,
     match_path_below_mount,
+    route_allowed_methods,
     route_allows_method,
     sent_content_type,
     sent_headers,
@@ -164,7 +165,9 @@ def wsgi_app(citry_instance: Citry) -> WSGIApp:
         method = environ.get("REQUEST_METHOD", "GET")
         # The shared rule keeps HEAD off POST-only routes, the same on every adapter.
         if not route_allows_method(matched.route, method):
-            return respond(RouteResponse(content="Method Not Allowed", status=405))
+            # HTTP requires a 405 to name the methods the route does accept.
+            allow = ("Allow", ", ".join(route_allowed_methods(matched.route)))
+            return respond(RouteResponse(content="Method Not Allowed", status=405, headers=(allow,)))
 
         handler = matched.route.handler
         assert handler is not None  # noqa: S101 - match_route only returns handler routes

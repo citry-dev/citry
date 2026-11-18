@@ -58,15 +58,17 @@ def test_a_redirect_accepts_a_row_only_with_an_http_scheme_or_none(row: dict[str
 
 
 @pytest.mark.parametrize("row", _ROWS, ids=_row_id)
-def test_the_form_redirect_resolves_a_row_only_when_it_has_no_scheme(row: dict[str, Any]) -> None:
+def test_the_form_redirect_resolves_a_row_only_when_it_depends_on_the_page(row: dict[str, Any]) -> None:
     # A Referer from the same host makes the resolver join every URL that
-    # depends on the page, so an unchanged URL means it read a scheme (or a
-    # leading `/` or `\`).
+    # depends on the page, so an unchanged URL means the resolver read a scheme (or a
+    # leading `/` or `\`). The one scheme exception is the page's own scheme
+    # with no `/` or `\` after the colon, which the browser reads as relative.
     request = RouteRequest(
         method="POST",
         path="/citry/events/x",
         headers=RouteHeaders([("Host", "app.test"), ("Referer", "http://app.test/shop/list")]),
     )
     stripped = row["url"].lstrip(_URL_LEADING_STRIP).translate({9: None, 10: None, 13: None})
-    passes_through = row["scheme"] is not None or stripped.startswith(("/", "\\"))
+    relative_with_scheme = row["scheme"] == "http" and not row["rest"].startswith(("/", "\\"))
+    passes_through = (row["scheme"] is not None and not relative_with_scheme) or stripped.startswith(("/", "\\"))
     assert (_resolve_redirect_url(row["url"], request) == row["url"]) == passes_through

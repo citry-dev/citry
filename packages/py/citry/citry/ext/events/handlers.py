@@ -88,13 +88,15 @@ _INJECTABLE_SET = frozenset(INJECTABLE_PARAMS)
 
 # Classes the extension system itself contributes to a woven Events class.
 # Handler enumeration and config resolution stop at these, so config-base
-# members are never mistaken for user declarations.
-_FRAMEWORK_CLASSES = frozenset(Events.__mro__)
+# members are never mistaken for user declarations. Base classes Citry ships
+# for users to subclass join through ``framework_base``.
+_FRAMEWORK_CLASSES: set[type] = set(Events.__mro__)
 
 # Descriptor-shaped values allowed under underscore names (private helpers).
 _DEF_LIKE = (staticmethod, classmethod, property)
 
 _F = TypeVar("_F", bound=Callable[..., Any])
+_T = TypeVar("_T")
 
 
 @dataclass(frozen=True, slots=True)
@@ -384,6 +386,20 @@ def event(
 ################################################
 # HANDLER ENUMERATION AND SIGNATURE VALIDATION
 ################################################
+
+
+def framework_base(cls: type[_T]) -> type[_T]:
+    """
+    Mark a base class Citry ships for ``Events`` classes as part of the framework.
+
+    Handler enumeration and config resolution skip it as they skip
+    ``Events``, so a public helper added to the base later never becomes an
+    event handler that a request can call on every subclass. The base lives
+    in a module that imports this one, so it registers itself here rather
+    than this module importing it.
+    """
+    _FRAMEWORK_CLASSES.add(cls)
+    return cls
 
 
 def user_level_classes(raw_events_cls: type) -> list[type]:

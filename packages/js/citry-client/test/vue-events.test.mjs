@@ -1643,6 +1643,28 @@ test("allowBatching false POST uses the encoded per-event path", async () => {
   assert.equal(requested.init.method, "POST");
 });
 
+test("the CSRF cookie is read past a cookie of the same name whose value does not decode", async () => {
+  const headersFor = async (cookie) => {
+    let headers;
+    const bridge = bridgeModule.createVueEventsBridge({
+      endpoint: "/events/call",
+      host: basicHost(),
+      // A CSRF setting with no token, so the bridge reads the default `csrftoken` cookie.
+      csrf: {},
+      fetch: async (_url, init) => {
+        headers = init.headers;
+        return resultResponse(JSON.parse(init.body));
+      },
+    });
+    await onPage({ cookie }, () => bridge.send({ source: { stableId: "board", generation: 1 }, handler: "move" }));
+    return headers;
+  };
+  // A broken `%` escape is passed over, so a later cookie with the same name still supplies the token.
+  assert.equal((await headersFor("csrftoken=%E0%A4%A; csrftoken=good%20token"))["X-CSRFToken"], "good token");
+  // With no cookie that decodes, the call still goes out, without a token.
+  assert.equal((await headersFor("csrftoken=%zz"))["X-CSRFToken"], undefined);
+});
+
 test("isolated PUT and DELETE use their declared methods and per-event routes", async () => {
   for (const method of ["PUT", "DELETE"]) {
     const isolatedDescriptor = {

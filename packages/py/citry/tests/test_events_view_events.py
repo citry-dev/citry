@@ -86,6 +86,13 @@ class TestVerbReservation:
         assert handlers["post"].methods == ("POST",)
         assert handlers["delete"].methods == ("DELETE",)
 
+    def test_a_public_method_on_the_base_class_is_not_a_handler(self, monkeypatch):
+        # ViewEvents is skipped like Events, so a public helper it gains later
+        # does not become a request-callable handler on every subclass.
+        monkeypatch.setattr(ViewEvents, "helper", lambda self: None, raising=False)  # noqa: ARG005
+        c = _citry()
+        assert "helper" not in _handlers(_contact(c))
+
     def test_named_handlers_ride_along_unchanged(self):
         # The shim only touches the seven verb names; a named event on the
         # same class keeps the plain Events defaults.

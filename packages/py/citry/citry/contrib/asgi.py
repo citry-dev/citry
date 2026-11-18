@@ -59,6 +59,7 @@ from citry.util.routing import (
     call_maybe_sync,
     check_route_table,
     match_path_below_mount,
+    route_allowed_methods,
     route_allows_method,
     sent_content_type,
     sent_headers,
@@ -190,7 +191,9 @@ def asgi_app(citry_instance: Citry) -> Callable[[Scope, Receive, Send], Awaitabl
         method: str = scope["method"]
         # The shared rule keeps HEAD off POST-only routes, the same on every adapter.
         if not route_allows_method(matched.route, method):
-            await _send_response(send, RouteResponse(content="Method Not Allowed", status=405))
+            # HTTP requires a 405 to name the methods the route does accept.
+            allow = ("Allow", ", ".join(route_allowed_methods(matched.route)))
+            await _send_response(send, RouteResponse(content="Method Not Allowed", status=405, headers=(allow,)))
             return
 
         if method in BODYLESS_METHODS:
