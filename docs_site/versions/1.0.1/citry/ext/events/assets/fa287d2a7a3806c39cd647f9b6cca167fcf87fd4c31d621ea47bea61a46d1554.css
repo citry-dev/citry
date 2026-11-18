@@ -1,0 +1,17 @@
+
+:where(.progress-unknown) {
+  display: grid;
+  gap: 0.75rem;
+  max-inline-size: 32rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.progress-unknown h2, .progress-unknown p) {
+  margin: 0;
+}
+
+:where(.progress-unknown p) {
+  color: GrayText;
+  font-size: 0.8rem;
+}

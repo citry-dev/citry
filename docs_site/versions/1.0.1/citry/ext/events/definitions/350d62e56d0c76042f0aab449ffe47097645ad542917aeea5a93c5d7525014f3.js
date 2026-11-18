@@ -1,0 +1,30 @@
+try {
+(function() {
+
+__citryRuntime.registerTypeOptions.bind(null, "FormConfiguration_982e24", "15f209712e42d54b702e92057ac78aeaa37ccf9c09cedff9c84a539a199716b7")({
+  data() {
+    return {
+      disabled: false,
+      readonly: false,
+      submitting: false,
+      gap: '1rem',
+    };
+  },
+  methods: {
+    applyPreviewControls(event) {
+      Object.assign(this, event.detail);
+    },
+  },
+  mounted() {
+    window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+  },
+  beforeUnmount() {
+    window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+  },
+});
+
+})();
+__citryRuntime.finishScript("387b8ffb32f786907116ad843db79e2ec00702edaeaf786f4fbe06443f396002");
+} catch (error) {
+__citryRuntime.finishScript("387b8ffb32f786907116ad843db79e2ec00702edaeaf786f4fbe06443f396002", error);
+}

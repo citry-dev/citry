@@ -1,0 +1,31 @@
+
+:where(.split-button-disabled-demo) {
+  display: grid;
+  gap: 1rem;
+  justify-items: start;
+  inline-size: min(100%, 34rem);
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.split-button-disabled-demo h2) { margin: 0; }
+:where(.split-button-disabled-demo__controls) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+}
+:where(.split-button-disabled-demo__controls label) {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+:where(.split-button-disabled-demo fieldset) {
+  inline-size: 100%;
+  padding: 1rem;
+  border: 1px solid GrayText;
+  border-radius: 0.75rem;
+}
+
+@media (forced-colors: active) {
+  :where(.split-button-disabled-demo fieldset) { border-color: CanvasText; }
+}

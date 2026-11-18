@@ -1,0 +1,18 @@
+
+:where(.ocean-picker) {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 38rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.ocean-picker__actions) {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+:where(.ocean-picker output) {
+  font-family: ui-monospace, monospace;
+}

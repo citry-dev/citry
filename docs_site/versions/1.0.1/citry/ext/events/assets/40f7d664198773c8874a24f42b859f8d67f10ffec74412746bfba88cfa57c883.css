@@ -1,0 +1,15 @@
+
+:where(.card-variants) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: 1.25rem;
+  max-width: 62rem;
+  padding: 1rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.card-variants h2) {
+  margin: 0;
+  font-size: 1rem;
+}

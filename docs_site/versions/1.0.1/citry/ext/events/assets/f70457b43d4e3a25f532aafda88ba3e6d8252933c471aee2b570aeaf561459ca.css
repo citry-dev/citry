@@ -1,0 +1,23 @@
+
+:where(.checkbox-matrix) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 1rem;
+  max-width: 52rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.checkbox-matrix article) {
+  display: grid;
+  align-content: start;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid light-dark(#c3d5c0, #405743);
+  border-radius: 0.875rem;
+  background: Canvas;
+}
+
+:where(.checkbox-matrix h3) {
+  margin: 0 0 0.2rem;
+}

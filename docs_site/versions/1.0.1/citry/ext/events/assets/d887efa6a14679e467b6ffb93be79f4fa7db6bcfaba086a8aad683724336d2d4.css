@@ -1,0 +1,67 @@
+
+:where(.scroll-area-callback) {
+  display: grid;
+  gap: 1rem;
+  max-inline-size: 42rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.scroll-area-callback__controls) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+:where(.scroll-area-callback__content) {
+  position: relative;
+  inline-size: 44rem;
+  min-block-size: 26rem;
+  padding: 1rem;
+}
+
+:where(.scroll-area-callback__content--expanded) {
+  min-block-size: 34rem;
+}
+
+:where(.scroll-area-callback__content p) {
+  margin: 0 0 1rem;
+}
+
+:where(.scroll-area-callback__sentinel) {
+  position: absolute;
+  inset-inline-start: 28rem;
+  padding: 0.375rem 0.625rem;
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, Highlight 18%, Canvas);
+}
+
+:where(.scroll-area-callback__image) {
+  display: block;
+  inline-size: 30rem;
+  block-size: 6rem;
+  margin-block: 1rem;
+  background: color-mix(in srgb, Highlight 14%, Canvas);
+}
+
+:where(.scroll-area-callback__shadow-host) {
+  display: block;
+  min-inline-size: 26rem;
+  min-block-size: 5rem;
+  border: 1px dashed GrayText;
+}
+
+:where(.scroll-area-callback__readout) {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.375rem 1rem;
+  margin: 0;
+}
+
+:where(.scroll-area-callback__readout dt) {
+  font-weight: 700;
+}
+
+:where(.scroll-area-callback__readout dd) {
+  margin: 0;
+}

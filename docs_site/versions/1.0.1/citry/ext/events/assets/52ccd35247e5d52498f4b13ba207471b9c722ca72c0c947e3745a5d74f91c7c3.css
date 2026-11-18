@@ -1,0 +1,3 @@
+
+:where(.rating-state-grid){display:grid;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));gap:1.5rem;align-items:start}
+:where(.rating-brand){--cui-rating-fill-color:#059669;--cui-rating-hover-color:#10b981;--cui-rating-gap:.4rem}
