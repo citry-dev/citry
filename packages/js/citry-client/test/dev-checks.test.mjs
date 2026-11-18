@@ -538,3 +538,32 @@ test("a failure while comparing is logged and never thrown", () => {
   context.CitryVueDevChecks.captureShells(host).compare();
   assert.equal(errors.length, 1);
 });
+
+test("a form's fields named after node members do not change the comparison", () => {
+  // A real form's members sit on its prototypes, and each named field shows up as an own data
+  // property that hides one of them. The check must read the members from the prototypes.
+  const FormElement = class {};
+  for (const member of ["nodeType", "localName", "namespaceURI", "attributes", "childNodes", "getAttribute"]) {
+    Object.defineProperty(FormElement.prototype, member, {
+      get() {
+        return this.members[member];
+      },
+    });
+  }
+  const form = (children) => {
+    const members = element("form", { class: "edit" }, children);
+    const node = Object.create(FormElement.prototype);
+    node.members = { ...members, getAttribute: members.getAttribute.bind(members) };
+    node.style = members.style;
+    node.hasAttribute = members.hasAttribute.bind(members);
+    node.getAttributeNS = members.getAttributeNS.bind(members);
+    node.parentElement = null;
+    for (const name of ["nodeType", "localName", "namespaceURI", "attributes", "childNodes", "getAttribute"])
+      Object.defineProperty(node, name, { value: { field: name } });
+    return node;
+  };
+  const make = () => [form([element("input", { name: "localName" }), text("Saved")])];
+  assert.equal(differenceOf(make(), make()), null);
+  const changed = [form([element("input", { name: "localName" }), text("Not saved")])];
+  assert.equal(differenceOf(make(), changed)?.kind, "text");
+});

@@ -29,6 +29,22 @@ export interface BrowserNumberParserRecord {
 type Failure = (code: string, message: string) => never;
 
 /**
+ * Read `record[key]` only when `key` is the record's own property.
+ *
+ * Format profiles, parser records and message entries arrive as plain JSON objects, which inherit
+ * from `Object.prototype`. A plain index would find `constructor` or `__proto__` there, so a name
+ * page code passes could reach a member no catalog defined. Reading own keys only makes those
+ * names fail like any other unknown name.
+ */
+export function ownValue<Value>(
+  record: Readonly<Record<string, Value>> | null | undefined,
+  key: string,
+): Value | undefined {
+  if (record === null || record === undefined) return undefined;
+  return Object.prototype.hasOwnProperty.call(record, key) ? record[key] : undefined;
+}
+
+/**
  * Whether two JSON values hold the same content, with object keys compared as a set.
  *
  * The server writes the same configuration in different key orders on a first render and on an
@@ -245,7 +261,7 @@ export function createPerAppI18nService<Formatter, Parser>(
     const token = attr === undefined ? message : `${message}.${attr}`;
     for (const requirement of tree.providerRequirements(internal)) {
       const runtime = requirement.artifacts.get(internal.state.context.locale);
-      const entry = runtime?.artifact.messages[token];
+      const entry = ownValue(runtime?.artifact.messages, token);
       if (runtime !== undefined && entry !== undefined) {
         const context = internal.state.context;
         const text = runtime.format(token, values);
@@ -257,10 +273,8 @@ export function createPerAppI18nService<Formatter, Parser>(
         const direction =
           entry.bundle_locale === context.locale
             ? context.direction
-            : runtime.artifact.bundle_directions[entry.bundle_locale];
-        if (direction === undefined) {
-          fail("I18N_ARTIFACT_INVALID", `browser bundle ${entry.bundle_locale} has no direction.`);
-        }
+            : (ownValue(runtime.artifact.bundle_directions, entry.bundle_locale) ??
+              fail("I18N_ARTIFACT_INVALID", `browser bundle ${entry.bundle_locale} has no direction.`));
         return {
           direction,
           entry,

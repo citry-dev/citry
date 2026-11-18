@@ -415,7 +415,8 @@ that type as given. For example, it refuses to run a script served as
 
 A route accepts `GET` by default. Pass `methods=("POST",)` or another tuple
 to change it. Citry answers any other method with `405 Method Not Allowed`
-before the handler runs. A route that lists `GET` also accepts `HEAD`.
+before the handler runs, with an `Allow` header that names the methods
+the route accepts. A route that lists `GET` also accepts `HEAD`.
 
 The request path must match the route's path exactly. With Citry mounted
 at `/citry`, the `status` route of the `Health` example answers

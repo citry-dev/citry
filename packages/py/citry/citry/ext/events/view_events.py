@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any
 
 from citry.ext.events.codecs import FormCodec
 from citry.ext.events.config import Events
-from citry.ext.events.handlers import EVENT_OPTIONS_ATTR, EventOptions, event_options
+from citry.ext.events.handlers import EVENT_OPTIONS_ATTR, EventOptions, event_options, framework_base
 
 # The transport translation is the per-event route's, unchanged; only the
 # event name comes from the HTTP method instead of the URL, so the verb
@@ -57,6 +57,8 @@ VIEW_EVENT_PATH = "ext/events/e/{class_id}"
 _VERB_METHODS = tuple(verb.upper() for verb in VERB_HANDLER_NAMES)
 
 
+# Skipped like Events itself, so only a subclass's own methods are handlers.
+@framework_base
 class ViewEvents(Events):
     """
     Base class for verb-shaped ``Events`` classes, for ports from view code.

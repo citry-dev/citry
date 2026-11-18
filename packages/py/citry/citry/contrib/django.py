@@ -74,6 +74,7 @@ from citry.util.routing import (
     flatten_routes,
     match_route_pattern,
     normalize_mount_prefix,
+    route_allowed_methods,
     route_allows_method,
     route_param_names,
     route_reverse_regex,
@@ -178,7 +179,9 @@ def _make_view(route: URLRoute) -> Any:
         # here: CsrfViewMiddleware skips its token check for HEAD, so a HEAD
         # that reached a POST handler would run it without the token.
         if not route_allows_method(route, request.method):
-            not_allowed = HttpResponseNotAllowed(route.methods)
+            # The same Allow list as the other adapters, so HEAD is named
+            # wherever the route accepts it through GET.
+            not_allowed = HttpResponseNotAllowed(route_allowed_methods(route))
             # The same standard header every other Citry response carries.
             not_allowed["X-Content-Type-Options"] = "nosniff"
             return not_allowed

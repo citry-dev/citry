@@ -14,7 +14,7 @@ import json
 import re
 import time
 from decimal import Decimal
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, urlencode, urlsplit
 
 import pytest
 
@@ -778,6 +778,56 @@ def _landing_client(c, adapter):
 
 def _event_url(comp_cls, name):
     return f"/citry/ext/events/e/{comp_cls.class_id}/{name}"
+
+
+def _post_redirect(c, comp_cls, target, headers=None):
+    """
+    Form-POST a Redirect target to the mounted app and return the raw status and Location.
+
+    httpx2 builds the follow-up request from Location even with
+    follow_redirects=False, and its URL parser rejects a scheme with no host
+    and no leading "/" (such as "http:next") that browsers accept. Driving
+    the ASGI app directly reads the header exactly as the server wrote it.
+    """
+    messages = []
+    body = urlencode({"to": target}).encode()
+    request_sent = False
+
+    async def receive():
+        # One request body, then a disconnect, as a server sends after the client finishes.
+        nonlocal request_sent
+        if request_sent:
+            return {"type": "http.disconnect"}
+        request_sent = True
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    async def send(message):
+        messages.append(message)
+
+    # The TestClient sends Host "testserver", and the Referer checks compare against it.
+    all_headers = {"host": "testserver", **{name.lower(): value for name, value in (headers or {}).items()}}
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "server": ("testserver", 80),
+        "client": ("testclient", 50000),
+        "path": _event_url(comp_cls, "go"),
+        "raw_path": _event_url(comp_cls, "go").encode(),
+        "root_path": "",
+        "query_string": b"",
+        "headers": [
+            (b"content-type", b"application/x-www-form-urlencoded"),
+            *((name.encode(), value.encode()) for name, value in all_headers.items()),
+        ],
+    }
+    asyncio.run(_mounted(c).app(scope, receive, send))
+    start = next(message for message in messages if message["type"] == "http.response.start")
+    # ASGI header names keep the case the server chose, so compare them lowercased.
+    response_headers = {name.decode("latin-1").lower(): value.decode("latin-1") for name, value in start["headers"]}
+    return start["status"], response_headers.get("location", "")
 
 
 def _post_envelope(client, url, envelope, headers=None, **kwargs):
@@ -1827,19 +1877,121 @@ class TestCompatMode:
             ("//cdn.example/x", "//cdn.example/x"),
             ("/\\cdn.example/x", "/\\cdn.example/x"),
             ("https://other.example/", "https://other.example/"),
+            # The page's own scheme with no "/" or "\" after the colon is
+            # relative too: location.assign("http:next") on this http page
+            # goes to "next" beside it.
+            ("http:next", "http://testserver/shop/next"),
+            ("HTTP:next", "http://testserver/shop/next"),
+            ("http:?page=2", "http://testserver/shop/list?page=2"),
+            ("http:#top", "http://testserver/shop/list?x=1#top"),
+            ("http:", "http://testserver/shop/list?x=1"),
+            # One "/" or "\" after the scheme starts a path from the root,
+            # two start a host, and the other scheme names a host either
+            # way, so none of these depends on the page.
+            ("http:/abs", "http:/abs"),
+            ("http:\\abs", "http:\\abs"),
+            ("http:\\\\cdn.example/x", "http:\\\\cdn.example/x"),
+            ("https:cdn.example/x", "https:cdn.example/x"),
         ],
     )
     def test_redirect_resolves_a_relative_url_against_the_referer(self, target, expected):
         c = _citry()
         jumper = _jumper(c)
-        response = _mounted(c).post(
-            _event_url(jumper, "go"),
-            data={"to": target},
-            headers={"Referer": "http://testserver/shop/list?x=1"},
-            follow_redirects=False,
-        )
-        assert response.status_code == 303
-        assert response.headers["location"] == expected
+        status, location = _post_redirect(c, jumper, target, headers={"Referer": "http://testserver/shop/list?x=1"})
+        assert status == 303
+        assert location == expected
+
+    @pytest.mark.parametrize(
+        ("target", "expected"),
+        [
+            ("https:next", "https://testserver/shop/next"),
+            # On an https page "http:next" names the host "next".
+            ("http:next", "http:next"),
+        ],
+    )
+    def test_scheme_relative_url_follows_the_referer_scheme(self, target, expected):
+        c = _citry()
+        jumper = _jumper(c)
+        _status, location = _post_redirect(c, jumper, target, headers={"Referer": "https://testserver/shop/list"})
+        assert location == expected
+
+    @pytest.mark.parametrize(
+        ("host", "referer", "expected"),
+        [
+            # A Referer with no path is a page at the site root.
+            ("testserver", "http://testserver", "http://testserver/next"),
+            ("testserver:8080", "http://testserver:8080/shop/list", "http://testserver:8080/shop/next"),
+        ],
+    )
+    def test_scheme_relative_url_resolves_against_any_same_host_referer(self, host, referer, expected):
+        c = _citry()
+        jumper = _jumper(c)
+        _status, location = _post_redirect(c, jumper, "http:next", headers={"Host": host, "Referer": referer})
+        assert location == expected
+
+    def test_scheme_relative_url_without_a_referer_passes_through_and_warns(self, caplog, monkeypatch):
+        # Without a Referer the browser reads "http:next" against the handler
+        # URL, the same mistake a plain relative URL makes, so it warns too.
+        monkeypatch.setattr(events_routes, "_WARNED_REDIRECTS", set())
+        c = _citry()
+        jumper = _jumper(c)
+        with caplog.at_level("WARNING", logger="citry"):
+            _status, location = _post_redirect(c, jumper, "http:next")
+        assert location == "http:next"
+        warnings = [r.getMessage() for r in caplog.records if r.name == "citry" and r.levelname == "WARNING"]
+        assert len(warnings) == 1
+        assert "actions.Redirect('http:next') is a relative URL" in warnings[0]
+
+    @pytest.mark.parametrize(
+        ("target", "expected"),
+        [
+            # Most URLs below are ones that browsers, urllib.parse and other
+            # URL parsers can read with different hosts: a backslash in or
+            # after the authority, credentials, a scheme without "//", percent
+            # escapes or full-width characters in place of "/" and "\". The
+            # server judges no host, so each Location keeps the URL the app
+            # returned (non-ASCII characters percent-encoded), or resolves it
+            # against the page when the browser would read it as relative.
+            # The expected values were checked with Node's URL class, which
+            # follows the browsers' URL standard: each Location, read against
+            # the handler URL, reaches the same address as location.assign()
+            # on the page.
+            ("http://cdn.example\\@testserver/x", "http://cdn.example\\@testserver/x"),
+            ("http://testserver\\@cdn.example/x", "http://testserver\\@cdn.example/x"),
+            ("http://cdn.example\\@testserver", "http://cdn.example\\@testserver"),
+            ("http://testserver\\.cdn.example/x", "http://testserver\\.cdn.example/x"),
+            ("http:/\\cdn.example/x", "http:/\\cdn.example/x"),
+            ("http:\\/cdn.example/x", "http:\\/cdn.example/x"),
+            ("https:\\\\cdn.example/x", "https:\\\\cdn.example/x"),
+            ("\\\\cdn.example/x", "\\\\cdn.example/x"),
+            ("\\/cdn.example/x", "\\/cdn.example/x"),
+            ("/\\/cdn.example/x", "/\\/cdn.example/x"),
+            (" //cdn.example/x", "//cdn.example/x"),
+            ("  /\\cdn.example/x", "/\\cdn.example/x"),
+            ("/%5ccdn.example/x", "/%5ccdn.example/x"),
+            ("%5c%5ccdn.example/x", "http://testserver/shop/%5c%5ccdn.example/x"),
+            ("/%5C%5Ccdn.example/x", "/%5C%5Ccdn.example/x"),
+            ("http://cdn.example%5c@testserver/x", "http://cdn.example%5c@testserver/x"),
+            ("http://testserver%5c@cdn.example/x", "http://testserver%5c@cdn.example/x"),
+            ("\uff3c\uff3ccdn.example/x", "http://testserver/shop/%EF%BC%BC%EF%BC%BCcdn.example/x"),
+            ("/\uff3ccdn.example/x", "/%EF%BC%BCcdn.example/x"),
+            ("http:\uff0f\uff0fcdn.example/x", "http://testserver/shop/%EF%BC%8F%EF%BC%8Fcdn.example/x"),
+            ("http://cdn.example\uff3c@testserver/x", "http://cdn.example%EF%BC%BC@testserver/x"),
+            ("http://testserver\uff0f@cdn.example/x", "http://testserver%EF%BC%8F@cdn.example/x"),
+            ("http://\uff43\uff44\uff4e.example/x", "http://%EF%BD%83%EF%BD%84%EF%BD%8E.example/x"),
+            ("http://testserver@cdn.example/x", "http://testserver@cdn.example/x"),
+            ("http://cdn.example#@testserver/x", "http://cdn.example#@testserver/x"),
+            ("http://cdn.example?@testserver/x", "http://cdn.example?@testserver/x"),
+            ("HTTP://cdn.example/x", "HTTP://cdn.example/x"),
+            ("https://user:pw@cdn.example/x", "https://user:pw@cdn.example/x"),
+        ],
+    )
+    def test_redirect_keeps_urls_that_parsers_read_differently(self, target, expected):
+        c = _citry()
+        jumper = _jumper(c)
+        status, location = _post_redirect(c, jumper, target, headers={"Referer": "http://testserver/shop/list"})
+        assert status == 303
+        assert location == expected
 
     @pytest.mark.parametrize(
         ("page", "target", "expected"),

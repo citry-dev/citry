@@ -55,7 +55,7 @@ from citry._protocol.events import (
     build_rejected_call_envelope,
     validate_result_envelope,
 )
-from citry._urls import url_scheme
+from citry._urls import url_scheme_and_rest
 from citry.ext.dependencies.routes import SHARED_RUNTIME
 from citry.ext.events.codecs import decode_request
 from citry.ext.events.csrf import build_csrf_check
@@ -669,8 +669,14 @@ def _resolve_redirect_url(url: str, request: RouteRequest) -> str:
     resolves the URL against the posting page first. The page comes from
     the ``Referer`` header, the only place a plain form post names it.
 
-    A URL that does not depend on the page (it has a scheme, or starts with
-    ``/`` or ``\``, which browsers read like ``/``) passes through as is.
+    A URL that does not depend on the page passes through as is: it starts
+    with ``/`` or ``\`` (which browsers read like ``/``), or it has a scheme
+    other than the page's own, or a ``/`` or ``\`` right after its scheme.
+    A URL with the page's own scheme and nothing like that after the colon,
+    such as ``http:next`` on an ``http:`` page, is relative: the browser
+    reads it as ``next``. It is resolved like a relative URL when the
+    Referer has the same scheme.
+
     When the request has no Referer, or one from another host, the URL also
     passes through unchanged and the browser resolves it against the handler
     URL. That is right when someone opens a ``GET`` handler URL directly, so
@@ -684,8 +690,26 @@ def _resolve_redirect_url(url: str, request: RouteRequest) -> str:
     stripped = url.lstrip(_URL_LEADING_STRIP).translate({9: None, 10: None, 13: None})
     # The shared reader rather than urlsplit, which raises on some non-ASCII
     # hosts and would turn the redirect into a 500.
-    if url_scheme(stripped) is not None or stripped.startswith(("/", "\\")):
+    scheme_and_rest = url_scheme_and_rest(stripped)
+    # The scheme a URL such as "http:next" must share with the page to be
+    # relative to it; None for a URL written without a scheme.
+    shared_scheme: str | None = None
+    if scheme_and_rest is not None:
+        scheme, rest = scheme_and_rest
+        # A "/" or "\" right after the colon does not depend on the page's
+        # path: two of them start a host, and one starts a path from the
+        # site root, which the browser reads the same against the handler
+        # URL. Redirect refuses every other scheme before this runs.
+        if scheme not in ("http", "https") or rest.startswith(("/", "\\")):
+            return url
+        shared_scheme = scheme
+        # The text after the colon, with tab, LF and CR already removed, is
+        # the relative URL the browser reads.
+        reference = rest
+    elif stripped.startswith(("/", "\\")):
         return url
+    else:
+        reference = stripped
 
     referer = request.headers.get("referer") or ""
     try:
@@ -699,10 +723,14 @@ def _resolve_redirect_url(url: str, request: RouteRequest) -> str:
     # CSRF check (enforce_floor) does for Origin: a page from another site is
     # not the page this redirect is relative to.
     if base.scheme in ("http", "https") and base.netloc and base.netloc.lower() == host:
+        # "http:next" on an https page names the host "next", so it does not
+        # depend on the page; the browser reads the Location the same way.
+        if shared_scheme is not None and shared_scheme != base.scheme:
+            return url
         # Answer with the absolute URL: the base is the visitor's own page on
         # this host, and an absolute Location keeps a page path such as
         # "//other/x" from turning the result into a link to another host.
-        return _join_like_a_browser(base, stripped)
+        return _join_like_a_browser(base, reference)
 
     # A GET handler URL opened directly is the page itself, so resolving
     # against it is correct. One warning per handler and URL is enough to

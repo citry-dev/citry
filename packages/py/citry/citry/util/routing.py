@@ -857,6 +857,20 @@ def route_allows_method(route: URLRoute, method: str) -> bool:
     return method in route.methods or (method == "HEAD" and "GET" in route.methods)
 
 
+def route_allowed_methods(route: URLRoute) -> tuple[str, ...]:
+    """
+    Return the methods ``route`` accepts, for the ``Allow`` header of a 405 answer.
+
+    HTTP requires a 405 to list the methods the resource accepts (RFC 9110
+    section 15.5.6). The list follows :func:`route_allows_method`, so a
+    route that lists ``GET`` also names ``HEAD``, and every adapter that
+    refuses a method sends the same list.
+    """
+    if "GET" in route.methods and "HEAD" not in route.methods:
+        return (*route.methods, "HEAD")
+    return route.methods
+
+
 def match_route(routes: Sequence[URLRoute], path: str) -> MatchedRoute | None:
     """
     Resolve a request path (no leading slash) against a route tree.

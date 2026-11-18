@@ -294,13 +294,20 @@ const eventRequestTarget = (url: string): { href: string; sameOrigin: boolean } 
   return { href: target.href, sameOrigin: onPageOrigin(target) };
 };
 
+// The value of the first cookie named `name` whose value decodes. A value with a broken `%`
+// escape makes `decodeURIComponent` throw, and that error would stop every event call, so such a
+// cookie is passed over like a missing one. The same rule as `readCsrfCookie` in
+// `_vue/client.js`; keep the two in step.
 const readCookie = (name: string): string => {
   if (typeof document === "undefined" || typeof pageDocument.cookie !== "string") return "";
-  const item = pageDocument.cookie
-    .split(";")
-    .map((value) => value.trim())
-    .find((value) => value.startsWith(`${name}=`));
-  return item ? decodeURIComponent(item.slice(name.length + 1)) : "";
+  for (const item of pageDocument.cookie.split(";")) {
+    const value = item.trim();
+    if (!value.startsWith(`${name}=`)) continue;
+    try {
+      return decodeURIComponent(value.slice(name.length + 1));
+    } catch {}
+  }
+  return "";
 };
 
 const isWellFormedUtf16 = (value: string): boolean => {
