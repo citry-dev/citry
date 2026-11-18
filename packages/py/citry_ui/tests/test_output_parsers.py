@@ -252,6 +252,17 @@ def test_direct_item_check_counts_the_roots_a_browser_builds() -> None:
     # Inside an open ``<select>`` the browser ignores ``</div>``, so the next
     # item would sit inside the first.
     assert _direct_items("<div><select></div>", "<div>b</div>")
+    # An end tag closes an element opened inside the select, and
+    # ``</select>`` closes the select and everything inside it, so each
+    # item here is one closed root.
+    assert not _direct_items("<div><select><option><div>i</div>a</option></select></div>", "<div>b</div>")
+    assert not _direct_items("<div><select><div><p></select></div>", "<div>b</div>")
+    # ``<input>``, a nested ``<select>`` and the end tag of the cell around
+    # the select close the select, so the ``</div>`` after them closes the
+    # item's root and what follows is a second root.
+    assert _direct_items("<div><select><select></div><div>x</select></select>")
+    assert _direct_items("<div><select><input></div><span>x</select>")
+    assert _direct_items("<div><table><tr><td><select></td></tr></table></div><span>x</select></td></tr></table>")
     # ``</link>`` closes nothing in a browser.
     assert not _direct_items("<div><link></link>a</div>")
     # An end tag that closes nothing inside the item could close an element
