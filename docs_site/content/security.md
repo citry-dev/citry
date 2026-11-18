@@ -1053,7 +1053,11 @@ not guaranteed to block every way out:
   can read any attribute and call any method of a context object whose name
   does not start with `_`. A secret kept in a public attribute is readable.
   A method that deletes data can be called. A database queryset in the
-  context lets a template filter it with any field lookup.
+  context lets a template filter it with any field lookup. If the
+  template passes a value from request data as a field name, as in
+  `qs.values_list(name)` or `qs.filter(**fields)`, a visitor can read or
+  test any column, including password hashes. Pick field names in
+  Python from a fixed list.
 - **Your functions can be called.** A function you put in the context is
   allowed until you block it, as shown next.
 - **Helpers that call other functions or look up names from text run
@@ -1150,8 +1154,12 @@ full example.
 ## Protect the render cache { #protect-the-render-cache }
 
 Citry replays HTML from the [render cache](/performance/caching/) as it
-was stored. Anyone who can write to the cache store can put HTML into
-your pages, so protect it like your database.
+was stored. Anyone who can write to the cache store can put HTML and
+scripts into your pages, and with a store that loads entries with
+Python's `pickle`, such as the ones behind `DjangoCache` and
+`DiskCache`, run code on your server. Protect the store like your
+database; see
+[Protect private output](/performance/caching/#protect-private-output).
 
 ## Keep debug logs off { #keep-debug-logs-off-in-production }
 
