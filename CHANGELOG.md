@@ -1,5 +1,27 @@
 # Release notes
 
+## Unreleased
+
+### Fixes
+
+- A component with `Cache` turned on that writes a value into a
+  `<textarea>` no longer comes back with an empty textarea when its
+  render is replayed from the cache.
+- With a configured cache, the stylesheet a `css_data()` component links
+  no longer answers 404 when the cache dropped its entry after the
+  render. Citry now writes it again when it writes the page.
+- A Django lazy translation, such as `gettext_lazy("active")`, now works
+  as a class name in `c-class`, in a list or as a dict key. It used to
+  raise.
+- A `Markup` dict key in `c-class` or `c-style` is no longer escaped twice.
+- A carriage return in an attribute value set from Python is now written
+  as `&#13;`, so the browser keeps it rather than reading a line feed.
+  Server-rendered HTML on an interactive Vue page is not changed.
+- With `security_csp` turned on, Citry now warns when it leaves the
+  element Vue mounts into empty because the server-rendered HTML would
+  break your CSP. The warning lists what the check found. Before, it
+  said nothing.
+
 ## v1.0.1
 
 Citry 1.0.1 is a security release. It requires citry-core 2.1.1, which

@@ -76,6 +76,9 @@ except ImportError:  # pragma: no cover - depends on the installed wheel
 # written this way cannot switch the page's encoding.
 _ESC = "\x1b"
 _ESC_REFERENCE = "&#27;"
+# The browser turns a raw carriage return in the page into a line feed, so an
+# attribute value writes it as this reference to keep it.
+_CR_REFERENCE = "&#13;"
 
 
 def escape(value: Any) -> Markup:
@@ -581,13 +584,18 @@ def escape_attribute_value(value: Any) -> str:
     from it, then escaped, so ``Markup("Tom &amp; Jerry")`` still reads as
     ``Tom & Jerry``. Interactive pages send Vue the same decoded value, so
     both kinds of page show the same attribute.
+
+    A carriage return is written as ``&#13;``. The browser reads a raw one in
+    the page as a line feed, while Vue sets the value from JavaScript with
+    the carriage return intact, so writing it raw would make the page's
+    attribute differ from the value.
     """
     # An exact str is the common case and has no __html__ to look up.
     if type(value) is not str:
         html = getattr(value, "__html__", None)
         if html is not None:
-            return escape_to_str(decode_attribute_entities(str(html())))
-    return escape_to_str(value)
+            return escape_to_str(decode_attribute_entities(str(html()))).replace("\r", _CR_REFERENCE)
+    return escape_to_str(value).replace("\r", _CR_REFERENCE)
 
 
 # Formatting caches must recognize the defining implementation, including

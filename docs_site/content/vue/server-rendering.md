@@ -230,7 +230,8 @@ Some of these pages are sent with an empty Vue host instead:
 - a page with `security_javascript="warn"`, because the warning would list
   every Vue attribute left in the HTML;
 - a page under a Content Security Policy that would reject its HTML, such
-  as an `onclick` attribute or a `javascript:` link;
+  as an `onclick` attribute or a `javascript:` link. When `security_csp`
+  is on, Citry warns and lists what the check found;
 - a page whose body contains a `<script>`, for example inside `<c-raw>`,
   because the browser would run it while reading the page, and a page Vue
   builds never runs it.

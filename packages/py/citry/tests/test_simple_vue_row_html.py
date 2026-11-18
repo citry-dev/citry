@@ -104,7 +104,8 @@ def _rows(count: int, group: int) -> list[dict[str, Any]]:
                 "title": f"<b>Row {index}</b> & \"quoted\" 'single' ✓ café",
                 "count": index,
                 "ratio": index / 4,
-                "label": 'a<b>&"c"' if index % 2 else "",
+                # A carriage return, which an attribute writes as a reference.
+                "label": 'a<b>&"c"\rd' if index % 2 else "",
                 "hidden": index % 3 == 0,
                 "items": [{"id": f"{row_id}-i{item}", "label": f"item <{item}> & more"} for item in range(index % 3)],
                 "note": "</textarea><b>not markup</b>",
@@ -125,7 +126,8 @@ def _row_attrs(row: dict[str, Any]) -> dict[str, object]:
     attrs: dict[str, object] = {
         "id": f"row-{row['id']}",
         "class": "row selected" if row["selected"] else "row",
-        "title": row["title"],
+        # A carriage return in the root's attributes must be written the same way on every path.
+        "title": f"{row['title']}\r",
         "data-selected": "true" if row["selected"] else "false",
         "aria-busy": row["selected"],
         "data-index": row["count"],
@@ -259,7 +261,7 @@ def test_row_html_matches_ordinary_and_per_row_serialize(
         assert "&lt;b&gt;Row 1&lt;/b&gt; &amp; &#34;quoted&#34; &#39;single&#39;" in simple_html
         assert 'title="&lt;b&gt;Row 0&lt;/b&gt;' in simple_html
         assert 'data-source-id="src-0"' in simple_html
-        assert 'data-label="a&lt;b&gt;&amp;&#34;c&#34;"' in simple_html
+        assert 'data-label="a&lt;b&gt;&amp;&#34;c&#34;&#13;d"' in simple_html
         assert "&lt;/textarea&gt;&lt;b&gt;not markup" in simple_html
         assert "<p>   </p>" in simple_html
         assert simple_html.count("data-cid-r") >= 8

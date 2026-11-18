@@ -21,6 +21,7 @@ from citry import Citry, Component, InMemoryCache
 from citry._vue.events import hold_page_assets
 from citry.contrib.wsgi import wsgi_app
 from citry.ext.dependencies.routes import script_url
+from citry.ext.dependencies.scripts import gen_cache_key
 
 SECRET = "css-data-name-secret-0123456789abcdef"  # noqa: S105 - a test value
 OLD_SECRET = "css-data-old-secret-0123456789abcdef"  # noqa: S105 - a test value
@@ -452,3 +453,43 @@ def test_a_cache_that_refuses_deletes_still_answers_404() -> None:
         f"/ext/events/assets/{copy_key.rsplit(':', 1)[1]}.css",
     ):
         assert _get(app, path)[0].startswith("404"), path
+
+
+@pytest.mark.parametrize("replayed", [False, True], ids=["fresh_render", "render_cache_replay"])
+def test_a_stylesheet_the_cache_dropped_before_the_page_is_written_is_served(replayed: bool) -> None:
+    cache = InMemoryCache()
+    app = Citry(secret=SECRET, cache=cache)
+    app.set_mounted_prefix("/citry")
+
+    class Widget(Component):
+        citry = app
+        template = """
+            <span class="w">w</span>
+        """
+        css = """
+            .w { width: var(--pct); }
+        """
+
+        class Cache:
+            enabled = replayed
+
+        def css_data(self, kwargs, slots):
+            return {"pct": f"{kwargs['pct']}%"}
+
+    rendered = Widget(pct=37).render()
+    if replayed:
+        # The second render replays the stored HTML and runs no css_data().
+        cache.delete(_stylesheet_key(Widget, rendered))
+        rendered = Widget(pct=37).render()
+    name = _rendered_name(Widget, rendered)
+    # The backend drops the entry after the render, before the page is written.
+    cache.delete(_stylesheet_key(Widget, rendered))
+    with hold_page_assets(app, rendered):
+        pass
+    status, body = _get(app, f"/cache/{Widget.class_id}.{name}.css")
+    assert status.startswith("200")
+    assert b"--pct: 37%;" in body
+
+
+def _stylesheet_key(widget: type[Component], rendered: object) -> str:
+    return gen_cache_key(widget.class_id, "css", _rendered_name(widget, rendered))

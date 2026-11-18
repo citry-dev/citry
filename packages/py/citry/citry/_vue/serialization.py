@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlsplit
 
 from citry import _output_policy
+from citry._caller_warnings import warn_at_caller
+from citry._csp_validation import _CspRenderValidator
 from citry._owned_resource import OWNED_ASSET_CROSSORIGIN
 from citry._vue import native_render as _native_render
 from citry._vue.capture import PreparedElementOpen
@@ -1051,9 +1053,25 @@ def _server_contents_pass_policies(
         return False
     if security_csp == "off":
         return True
-    # This call only answers yes or no and reports nothing. The page's own CSP
-    # validator reports any finding when it checks the served page.
-    return _output_policy.server_copy_passes_csp(contents, security_csp)
+    if _output_policy.server_copy_passes_csp(contents, security_csp):
+        return True
+    # The page's own CSP check reads the page with the empty host, so it finds
+    # nothing in this copy. Say here what made Citry leave the host empty, in
+    # both modes: an empty host is not a failed render, so even "strict" only
+    # warns.
+    explain = _CspRenderValidator("warn")
+    explain.validate_settled_html(contents, marker_prefix=None, trusted_tag_starts=frozenset(), component_classes={})
+    # Positions would count bytes in this copy, not in the served page, so
+    # each line keeps only what was found.
+    details = "\n".join(dict.fromkeys(f"- {finding.detail}" for finding in explain._findings))
+    warn_at_caller(
+        "Citry sent this page's Vue host empty, without its server HTML, because that HTML "
+        "would break the security_csp rules, so readers without JavaScript and search engines "
+        "see an empty element. Remove what is listed from the component's output to send the "
+        f"server HTML. What the check found:\n{details}",
+        RuntimeWarning,
+    )
+    return False
 
 
 def _server_host_contents(full_html: str, placeholders: Mapping[str, str]) -> str | None:
