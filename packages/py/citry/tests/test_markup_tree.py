@@ -142,6 +142,53 @@ BROWSER_TREES = {
         "<p><select></p><b></b></select>",
         ["p", "p/select", "p/select/p", "p/select/b"],
     ),
+    "br-end-tag-in-select-creates-br": (
+        "<select><option></br><b></b></select>",
+        ["select", "select/option", "select/option/br", "select/option/b"],
+    ),
+    "p-end-tag-closes-p-opened-in-select": (
+        "<select><p><span></p><i></i></select>",
+        ["select", "select/p", "select/p/span", "select/i"],
+    ),
+    "nested-select-closes-select": ("<div><select><select><b></b></div><i></i>", ["div", "div/select", "div/b", "i"]),
+    "input-closes-select": (
+        "<div><select><option>a<input><b></b></div><i></i>",
+        ["div", "div/select", "div/select/option", "div/input", "div/b", "i"],
+    ),
+    "cell-end-tag-closes-select": (
+        "<table><tbody><tr><td><select><b></td><td><i></i></td></tr></tbody></table><u></u>",
+        [
+            "table",
+            "table/tbody",
+            "table/tbody/tr",
+            "table/tbody/tr/td",
+            "table/tbody/tr/td/select",
+            "table/tbody/tr/td/select/b",
+            "table/tbody/tr/td",
+            "table/tbody/tr/td/i",
+            "u",
+        ],
+    ),
+    "table-end-tag-closes-select": (
+        "<table><caption><select><b></table><i></i>",
+        ["table", "table/caption", "table/caption/select", "table/caption/select/b", "i"],
+    ),
+    "other-cell-end-tag-in-select-ignored": (
+        "<table><tbody><tr><td><select><b></th><i></i></select></td></tr></tbody></table>",
+        [
+            "table",
+            "table/tbody",
+            "table/tbody/tr",
+            "table/tbody/tr/td",
+            "table/tbody/tr/td/select",
+            "table/tbody/tr/td/select/b",
+            "table/tbody/tr/td/select/b/i",
+        ],
+    ),
+    "template-end-tag-closes-select": (
+        "<template><select><b></template><i></i>",
+        ["template", "template/select", "template/select/b", "i"],
+    ),
     "image-is-img": ("<div><image src=x><span></span></div>", ["div", "div/img", "div/span"]),
 }
 
