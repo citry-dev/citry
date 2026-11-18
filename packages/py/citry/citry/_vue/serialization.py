@@ -27,6 +27,7 @@ from citry.ext.dependencies.extension import DependenciesExtension
 from citry.ext.dependencies.scripts import has_component_asset
 from citry.ext.dependencies.types import DependencyRecord, Script, Style
 from citry.util import deep_json
+from citry.util._markup_tree import MarkupTreeParser, Namespace, OpenElement
 from citry.util.html import LongReferenceSafeParser, script_json
 from citry.util.id import validate_render_id
 from citry_core import _rust
@@ -67,24 +68,6 @@ def _dev_checks_source() -> str:
 # replace class attributes. The hydration fast path admits no custom hook.
 _BUILTIN_DEPENDENCIES_ON_SERIALIZE = DependenciesExtension.on_serialize
 _BUILTIN_DEPENDENCIES_INTERNAL_ON_SERIALIZE = DependenciesExtension._on_serialize_internal
-_VOID_HTML_TAGS = frozenset(
-    {
-        "area",
-        "base",
-        "br",
-        "col",
-        "embed",
-        "hr",
-        "img",
-        "input",
-        "link",
-        "meta",
-        "param",
-        "source",
-        "track",
-        "wbr",
-    }
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -511,46 +494,73 @@ def _exact_builtin_dependencies_hook(citry: Any) -> tuple[object, object, object
     return extension, on_serialize, internal
 
 
-class _HostValidator(LongReferenceSafeParser):
+class _HostValidator(MarkupTreeParser[bool]):
+    """
+    Check that a page holds the Vue mount host once, in the shape Citry wrote it.
+
+    The mount host is the ``<div id="...">`` that Vue mounts the app into.
+    An extension's ``on_serialize`` hook may rewrite the page, so after the
+    hooks run, this parser reads the page and records how many elements
+    carry the host id, whether the host has exactly the shape Citry wrote,
+    whether it holds any content, and whether it is still open at the end.
+    It opens and closes elements where a browser does, so an end tag that a
+    browser ignores, such as ``</link>``, does not end the host early. Like
+    the parser, it does not model the elements a browser moves: when the
+    host sits inside a formatting element such as ``<b>`` and that
+    element's end tag comes inside the host, the browser puts a copy of the
+    formatting element into the host, which this check does not see.
+    """
+
     def __init__(self, host_id: str) -> None:
+        # Text stays undecoded so that a reference such as ``&#1;``, which
+        # ``html.unescape`` turns into nothing, still counts as content.
         super().__init__(convert_charrefs=False)
         self.host_id = host_id
         self.count = 0
-        self.depth = 0
         self.empty = True
         self.valid_attrs = True
+        # Whether the host element is open in the tree the browser builds.
+        self._host_open = False
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+    @property
+    def depth(self) -> int:
+        """Return 1 while the host is still open, so a host without its end tag fails the check."""
+        return 1 if self._host_open else 0
+
+    def open_element(self, tag: str, attrs: list[tuple[str, str | None]], namespace: Namespace) -> bool:
         if any(name == "id" and value == self.host_id for name, value in attrs):
             self.count += 1
-            if tag != "div" or attrs != [("id", self.host_id)] or self.depth:
+            # Citry writes the host as ``<div id="...">`` with an end tag. A
+            # second host inside the first, any other attribute, and
+            # ``<div id="..."/>`` all differ from what Citry wrote.
+            starttag = self.get_starttag_text() or ""
+            if (
+                tag != "div"
+                or namespace != "html"
+                or attrs != [("id", self.host_id)]
+                or self._host_open
+                or starttag.endswith("/>")
+            ):
                 self.valid_attrs = False
-            else:
-                self.depth = 1
-            return
-        if self.depth:
+                return False
+            self._host_open = True
+            return True
+        if self._host_open:
             self.empty = False
-            if tag.lower() not in _VOID_HTML_TAGS:
-                self.depth += 1
+        return False
 
-    def handle_startendtag(self, _tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if any(name == "id" and value == self.host_id for name, value in attrs):
-            self.count += 1
-            self.valid_attrs = False
-        elif self.depth:
-            self.empty = False
-
-    def handle_endtag(self, _tag: str) -> None:
-        if self.depth:
-            self.depth -= 1
+    def close_element(self, element: OpenElement[bool]) -> None:
+        if element.value:
+            self._host_open = False
 
     def handle_data(self, data: str) -> None:
-        if self.depth and data:
+        if self._host_open and data:
             self.empty = False
 
-    # An entity, a character reference, and a comment each count as content for the
-    # emptiness test, and the parser hands each of them a different string (a name
-    # rather than text), so they delegate rather than alias: only presence matters.
+    # An entity, a character reference, and a comment each count as content
+    # for the emptiness test, and the parser hands each of them a different
+    # string (a name rather than text), so they delegate rather than alias:
+    # only presence matters.
     def handle_entityref(self, name: str) -> None:
         self.handle_data(name)
 
