@@ -26,15 +26,21 @@
     }
     return undefined;
   };
-  // Call a built-in method of any DOM object. A form's named field can hide the form's own
-  // `addEventListener`, so a listener Citry attaches to a form goes through here. A name no
-  // prototype defines (a test's plain-object stand-in) falls back to an ordinary read.
-  const callBuiltIn = (target, key, ...args) => {
+  // Read a built-in member of any DOM object, calling its getter with the object. A form's named
+  // field can hide any member of the form (`<input name="isConnected">` makes `form.isConnected`
+  // that input), so every read Citry makes on an element that may be a form goes through here or
+  // `callBuiltIn`. A name no prototype defines (a test's plain-object stand-in) falls back to an
+  // ordinary read.
+  const readBuiltIn = (target, key) => {
     const descriptor = builtInMember(target, key);
-    const method = descriptor === undefined ? Reflect.get(target, key)
+    return descriptor === undefined ? Reflect.get(target, key)
       : descriptor.get !== undefined ? descriptor.get.call(target) : descriptor.value;
-    return method.apply(target, args);
   };
+  // Call a built-in method of any DOM object, such as a form's `addEventListener`, past a named
+  // field that hides it.
+  const callBuiltIn = (target, key, ...args) => readBuiltIn(target, key).apply(target, args);
+  // Whether a node is in a document, read past a form field named `isConnected`.
+  const nodeConnected = node => readBuiltIn(node, "isConnected") === true;
   // A stand-in for the document whose members are always the browser's built-in ones: each read
   // finds the member through `builtInMember`, calls a getter with the real document and binds a
   // method to it. A name no prototype defines (a test's plain-object document) falls back to an
@@ -377,9 +383,19 @@
     const lower = name.toLowerCase();
     return FORBIDDEN_CSRF_HEADERS.has(lower) || ["x-citry-", "sec-", "proxy-"].some(prefix => lower.startsWith(prefix));
   };
+  // The value of the first cookie named `name` whose value decodes. A value with a broken `%`
+  // escape makes `decodeURIComponent` throw, and that error would stop every request that reads the
+  // token, so such a cookie is passed over like a missing one. The same rule as `readCookie` in
+  // packages/js/citry-client/src/citry-events-vue.ts; keep the two in step.
   const readCsrfCookie = name => {
-    const match = pageDocument.cookie.split(";").map(value => value.trim()).find(value => value.startsWith(name + "="));
-    return match ? decodeURIComponent(match.slice(name.length + 1)) : "";
+    for (const item of pageDocument.cookie.split(";")) {
+      const value = item.trim();
+      if (!value.startsWith(name + "=")) continue;
+      try {
+        return decodeURIComponent(value.slice(name.length + 1));
+      } catch {}
+    }
+    return "";
   };
   // With no configured token, read Django's default `csrftoken` cookie: Django apps work with no setup,
   // and on another host a missing cookie only means no header is sent.
@@ -785,7 +801,9 @@
     if (type === "input" && (props.type === "checkbox" || props.type === "radio")) return props;
     if (!valueComparedByVNode(valueSource(authored, patchFlag, dynamicProps))) return props;
     const prepared = {};
-    for (const key of Object.keys(props)) if (key !== "value") prepared[key] = props[key];
+    // A prop named `__proto__` is left out: assigning it would replace the copy's prototype, and
+    // as an own key Vue would write it to the element's prototype. No element has such a prop.
+    for (const key of Object.keys(props)) if (key !== "value" && key !== "__proto__") prepared[key] = props[key];
     // Vue writes `value` after the other props (a range input needs its min and max first), so
     // the renamed key stays last.
     prepared[".value"] = props.value;
@@ -1770,7 +1788,8 @@
   // Whether the element shows: `checkVisibility()` with its default options,
   // or, in browsers before it existed, whether the element has a box.
   const citryElementVisible = element =>
-    typeof element.checkVisibility === "function" ? element.checkVisibility() : element.getClientRects().length > 0;
+    typeof readBuiltIn(element, "checkVisibility") === "function" ? callBuiltIn(element, "checkVisibility")
+      : callBuiltIn(element, "getClientRects").length > 0;
   // The order in which events of each type started, so a listener can tell an
   // event that began before it was attached, such as the click that mounted a
   // popup, from a later one. Event times would do this, but browsers round
@@ -1926,7 +1945,7 @@
       // so a popup that a click mounts does not see that same click.
       if (citryEventPredatesListener(state, domEvent)) return;
       if (outside) {
-        if (!element.isConnected || domEvent.composedPath().includes(element)) return;
+        if (!nodeConnected(element) || domEvent.composedPath().includes(element)) return;
         // An event the capture listener missed, such as one that started
         // before the listener was attached, falls back to a check now.
         const snapshot = state.startVisible.get(domEvent);
@@ -2051,13 +2070,13 @@
       handles?.some(handle => handle.record === record && handle.id === bindingId && handle.spec === binding),
     );
   const timedBindingIsCurrent = (record, element, bindingId, binding) =>
-    record.app.mounted.get(record.occurrenceId)?.record === record && element.isConnected &&
+    record.app.mounted.get(record.occurrenceId)?.record === record && nodeConnected(element) &&
     record.live.value?.preparedData?.eventBindings?.[bindingId] === binding;
   const pollBindingIsCurrent = lifetime =>
     !lifetime.record.app.terminal &&
     apps.get(lifetime.record.app.id) === lifetime.record.app &&
     lifetime.record.app.mounted.get(lifetime.record.occurrenceId)?.record === lifetime.record &&
-    lifetime.element.isConnected &&
+    nodeConnected(lifetime.element) &&
     eventTimingLifetimes.get(lifetime.element)?.get(lifetime.bindingId) === lifetime &&
     timingDirectiveOwns(lifetime.element, lifetime.record, lifetime.bindingId, lifetime.binding) &&
     lifetime.record.live.value?.preparedData?.pollBindings?.[lifetime.bindingId] === lifetime.binding;
@@ -3600,12 +3619,12 @@
       if (vnode.type === V.Static && vnode.el instanceof Node && vnode.anchor instanceof Node) {
         let node = vnode.el;
         while (node) {
-          if (node instanceof Element && node.isConnected) return node;
+          if (node instanceof Element && nodeConnected(node)) return node;
           if (node === vnode.anchor) break;
           node = node.nextSibling;
         }
       }
-      if (vnode.el instanceof Element && vnode.el.isConnected) return vnode.el;
+      if (vnode.el instanceof Element && nodeConnected(vnode.el)) return vnode.el;
       if (Array.isArray(vnode.children)) for (const child of vnode.children) {
         const element = firstLiveElement(child, seen);
         if (element) return element;
@@ -3616,7 +3635,7 @@
       const element = firstLiveElement(component?.$?.subTree);
       if (element) return element;
       const root = component?.$el;
-      if (typeof Node === "function" && root instanceof Node && root.isConnected) return root;
+      if (typeof Node === "function" && root instanceof Node && nodeConnected(root)) return root;
       throw new Error("Citry Events component has no live DOM root");
     };
     const dispatchCarrier = source => {
@@ -3628,7 +3647,7 @@
       return liveComponentCarrier(mounted.component);
     };
     const componentContains = (component, element) =>
-      liveRootElements(component).some(root => root === element || root.contains(element));
+      liveRootElements(component).some(root => root === element || callBuiltIn(root, "contains", element));
     ownedApp.componentRoot = (record, childId) => {
       if (record?.app !== ownedApp || ownedApp.mounted.get(record.occurrenceId)?.record !== record)
         throw new Error("Citry component event source is stale or retired");
@@ -3648,7 +3667,7 @@
       return liveComponentCarrier(mounted.component);
     };
     const sourceForElement = element => {
-      if (typeof Element !== "function" || !(element instanceof Element) || !element.isConnected) return null;
+      if (typeof Element !== "function" || !(element instanceof Element) || !nodeConnected(element)) return null;
       const candidates = [];
       for (const [id, mounted] of ownedApp.mounted) {
         if (!componentContains(mounted.component, element)) continue;
@@ -4350,7 +4369,7 @@
         if (!mounted || mounted.record.generation !== effectiveSource.generation)
           throw new Error("Citry Events dispatch source is stale or retired");
         mounted.record.events.dispatch(name, detail);
-        dispatchCarrier(effectiveSource).dispatchEvent(new CustomEvent(name, {detail, bubbles: true}));
+        callBuiltIn(dispatchCarrier(effectiveSource), "dispatchEvent", new CustomEvent(name, {detail, bubbles: true}));
       },
       dispatchEventGlobal(name, detail) {
         pageDocument.dispatchEvent(new CustomEvent(name, {detail, bubbles: true}));
@@ -4669,7 +4688,7 @@
     const disposeRuntimeEvents = element => {
       const lifetime = runtimeEventLifetimes.get(element);
       if (!lifetime) return;
-      for (const item of lifetime.values()) element.removeEventListener(item.event, item.listener);
+      for (const item of lifetime.values()) callBuiltIn(element, "removeEventListener", item.event, item.listener);
       const timed = runtimeEventTimingDirectives.get(element);
       disposeElementEventTimings(element, timed);
       runtimeEventTimingDirectives.delete(element);
@@ -4723,7 +4742,7 @@
         const signature = runtimeEventSignature(handle);
         const retained = prior.get(handle.id);
         if (retained?.signature === signature) { current.set(handle.id, retained); continue; }
-        if (retained) element.removeEventListener(retained.event, retained.listener);
+        if (retained) callBuiltIn(element, "removeEventListener", retained.event, retained.listener);
         let listener = event => {
           let dispatched;
           try { dispatched = handle.record.app.eventDispatch(handle.record, handle.id, event, undefined); }
@@ -4737,10 +4756,10 @@
         const modifiers = ["prevent", "stop", "self"].filter(name => spec[name] === true);
         if (modifiers.length) listener = V.withModifiers(listener, modifiers);
         if (spec.key !== null) listener = V.withKeys(listener, [spec.key]);
-        element.addEventListener(spec.event, listener, spec.once === true ? {once:true} : undefined);
+        callBuiltIn(element, "addEventListener", spec.event, listener, spec.once === true ? {once:true} : undefined);
         current.set(handle.id, {event:spec.event, listener, signature});
       }
-      for (const [id, item] of prior) if (!current.has(id)) element.removeEventListener(item.event, item.listener);
+      for (const [id, item] of prior) if (!current.has(id)) callBuiltIn(element, "removeEventListener", item.event, item.listener);
       const timed = handles.filter(handle => handle.kind === "poll" ||
         handle.spec.debounce !== null || handle.spec.throttle !== null);
       reconcileRuntimeEventTimings(element, timed);
@@ -4825,8 +4844,8 @@
       const shellCheck = hydrating && configuration.emptyShells === true && configuration.development === true
         ? ownGlobal("CitryVueDevChecks")?.captureShells(hostElement) : undefined;
       if (hydrating && configuration.emptyShells === true)
-        for (const shell of hostElement.querySelectorAll('[data-allow-mismatch="children"]')) shell.replaceChildren();
-      const hydrationBeforeElements = hydrationDiagnostics ? Array.from(hostElement.querySelectorAll("*")) : null;
+        for (const shell of callBuiltIn(hostElement, "querySelectorAll", '[data-allow-mismatch="children"]')) shell.replaceChildren();
+      const hydrationBeforeElements = hydrationDiagnostics ? Array.from(callBuiltIn(hostElement, "querySelectorAll", "*")) : null;
       const hydrationWarnings = hydrationDiagnostics ? [] : null;
       const hydrationErrors = hydrationDiagnostics ? [] : null;
       const hydrationStartedAt = hydrationDiagnostics ? performance.now() : 0;
@@ -4862,8 +4881,8 @@
           console.warn = priorWarn;
           console.error = priorError;
           vueApp.config.warnHandler = priorWarnHandler;
-          const hydrationAfterElements = Array.from(hostElement.querySelectorAll("*"));
-          const reusedElementCount = hydrationBeforeElements.filter(element => hostElement.contains(element)).length;
+          const hydrationAfterElements = Array.from(callBuiltIn(hostElement, "querySelectorAll", "*"));
+          const reusedElementCount = hydrationBeforeElements.filter(element => callBuiltIn(hostElement, "contains", element)).length;
           const mismatchCount = [...hydrationWarnings, ...hydrationErrors].filter(message =>
             /hydration|mismatch/i.test(message)).length;
           globalThis.__citryHydrationReport = Object.freeze({
@@ -5023,12 +5042,14 @@
       ...extra,
     };
     if (kind === "swapped") detail.els = [...roots];
-    return (roots[0] || pageDocument).dispatchEvent(new CustomEvent(`citry:events:${kind}`, {
+    const lifecycleEvent = new CustomEvent(`citry:events:${kind}`, {
       detail,
       bubbles: true,
       // A page cancels `before` to stop a call, and a version-skew `stale` to replace Citry's own report.
       cancelable: kind === "before" || (kind === "stale" && extra.reason === "version"),
-    }));
+    });
+    // A root may be a form, whose field named `dispatchEvent` would otherwise stand in for the method.
+    return roots[0] ? callBuiltIn(roots[0], "dispatchEvent", lifecycleEvent) : pageDocument.dispatchEvent(lifecycleEvent);
   }
   // The connected DOM elements a component renders at its top level, in order. A fragment or a child
   // component root contributes its own top-level elements, so this matches what the user sees.
@@ -5041,14 +5062,14 @@
         for (const child of vnode.children) visit(child);
         return;
       }
-      if (typeof Element === "function" && vnode.el instanceof Element && vnode.el.isConnected) {
+      if (typeof Element === "function" && vnode.el instanceof Element && nodeConnected(vnode.el)) {
         if (!output.includes(vnode.el)) output.push(vnode.el);
         return;
       }
       if (Array.isArray(vnode.children)) for (const child of vnode.children) visit(child);
     };
     visit(component?.$?.subTree);
-    if (!output.length && typeof Element === "function" && component?.$el instanceof Element && component.$el.isConnected)
+    if (!output.length && typeof Element === "function" && component?.$el instanceof Element && nodeConnected(component.$el))
       output.push(component.$el);
     return output;
   }
@@ -5531,11 +5552,12 @@
     if (composingTarget && !composingTarget.isConnected) composingTarget = null;
     // Only an element Vue kept, and only when nothing else took the focus: the page may have moved
     // it on purpose, and an element Vue replaced is a new field.
-    if (!focus || !focus.element.isConnected) return;
+    // The focused element can be a form with `tabindex`, so its members are read past named fields.
+    if (!focus || !nodeConnected(focus.element)) return;
     const current = pageDocument.activeElement;
     if (current !== focus.element) {
       if (current && current !== pageDocument.body) return;
-      focus.element.focus({preventScroll: true});
+      callBuiltIn(focus.element, "focus", {preventScroll: true});
     }
     // Reapply the range even when the field kept focus: when the server changed a typed field's
     // text, the native-control restore that runs just before this writes `.value`, which moves the
@@ -5563,7 +5585,7 @@
     if (typeof Element !== "function" || !(root instanceof Element)) return [];
     const elements = [];
     if (isNativeControl(root)) elements.push(root);
-    elements.push(...root.querySelectorAll("input,textarea,select"));
+    elements.push(...callBuiltIn(root, "querySelectorAll", "input,textarea,select"));
     return elements;
   }
 
@@ -5624,8 +5646,8 @@
   function restoreNativeControlState(snapshots) {
     for (const snapshot of snapshots || []) {
       const {root, element} = snapshot;
-      if (typeof Element !== "function" || !(root instanceof Element) || !root.isConnected ||
-          !element.isConnected || !root.contains(element)) continue;
+      if (typeof Element !== "function" || !(root instanceof Element) || !nodeConnected(root) ||
+          !nodeConnected(element) || !callBuiltIn(root, "contains", element)) continue;
       const owned = nativeOwnedProperties(element);
       if (owned.has(snapshot.kind)) continue;
       if (snapshot.kind === "value" && "value" in element) {
@@ -6049,7 +6071,7 @@
   fragmentSupport.installFragmentManager(
     citryNamespace,
     (node, exceptAppId) => [...apps.values()].some(app => app.id !== exceptAppId &&
-      app.hostElement instanceof Element && app.hostElement.contains(node)),
+      app.hostElement instanceof Element && callBuiltIn(app.hostElement, "contains", node)),
     startPrepared,
     documentNonce,
     carriesPageNonce,

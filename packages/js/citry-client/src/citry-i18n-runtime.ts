@@ -1,5 +1,5 @@
 import { FluentBundle, FluentResource, type FluentFunction, type FluentValue } from "@fluent/bundle";
-import { createPureI18nHelpers } from "./citry-i18n-core";
+import { createPureI18nHelpers, ownValue } from "./citry-i18n-core";
 
 const FSI = "\u2068";
 const PDI = "\u2069";
@@ -446,8 +446,8 @@ export function createI18nWireRuntime(
   }
 
   function profile(kind: string, name: string): Record<string, unknown> {
-    const category = runtimeState.configuration?.formats[kind];
-    const value = category?.[name];
+    const category = ownValue(runtimeState.configuration?.formats, kind);
+    const value = ownValue(category, name);
     if (value === undefined) fail("I18N_FORMAT_INVALID", `unknown ${kind} format ${name}.`);
     return exactObject(value, `${kind} format ${name}`);
   }
@@ -818,14 +818,14 @@ export function createI18nWireRuntime(
       number(input: string, rawOptions: FormatOptions): NumericParseResult {
         if (typeof input !== "string") fail("I18N_PARSE_INVALID", "number input must be a string.");
         const options = formatOptions(rawOptions, "number parser");
-        const record = artifact().number[options.format];
+        const record = ownValue(artifact().number, options.format);
         if (record === undefined) fail("I18N_PARSE_INVALID", `unknown number parser ${options.format}.`);
         return parseNumber(input, record);
       },
       percent(input: string, rawOptions: FormatOptions): NumericParseResult {
         if (typeof input !== "string") fail("I18N_PARSE_INVALID", "percent input must be a string.");
         const options = formatOptions(rawOptions, "percent parser");
-        const record = artifact().percent[options.format];
+        const record = ownValue(artifact().percent, options.format);
         if (record === undefined) fail("I18N_PARSE_INVALID", `unknown percent parser ${options.format}.`);
         if (record.affix === "omit") {
           const parsed = parsePlainNumber(input, record.numbers);
@@ -891,7 +891,7 @@ export function createI18nWireRuntime(
       },
       NUMBER(positional: FluentValue[], named: Record<string, FluentValue>): string {
         const profile = String(native(named.profile));
-        if (Object.keys(named).length !== 1 || formats.number?.[profile] === undefined) {
+        if (Object.keys(named).length !== 1 || ownValue(formats.number, profile) === undefined) {
           fail("I18N_NUMBER_INVALID", `NUMBER received unknown profile ${profile}.`);
         }
         const value = String(native(positional[0]));
@@ -987,7 +987,7 @@ export function createI18nWireRuntime(
     return Object.freeze({
       artifact,
       format(token: string, values: Readonly<Record<string, unknown>>): string {
-        const entry = artifact.messages[token];
+        const entry = ownValue(artifact.messages, token);
         if (entry === undefined) fail("I18N_MESSAGE_MISSING", `browser message ${token} is not loaded.`);
         const bundle = compiled.get(entry.bundle_locale);
         const message = bundle?.getMessage(entry.internal_id);
