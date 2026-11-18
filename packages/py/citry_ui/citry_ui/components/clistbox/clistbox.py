@@ -8,7 +8,6 @@ from hashlib import sha256
 from typing import Any, ClassVar, Literal, TypedDict, cast
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry.util.html import LongReferenceSafeParser
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
@@ -16,6 +15,7 @@ from citry_ui.components._attrs import (
     merge_root_attrs,
     reject_citry_ui_reserved_attr,
 )
+from citry_ui.components._markup_tree import MarkupTreeParser, Namespace
 from citry_ui.components._validation import (
     first_attribute_occurrences,
     reject_owned_attrs,
@@ -264,7 +264,9 @@ def _token(value: str) -> str:
     return sha256(value.encode()).hexdigest()[:12]
 
 
-class _ListboxOutputParser(LongReferenceSafeParser):
+class _ListboxOutputParser(MarkupTreeParser[tuple[str | None, bool]]):
+    # The value kept for each open element is its owned part, if any, and
+    # whether it sits inside an option's slot content.
     _OWNED_PARTS: ClassVar[set[str]] = {
         "listbox-root",
         "listbox-label",
@@ -306,19 +308,26 @@ class _ListboxOutputParser(LongReferenceSafeParser):
         "textarea",
         "summary",
         "label",
+        # With scripting on, the browser reads its content as text, so the
+        # elements inside could close the option content early.
+        "noscript",
     }
 
     def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.stack: list[tuple[str | None, bool]] = []
+        super().__init__()
         self.problem: str | None = None
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+    def open_element(
+        self,
+        tag: str,
+        attrs: list[tuple[str, str | None]],
+        namespace: Namespace,  # noqa: ARG002
+    ) -> tuple[str | None, bool]:
         # Read each repeated attribute at its first occurrence, as the browser does.
         values = dict(first_attribute_occurrences(attrs))
         raw_part = values.get("data-citry-ui-part")
         part = raw_part if raw_part in self._OWNED_PARTS else None
-        in_slot = any(slot for _, slot in self.stack)
+        in_slot = bool(self.open_elements) and self.open_elements[-1].value[1]
         starts_slot = "data-cui-listbox-slot-region" in values
         option_region = in_slot or starts_slot
         if option_region and self.problem is None:
@@ -334,20 +343,12 @@ class _ListboxOutputParser(LongReferenceSafeParser):
             ):
                 self.problem = f"Option content contains interactive {visible_markup_text(tag)}"
         if not in_slot and self.problem is None:
-            parent = self.stack[-1][0] if self.stack else None
+            parent = self.open_elements[-1].value[0] if self.open_elements else None
             if part is None and parent in self._ALLOWED and not starts_slot:
                 self.problem = f"{parent or 'document'} contains unsupported {visible_markup_text(tag)}"
             elif part is not None and part not in self._ALLOWED.get(parent, set()):
                 self.problem = f"{parent or 'document'} contains unsupported {part}"
-        self.stack.append((part, option_region))
-
-    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        self.handle_starttag(tag, attrs)
-        self.handle_endtag(tag)
-
-    def handle_endtag(self, tag: str) -> None:  # noqa: ARG002
-        if self.stack:
-            self.stack.pop()
+        return (part, option_region)
 
 
 def _validate_output(rendered: object) -> None:

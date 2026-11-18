@@ -10,7 +10,6 @@ from hashlib import sha256
 from typing import Any, ClassVar, Literal, TypeAlias, TypedDict, cast
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry.util.html import LongReferenceSafeParser
 from citry_ui.components._active_descendant import ACTIVE_DESCENDANT_RUNTIME_DEPENDENCY
 from citry_ui.components._anchored_layer import ANCHORED_LAYER_RUNTIME_DEPENDENCY
 from citry_ui.components._attrs import (
@@ -23,6 +22,7 @@ from citry_ui.components._attrs import (
 )
 from citry_ui.components._dialog_controller import DIALOG_CONTROLLER_RUNTIME_DEPENDENCY
 from citry_ui.components._i18n import uses_catalog_default
+from citry_ui.components._markup_tree import MarkupTreeParser, Namespace
 from citry_ui.components._validation import first_attribute_occurrences
 
 CCommandPaletteIntent = Literal["default", "danger"]
@@ -391,50 +391,44 @@ def _copy_attrs(
     return copied
 
 
-class _VisualParser(LongReferenceSafeParser):
-    _VOID: ClassVar[set[str]] = {
-        "area",
-        "base",
-        "br",
-        "col",
-        "embed",
-        "hr",
-        "img",
-        "input",
-        "link",
-        "meta",
-        "source",
-        "track",
-        "wbr",
-    }
+@dataclass(frozen=True, slots=True)
+class _PaletteElement:
+    # Whether the element sits in a visual region, and whether it is the palette host.
+    in_visual: bool
+    is_host: bool
 
+
+class _VisualParser(MarkupTreeParser[_PaletteElement]):
     def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.depth = 0
-        self.html_depth = 0
-        self.host_depth: int | None = None
+        super().__init__()
+        self.host_seen = False
         self.dialog_count = 0
         self.activators: list[dict[str, str | None]] = []
         self.invalid = False
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+    def open_element(
+        self,
+        tag: str,
+        attrs: list[tuple[str, str | None]],
+        namespace: Namespace,  # noqa: ARG002
+    ) -> _PaletteElement:
         # Read each repeated attribute at its first occurrence, as the browser does.
         values = dict(first_attribute_occurrences(attrs))
-        if self.host_depth is None and "data-citry-command-palette-host" in values:
-            self.host_depth = self.html_depth
-        elif self.host_depth is not None and self.html_depth == self.host_depth + 1:
+        parent = self.open_elements[-1].value if self.open_elements else None
+        is_host = False
+        # Only the first host counts; its children are the activator slot.
+        if not self.host_seen and "data-citry-command-palette-host" in values:
+            self.host_seen = is_host = True
+        elif parent is not None and parent.is_host:
             if tag == "dialog" and "data-citry-command-palette-root" in values:
                 self.dialog_count += 1
             else:
                 self.activators.append(values)
                 if "-" in tag or "is" in values or "data-citry-command-palette-trigger" not in values:
                     self.invalid = True
-        if self.depth == 0:
-            if "data-citry-command-palette-visual" in values:
-                self.depth = 1
-        elif tag not in self._VOID:
-            self.depth += 1
-        if self.depth and (
+        # The visual region starts at its own element, which is checked too.
+        in_visual = (parent is not None and parent.in_visual) or "data-citry-command-palette-visual" in values
+        if in_visual and (
             "-" in tag
             or "is" in values
             or tag
@@ -445,6 +439,9 @@ class _VisualParser(LongReferenceSafeParser):
                 "iframe",
                 "input",
                 "label",
+                # With scripting on, the browser reads its content as text,
+                # so the elements inside could close the region early.
+                "noscript",
                 "object",
                 "select",
                 "textarea",
@@ -458,19 +455,7 @@ class _VisualParser(LongReferenceSafeParser):
             or ("contenteditable" in values and (values["contenteditable"] or "").casefold() != "false")
         ):
             self.invalid = True
-        if tag not in self._VOID:
-            self.html_depth += 1
-
-    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        previous = self.depth
-        self.handle_starttag(tag, attrs)
-        self.depth = previous
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag not in self._VOID:
-            self.html_depth -= 1
-        if self.depth:
-            self.depth -= 1
+        return _PaletteElement(in_visual=in_visual, is_host=is_host)
 
 
 class CCommandPalette(LibraryComponent):

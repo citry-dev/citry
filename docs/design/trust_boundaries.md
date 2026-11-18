@@ -358,9 +358,11 @@ a hook may pass request data through.
 
 ## 13. Citry UI
 
-Every Citry UI check runs in Python in the component's `template_data()` or
-`js_data()`, before the template renders, so static HTML, Vue pages,
-Events `Render`, and cached renders all get it. Citry UI templates spread
+Every Citry UI check of an input runs in Python in the component's
+`template_data()` or `js_data()`, before the template renders, so static
+HTML, Vue pages, Events `Render`, and cached renders all get it. The checks
+of slot fills in the last row read the rendered HTML instead, in the
+component's `on_render()`, after the template renders. Citry UI templates spread
 attribute maps with core `c-bind`, so the core name checks of 2.2 apply on
 top of the component's own. No Citry UI component inserts HTML with
 `innerHTML`, `v-html`, or `<c-raw>`.
@@ -380,6 +382,7 @@ top of the component's own. No Citry UI component inserts HTML with
 | Label patterns (`count_label`, `page_label` and the other `{...}` label arguments of `CTransferList`, `CSortable`, `CFormCollection`, `CCascader`, `CPagination` and `CTreeGrid`) | Author only | Text | Filled in with `str.format` (for example `ui/components/ctransfer_list/ctransfer_list.py:599`, `ui/components/ccascader/ccascader.py:528`) or by plain replacement (`ui/components/cpagination/cpagination.py:236`); Citry UI checks only that the required fields appear (for example `ui/components/ctransfer_list/ctransfer_list.py:336-340`). | Missing |
 | `id=` and `name=` arguments, `form=`, `CTourStep(target_id=)` | App code | Element `id` and form control `name`; ids the browser code looks up | `validate_html_id` (`ui/components/_validation.py:71`) refuses an empty value and ASCII whitespace; the value is escaped. `form=` (`CSortable`, `CCascader`, `CTreeGrid`, `CTransferList`) and `CTourStep(target_id=)` are ids that Citry UI's browser code looks up on the page (for example `ui/components/csortable/runtime.source.js:301`). An element with the same id earlier in the page wins the lookup, so the component's hidden inputs are sent with that element when it is a form, and are left out of the submission when it is not. `CForm(attrs=)` refuses `id` (`ui/components/cform/cform.py:102`). Citry's own browser code reads form members past a control with the same name (`readBuiltIn`, `callBuiltIn`). Vue's own code reads them directly, so a control named after a form method or property, such as `addEventListener` or `tagName`, stops the Vue app that renders the form. | `docs/security.md` ("Check form field names") |
 | `CIcon(name=)` and icon names | Request data OK | Packaged SVG | Looked up in the packaged registry; `Markup` refused in every input (`ui/components/cicon/cicon.py:143`, `:166`). | `ui/components/cicon/api.md:139-142` |
+| Slot fills a component checks after it renders: `CImage` placeholder and fallback, `CCommandPalette` visual and activator slots, `CListbox` option content, `CTree` items, `CDisclosure` title and content, the direct children of `CAccordion` and of the Menu collections | Template author; `Markup` in a fill: app code | Markup | The component reads its rendered HTML with `MarkupTreeParser` (`ui/components/_markup_tree.py`), which follows the browser's rules for SVG and MathML content (such as `<style>` there), `<![CDATA[`, end tags that close nothing (such as `</link>`), and the elements a start tag closes, and refuses a fill that breaks the component's layout or focus rules, such as a focusable element in a `CImage` placeholder. The region checks also refuse `<noscript>`, whose content the browser reads as text when scripting is on. It does not model the elements a browser moves, such as a block element out of a misnested `<b>` or content placed before a `<table>`; that keeps those elements inside a region (stricter) but can hide an extra root from the `CAccordion` and Menu checks. These checks guard layout and focus, not script: a fill is author or app markup and can already hold any HTML. | Missing |
 
 ## 14. Citry's browser runtime
 

@@ -8,7 +8,6 @@ from hashlib import sha256
 from typing import Any, ClassVar, Literal, TypedDict, cast
 
 from citry import CitryElement, CitryRender, ComponentLike, LibraryComponent, SlotInput, const_value
-from citry.util.html import LongReferenceSafeParser
 from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_DEPENDENCY,
     ANCHORED_LAYER_RUNTIME_JS,
@@ -22,6 +21,7 @@ from citry_ui.components._attrs import (
     reject_citry_ui_reserved_attr,
 )
 from citry_ui.components._direct_output import feed_typed_direct_output
+from citry_ui.components._markup_tree import MarkupTreeParser, Namespace
 from citry_ui.components._shared_component_assets import build_shared_component_assets
 from citry_ui.components._url import check_link_url
 from citry_ui.components._validation import (
@@ -480,34 +480,13 @@ def _validate_registry(registry: _MenuRegistry) -> None:
         raise ValueError(msg)
 
 
-_VOID_ELEMENTS = frozenset(
-    {
-        "area",
-        "base",
-        "br",
-        "col",
-        "embed",
-        "hr",
-        "img",
-        "input",
-        "link",
-        "meta",
-        "param",
-        "source",
-        "track",
-        "wbr",
-    }
-)
-
-
-class _DirectMenuParser(LongReferenceSafeParser):
-    # Only tag names and nesting matter here, never an attribute value.
-    _reads_attribute_values = False
+class _DirectMenuParser(MarkupTreeParser[None]):
+    # Only which elements are open matters here: the slot's direct content
+    # must be exactly one root element per declaration and nothing else.
 
     def __init__(self, expected: Mapping[str, str]) -> None:
-        super().__init__(convert_charrefs=True)
+        super().__init__()
         self.expected = expected
-        self.depth = 0
         self.active_render_id: str | None = None
         self.active_root_count = 0
         self.render_ids: list[str] = []
@@ -525,56 +504,45 @@ class _DirectMenuParser(LongReferenceSafeParser):
 
     def enter(self, render_id: str) -> None:
         self.flush()
-        if self.depth != 0 or self.active_render_id is not None:
+        if self.open_elements or self.active_render_id is not None:
             self.invalid = True
         self.active_render_id = render_id
         self.active_root_count = 0
 
     def exit(self, render_id: str) -> None:
         self.flush()
-        if self.depth != 0 or self.active_render_id != render_id or self.active_root_count != 1:
+        if self.open_elements or self.active_render_id != render_id or self.active_root_count != 1:
             self.invalid = True
         self.render_ids.append(render_id)
         self.active_render_id = None
         self.active_root_count = 0
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        del attrs
-        if self.depth == 0:
-            if self.active_render_id is None:
-                self.invalid = True
-            else:
-                self.active_root_count += 1
-                if tag != self.expected[self.active_render_id]:
-                    self.invalid = True
-        if tag not in _VOID_ELEMENTS:
-            self.depth += 1
-
-    def handle_startendtag(
-        self,
-        tag: str,
-        attrs: list[tuple[str, str | None]],
-    ) -> None:
-        self.handle_starttag(tag, attrs)
-        if tag not in _VOID_ELEMENTS:
-            self.handle_endtag(tag)
-
-    def handle_endtag(self, tag: str) -> None:  # noqa: ARG002
-        if self.depth == 0:
-            self.invalid = True
+    def open_element(self, tag: str, attrs: list[tuple[str, str | None]], namespace: Namespace) -> None:  # noqa: ARG002
+        if self.open_elements:
             return
-        self.depth -= 1
+        # A root element must belong to a declaration and have its tag.
+        if self.active_render_id is None:
+            self.invalid = True
+        else:
+            self.active_root_count += 1
+            if tag != self.expected[self.active_render_id]:
+                self.invalid = True
+
+    def unmatched_end_tag(self, tag: str) -> None:  # noqa: ARG002
+        # In the page this end tag could close an element around the
+        # collection, so the declarations would no longer sit inside it.
+        self.invalid = True
 
     def handle_data(self, data: str) -> None:
-        if self.depth == 0 and data.strip():
+        if not self.open_elements and data.strip():
             self.invalid = True
 
     def handle_comment(self, data: str) -> None:  # noqa: ARG002
-        if self.depth == 0:
+        if not self.open_elements:
             self.invalid = True
 
     def handle_decl(self, decl: str) -> None:  # noqa: ARG002
-        if self.depth == 0:
+        if not self.open_elements:
             self.invalid = True
 
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- The components that check their rendered slot fills, such as `CImage`
+  placeholders and `CListbox` option content, now read SVG and MathML
+  content (such as `<style>`), `<![CDATA[`, and end tags that close
+  nothing (such as `</link>`) the way browsers do, so they accept and
+  refuse the elements a browser builds. A fill can now raise
+  `ValueError` where it rendered before, and the `CImage`,
+  `CCommandPalette` and `CListbox` fills now refuse `<noscript>`. SVG icons with a `<style>` block render as before.
+
 ## [0.6.1] - 2026-11-18
 
 ### Changed
