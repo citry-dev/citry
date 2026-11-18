@@ -349,19 +349,29 @@ brief use that list:
   `attrs=` argument (and the other `*_attrs=` arguments) lets data choose
   the name. A data-chosen name can add an `on*` handler, set a DOM
   property such as `innerHTML`, or contain a form feed or other control
-  character, which the browser reads as the end of the name.
+  character, which the browser reads as the end of the name. In a
+  component with `js`, Vue reads some names itself instead of writing
+  them: `ref`, `ref_for` and `ref_key` make Vue store the element in the
+  component's own value of that name.
 - **URL attributes.** `href`, `src`, `action`, `formaction`, `srcset`,
-  `xlink:href`, the URL in `<meta http-equiv="refresh">`, and the `to`,
-  `from`, `by` or `values` of an SVG `<set>` or `<animate>` that changes a
-  link. A `javascript:` URL runs code, and a `data:` URL can open a
-  document that runs code.
+  `xlink:href`, `href` on a MathML element (which WebKit and Firefox
+  open like a link's when a visitor clicks it), the URL in
+  `<meta http-equiv="refresh">`, and the `to`, `from`, `by` or `values`
+  of an SVG `<set>` or `<animate>` that changes a link. A `javascript:`
+  URL runs code, and a `data:` URL can open a document that runs code.
+  WebKit renders a `data:` document as HTML when it cannot display the
+  type, including a type written with a control character in it, and
+  Chromium keeps a tab or line break written inside a `data:` URL.
 - **Embedded documents.** An `iframe srcdoc` value, or a `data:` document
   opened in a frame, by a link or by a form, is a whole page with its own
   scripts and its own embedded documents.
 - **Tag names.** `<c-element>` and the Citry UI components that take a
   tag. A data-chosen `script`, `style`, `plaintext` or `iframe` changes
   how the browser reads the element's content, and `base`, `meta` or
-  `link` changes how the page loads.
+  `link` changes how the page loads. A data-chosen `svg` or `math` (and
+  `mglyph` or `malignmark` inside a MathML text element) switches the
+  browser into SVG or MathML parsing, where `<style>`, `<noscript>` and
+  similar elements in trusted HTML stop keeping their contents as text.
 - **CSS.** `css_data()` values, in the stylesheet Citry generates from
   them and in inline `<style>`, and `:style` bindings. Citry must write
   them so they read the same under any encoding the page declares.
@@ -375,7 +385,9 @@ brief use that list:
 - **Addresses and keys the browser code takes from the server.** Fragment
   and definition scripts, Events request URLs, and State and locale
   names, which the browser code must look up so that a name such as
-  `__proto__` reaches only its own entry.
+  `__proto__` reaches only its own entry. The browser code must also
+  resolve the URLs it loads against the page's address, so an injected
+  `<base>` tag cannot move them.
 - **Navigation.** `Redirect`, `PushUrl` and `ReplaceUrl`, including the
   `Location` header on the no-JavaScript form path, which must not hold a
   control character.
@@ -394,10 +406,12 @@ brief use that list:
   browsers differ from each other. Known cases are the contents of a
   `<select>`, SVG and MathML elements that hold HTML and misplaced end
   tags inside them, the mode a doctype picks for an `iframe srcdoc`
-  document (quirks or standards mode), and HTML that a script inserts into
-  another page or into a `<template>`. The output checks must read a page
-  every way a supported browser can build it, or report a page they cannot
-  read.
+  document (quirks or standards mode), HTML that a script inserts into
+  another page or into a `<template>`, Chromium's and WebKit's rules for
+  a `</form>` inside a `<template>`, and Chromium's `<noscript>` and
+  `</form>` rules together in HTML set on a `<template>`. The output
+  checks must read a page every way a supported browser can build it, or
+  report a page they cannot read.
 - **The page's declared encoding.** A browser reads the page in the
   encoding that a response header or a `<meta charset>` names, and in some
   encodings the same bytes mean something else. In ISO-2022-JP an escape

@@ -41,16 +41,31 @@ URL inputs check the scheme and raise `ValueError` for any other:
 See [Check URL attributes](/security/#check-url-attributes) for the
 other URLs on your page.
 
-Two inputs need checks of your own:
+These inputs need checks of your own:
 
 - Build attribute maps (`attrs=` and the other `*_attrs=` arguments)
   in your own code. Citry UI raises `ValueError` for a key such as
   `onclick`, a key the component sets itself, `is` or `key`, or a key
   that starts with `data-citry-`, `data-cui-`, `data-cev` or
-  `data-cid`. Citry's browser code finds its elements by those
-  prefixes, and `is` and `key` change which element is rendered, so a
-  key from request data could make the page act differently. Citry UI
-  does not check what the other names mean.
+  `data-cid`. Citry's browser code finds its elements by those names,
+  and `is` and `key` change which element is rendered, so a key from
+  request data could make the page act differently. Citry UI does not
+  check what the other names mean. Choose the values of these keys
+  in your own code too, because each one makes the browser act:
+    - a URL, such as `formaction`, `href`, or `src`, which Citry UI
+      checks only where the component writes a link, a form, an
+      image, or a submit button;
+    - `form`, which makes a submit button submit another form, or
+      moves a field into another form when that form is submitted;
+    - `commandfor` or `popovertarget`, which lets a button open
+      another dialog or popover on the page;
+    - `id`: Citry UI's browser code finds some elements by id. If an
+      earlier element on the page has the same id as the form a
+      component names, the browser finds that element first, and the
+      component's values are missing when the form is submitted;
+    - `name`, which sets the name a field is sent under. A field's
+      name can also hide a property of its form that browser code
+      reads.
 - Choose `style` values in your own code. Citry does not check them as
   CSS, so a value from request data can add declarations of its own,
   such as a background image from another site.

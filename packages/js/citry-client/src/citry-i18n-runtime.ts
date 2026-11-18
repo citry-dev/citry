@@ -1,5 +1,5 @@
 import { FluentBundle, FluentResource, type FluentFunction, type FluentValue } from "@fluent/bundle";
-import { createPureI18nHelpers } from "./citry-i18n-core";
+import { createPureI18nHelpers, sameJsonContent } from "./citry-i18n-core";
 
 const FSI = "\u2068";
 const PDI = "\u2069";
@@ -1115,6 +1115,25 @@ export function createI18nWireRuntime(
     return { artifacts, bindings, messages, outputs, owner, provider, renderedLocale };
   }
 
+  // The runtime only asks whether a locale is configured, so two manifests that list the same
+  // locales in another order describe the same project.
+  function sameLocales(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {
+    return left.size === right.size && Array.from(left).every((locale) => right.has(locale));
+  }
+
+  // Parser artifacts are looked up by locale, so the order the server listed them in does not
+  // matter, only which locales have one and what each holds.
+  function sameParsers(
+    left: ReadonlyMap<string, BrowserParserArtifact>,
+    right: ReadonlyMap<string, BrowserParserArtifact>,
+  ): boolean {
+    if (left.size !== right.size) return false;
+    for (const [locale, artifact] of left) {
+      if (!right.has(locale) || !sameJsonContent(artifact, right.get(locale))) return false;
+    }
+    return true;
+  }
+
   function configureManifest(value: unknown): readonly [I18nManifest, RuntimeConfiguration] {
     const item = exactObject(value, "an i18n manifest");
     exactKeys(
@@ -1258,10 +1277,10 @@ export function createI18nWireRuntime(
       runtimeState.configuration !== null &&
       (runtimeState.configuration.catalogRevision !== next.catalogRevision ||
         runtimeState.configuration.formatsRevision !== next.formatsRevision ||
-        JSON.stringify(Array.from(runtimeState.configuration.locales)) !== JSON.stringify(locales) ||
+        !sameLocales(runtimeState.configuration.locales, next.locales) ||
         runtimeState.configuration.messagesUrl !== next.messagesUrl ||
-        JSON.stringify(runtimeState.configuration.formats) !== JSON.stringify(next.formats) ||
-        JSON.stringify(Array.from(runtimeState.configuration.parsers)) !== JSON.stringify(Array.from(next.parsers)))
+        !sameJsonContent(runtimeState.configuration.formats, next.formats) ||
+        !sameParsers(runtimeState.configuration.parsers, next.parsers))
     ) {
       fail("I18N_WIRE_INVALID", "an i18n fragment uses a different project runtimeState.configuration.");
     }

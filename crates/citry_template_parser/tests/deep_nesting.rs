@@ -9,8 +9,9 @@
 //!
 //! These tests parse, clone, compare, print, compile and drop templates up to
 //! 512 tags deep (512 for plain elements, 256 for control-flow and component
-//! tags) on threads with 256 KiB and 128 KiB stacks. 128 KiB is the default
-//! for threads on musl Linux, and Rust spawns threads with 2 MiB by default.
+//! tags) on threads with 256 KiB and 128 KiB stacks. 128 KiB is what musl
+//! Linux gives a thread that nobody sized, and Rust spawns threads with
+//! 2 MiB by default.
 //! A crash aborts this test binary, which fails the test run.
 //!
 //! Each test enters the parser through `with_enough_stack`, as the Python

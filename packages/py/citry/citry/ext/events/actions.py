@@ -277,6 +277,12 @@ class Dispatch(Action):
     so events from different components do not collide. Names starting with
     ``citry:`` are reserved for Citry's own events and raise ``ValueError``.
 
+    Choose the name in your own code, never from request data. A standard
+    DOM event name such as ``click`` or ``submit`` runs the page's own
+    listeners for that event, including ``@c-*`` bindings that call the
+    server. If the component's first element is a ``<form>``, Firefox
+    also submits that form to its ``action`` on ``submit``.
+
     Attributes:
         name: The event name, dispatched verbatim.
         detail: The ``CustomEvent`` ``detail`` payload, a JSON-serializable

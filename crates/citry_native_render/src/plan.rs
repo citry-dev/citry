@@ -140,13 +140,14 @@ pub struct PlanError(pub String);
 ///
 /// A debug build's stack frames are several times larger than a release
 /// build's, so each build has its own limit, chosen from how deep each
-/// template shape renders on a fresh thread of 128 KiB, the default thread
-/// stack on musl Linux. A release build reached about 140 levels, and its
-/// limit is about half that. A debug build reached 9 levels with 32 KiB of
-/// the stack held back, and its limit stays a level below. Python reads the
-/// active value as `citry_core._rust.NATIVE_RENDER_MAX_BODY_DEPTH`, and a
-/// test renders at the limit on a 128 KiB thread. See
-/// `docs/design/native_render.md`, "Templates nested too deeply".
+/// template shape renders on a fresh thread of 128 KiB, the stack musl Linux
+/// gives a thread that nobody sized. A release build reached about 140
+/// levels, and its limit is about half that. A debug build reached 9 levels
+/// with 32 KiB of the stack held back, and its limit stays a level below.
+/// Python reads the active value as
+/// `citry_core._rust.NATIVE_RENDER_MAX_BODY_DEPTH`, and a test renders at
+/// the limit on a 128 KiB thread. See `docs/design/native_render.md`,
+/// "Templates nested too deeply".
 pub const MAX_BODY_DEPTH: usize = if cfg!(debug_assertions) { 8 } else { 64 };
 
 /// How many levels the paths a template reads may nest: a variable is one

@@ -77,7 +77,10 @@ A few Citry terms appear throughout:
 HTTP method, so existing URLs keep working. The handler bodies still change:
 they read typed `data` and the neutral `request`, and return Events values
 instead of host responses. The method-only URL has no public URL builder;
-`events.url("post")` builds the named `/post` route instead.
+`events.url("post")` builds the named `/post` route instead. Django's CSRF
+token check skips `GET`, `HEAD`, and `OPTIONS` requests, as it did for the
+original view, so `get`, `head`, and `options` must only read data. See
+[Keep `GET`, `HEAD` read-only](/security/#get-handlers-skip-csrf).
 
 ## Keep State across calls
 
