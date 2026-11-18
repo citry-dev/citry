@@ -49,6 +49,12 @@ class Holder:
 
     drop.alters_data = True  # type: ignore[attr-defined]
 
+    def delete(self, using: Any = None) -> None:
+        """Shaped like Django's `Model.delete`, which a sort key can call with one argument."""
+        CALLED.append("delete")
+
+    delete.alters_data = True  # type: ignore[attr-defined]
+
     def label(self, item: Any) -> str:
         return f"label-{item}"
 
@@ -116,6 +122,11 @@ class TestRefusedFunctionsAsArguments:
 
     def test_alters_data_method(self):
         assert_refused("[1].sort(key=obj.drop)", obj=Holder())
+
+    def test_django_style_delete_from_template_text(self):
+        # Template text alone, with an ordinary model-like object in the context: this
+        # route changes data, not only reads it.
+        assert_refused("[None].sort(key=user.delete)", user=Holder())
 
     def test_partial_of_a_refused_function(self):
         assert_refused("[obj].sort(key=fmt)", obj=Holder(), fmt=functools.partial(str.format, "{0._trigger}"))
