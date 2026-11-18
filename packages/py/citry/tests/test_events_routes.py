@@ -14,7 +14,7 @@ import json
 import re
 import time
 from decimal import Decimal
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, urlencode, urlsplit
 
 import pytest
 
@@ -778,6 +778,56 @@ def _landing_client(c, adapter):
 
 def _event_url(comp_cls, name):
     return f"/citry/ext/events/e/{comp_cls.class_id}/{name}"
+
+
+def _post_redirect(c, comp_cls, target, headers=None):
+    """
+    Form-POST a Redirect target to the mounted app and return the raw status and Location.
+
+    httpx2 builds the follow-up request from Location even with
+    follow_redirects=False, and its URL parser rejects a scheme with no host
+    and no leading "/" (such as "http:next") that browsers accept. Driving
+    the ASGI app directly reads the header exactly as the server wrote it.
+    """
+    messages = []
+    body = urlencode({"to": target}).encode()
+    request_sent = False
+
+    async def receive():
+        # One request body, then a disconnect, as a server sends after the client finishes.
+        nonlocal request_sent
+        if request_sent:
+            return {"type": "http.disconnect"}
+        request_sent = True
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    async def send(message):
+        messages.append(message)
+
+    # The TestClient sends Host "testserver", and the Referer checks compare against it.
+    all_headers = {"host": "testserver", **{name.lower(): value for name, value in (headers or {}).items()}}
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "server": ("testserver", 80),
+        "client": ("testclient", 50000),
+        "path": _event_url(comp_cls, "go"),
+        "raw_path": _event_url(comp_cls, "go").encode(),
+        "root_path": "",
+        "query_string": b"",
+        "headers": [
+            (b"content-type", b"application/x-www-form-urlencoded"),
+            *((name.encode(), value.encode()) for name, value in all_headers.items()),
+        ],
+    }
+    asyncio.run(_mounted(c).app(scope, receive, send))
+    start = next(message for message in messages if message["type"] == "http.response.start")
+    # ASGI header names keep the case the server chose, so compare them lowercased.
+    response_headers = {name.decode("latin-1").lower(): value.decode("latin-1") for name, value in start["headers"]}
+    return start["status"], response_headers.get("location", "")
 
 
 def _post_envelope(client, url, envelope, headers=None, **kwargs):
@@ -1847,14 +1897,9 @@ class TestCompatMode:
     def test_redirect_resolves_a_relative_url_against_the_referer(self, target, expected):
         c = _citry()
         jumper = _jumper(c)
-        response = _mounted(c).post(
-            _event_url(jumper, "go"),
-            data={"to": target},
-            headers={"Referer": "http://testserver/shop/list?x=1"},
-            follow_redirects=False,
-        )
-        assert response.status_code == 303
-        assert response.headers["location"] == expected
+        status, location = _post_redirect(c, jumper, target, headers={"Referer": "http://testserver/shop/list?x=1"})
+        assert status == 303
+        assert location == expected
 
     @pytest.mark.parametrize(
         ("target", "expected"),
@@ -1867,13 +1912,8 @@ class TestCompatMode:
     def test_scheme_relative_url_follows_the_referer_scheme(self, target, expected):
         c = _citry()
         jumper = _jumper(c)
-        response = _mounted(c).post(
-            _event_url(jumper, "go"),
-            data={"to": target},
-            headers={"Referer": "https://testserver/shop/list"},
-            follow_redirects=False,
-        )
-        assert response.headers["location"] == expected
+        _status, location = _post_redirect(c, jumper, target, headers={"Referer": "https://testserver/shop/list"})
+        assert location == expected
 
     @pytest.mark.parametrize(
         ("host", "referer", "expected"),
@@ -1886,13 +1926,8 @@ class TestCompatMode:
     def test_scheme_relative_url_resolves_against_any_same_host_referer(self, host, referer, expected):
         c = _citry()
         jumper = _jumper(c)
-        response = _mounted(c).post(
-            _event_url(jumper, "go"),
-            data={"to": "http:next"},
-            headers={"Host": host, "Referer": referer},
-            follow_redirects=False,
-        )
-        assert response.headers["location"] == expected
+        _status, location = _post_redirect(c, jumper, "http:next", headers={"Host": host, "Referer": referer})
+        assert location == expected
 
     def test_scheme_relative_url_without_a_referer_passes_through_and_warns(self, caplog, monkeypatch):
         # Without a Referer the browser reads "http:next" against the handler
@@ -1901,8 +1936,8 @@ class TestCompatMode:
         c = _citry()
         jumper = _jumper(c)
         with caplog.at_level("WARNING", logger="citry"):
-            response = _mounted(c).post(_event_url(jumper, "go"), data={"to": "http:next"}, follow_redirects=False)
-        assert response.headers["location"] == "http:next"
+            _status, location = _post_redirect(c, jumper, "http:next")
+        assert location == "http:next"
         warnings = [r.getMessage() for r in caplog.records if r.name == "citry" and r.levelname == "WARNING"]
         assert len(warnings) == 1
         assert "actions.Redirect('http:next') is a relative URL" in warnings[0]
@@ -1954,14 +1989,9 @@ class TestCompatMode:
     def test_redirect_keeps_urls_that_parsers_read_differently(self, target, expected):
         c = _citry()
         jumper = _jumper(c)
-        response = _mounted(c).post(
-            _event_url(jumper, "go"),
-            data={"to": target},
-            headers={"Referer": "http://testserver/shop/list"},
-            follow_redirects=False,
-        )
-        assert response.status_code == 303
-        assert response.headers["location"] == expected
+        status, location = _post_redirect(c, jumper, target, headers={"Referer": "http://testserver/shop/list"})
+        assert status == 303
+        assert location == expected
 
     @pytest.mark.parametrize(
         ("page", "target", "expected"),
