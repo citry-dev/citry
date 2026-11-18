@@ -12,9 +12,9 @@ inputs:
       - {id: kind, name: kind, type: {display: '"rect" | "text" | "circle"', interfaces: [CSkeletonKind]}, default: {kind: literal, value: rect}, effect: Selects primitive geometry.}
       - {id: lines, name: lines, type: 'int (1..100)', default: {kind: literal, value: 1}, effect: Renders one or more text lines; values above one require text kind.}
       - {id: animation, name: animation, type: {display: '"pulse" | "wave" | "none"', interfaces: [CSkeletonAnimation]}, default: {kind: literal, value: pulse}, effect: Selects CSS-only motion. Reduced-motion always disables it.}
-      - {id: width, name: width, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the root width to one CSS length or percentage.}
-      - {id: height, name: height, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the primitive or line height to one CSS length or percentage.}
-      - {id: last-line-width, name: last_line_width, type: str, default: {kind: literal, value: 70%}, effect: Sets the final line width when multiple text lines render.}
+      - {id: width, name: width, type: 'str | None', default: {kind: literal, value: null}, effect: 'Sets the root width to one positive length in `px`, `rem`, `em`, `ch`, `vw`, `vh`, `vmin`, `vmax`, or `%`, such as `12rem` or `50%`.'}
+      - {id: height, name: height, type: 'str | None', default: {kind: literal, value: null}, effect: 'Sets the primitive or line height to one positive length in `px`, `rem`, `em`, `ch`, `vw`, `vh`, `vmin`, `vmax`, or `%`.'}
+      - {id: last-line-width, name: last_line_width, type: str, default: {kind: literal, value: 70%}, effect: 'Sets the final line width, one positive length in `px`, `rem`, `em`, `ch`, `vw`, `vh`, `vmin`, `vmax`, or `%`, when multiple text lines render.'}
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes and merges them with `attrs`.}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles before direct dimension inputs.}
       - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied trusted root attributes without replacing decorative semantics, children, reflections, focus, or Citry runtime fields.'}

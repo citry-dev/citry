@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, cast
@@ -33,6 +34,14 @@ _OWNED_ATTRS = frozenset(
     }
 )
 
+# One positive CSS length or percentage, such as `12rem` or `70%`. The units
+# match CGrid's `min_col` plus `%`, and nothing else may reach the custom
+# property, so a size can never carry a function, a keyword or a second value.
+_CSS_LENGTH_RE = re.compile(
+    r"(?P<number>(?:\d+(?:\.\d+)?|\.\d+))(?P<unit>px|rem|em|ch|vw|vh|vmin|vmax|%)\Z",
+    re.ASCII,
+)
+
 
 def _plain_string(input_name: str, value: object, *, optional: bool = False) -> str | None:
     raw = const_value(value)
@@ -49,8 +58,20 @@ def _plain_string(input_name: str, value: object, *, optional: bool = False) -> 
     if not plain:
         msg = f"CSkeleton {input_name} must be non-empty."
         raise ValueError(msg)
-    if "\x00" in plain or any(token in plain for token in (";", "{", "}", "/*", "*/")):
-        msg = f"CSkeleton {input_name} must be one CSS length or percentage."
+    return plain
+
+
+def _length(input_name: str, value: object, *, optional: bool = False) -> str | None:
+    plain = _plain_string(input_name, value, optional=optional)
+    if plain is None:
+        return None
+    match = _CSS_LENGTH_RE.fullmatch(plain)
+    # A zero size draws nothing, so zero is refused along with the rest.
+    if match is None or float(match.group("number")) <= 0:
+        msg = (
+            f"CSkeleton {input_name} must be one positive length in px, rem, em, ch, vw, vh, vmin, vmax, or %, "
+            f"such as '12rem' or '50%', got {plain!r}."
+        )
         raise ValueError(msg)
     return plain
 
@@ -117,9 +138,9 @@ class CSkeleton(LibraryComponent):
         kind = _choice("kind", kwargs.kind, _KINDS)
         animation = _choice("animation", kwargs.animation, _ANIMATIONS)
         lines = _lines(kwargs.lines)
-        width = _plain_string("width", kwargs.width, optional=True)
-        height = _plain_string("height", kwargs.height, optional=True)
-        last_line_width = _plain_string("last_line_width", kwargs.last_line_width)
+        width = _length("width", kwargs.width, optional=True)
+        height = _length("height", kwargs.height, optional=True)
+        last_line_width = _length("last_line_width", kwargs.last_line_width)
         if lines != 1 and kind != "text":
             msg = "CSkeleton lines other than 1 require kind='text'."
             raise ValueError(msg)

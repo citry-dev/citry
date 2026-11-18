@@ -7,7 +7,13 @@ from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
 
 from citry import LibraryComponent, SlotInput
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    attr_name_text,
+    merge_root_attrs,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._context import FORM_CONTEXT_KEY
 from citry_ui.components._shared_component_assets import build_shared_component_assets
 from citry_ui.components._url import attribute_text, check_link_url
@@ -56,9 +62,9 @@ _LINK_FORM_ATTRS = {
 
 
 def _reject_link_form_attrs(attrs: Mapping[str, object] | None) -> None:
-    incompatible = sorted(key for key in attrs or {} if key.lower() in _LINK_FORM_ATTRS)
+    incompatible = sorted(key for key in attrs or {} if attr_name_text(key).lower() in _LINK_FORM_ATTRS)
     if incompatible:
-        names = ", ".join(repr(name) for name in incompatible)
+        names = ", ".join(repr(attr_name_text(name)) for name in incompatible)
         msg = f"CButton attrs {names} apply only to action buttons and cannot be used when href is set."
         raise ValueError(msg)
 
@@ -68,7 +74,9 @@ def _check_formaction(attrs: Mapping[str, object] | None) -> None:
     # same link check as CForm action. CSplitButton's primary_attrs reach here
     # through _build_button_snapshot too.
     for key, value in (attrs or {}).items():
-        if key.lower() == "formaction" and value is not None and not isinstance(value, bool):
+        # Compare the text Citry writes, not what a `str` subclass key
+        # answers from `lower()` or `__eq__`.
+        if attr_name_text(key).lower() == "formaction" and value is not None and not isinstance(value, bool):
             # Read the value as Citry writes it: str() would keep a Markup
             # value's character references undecoded, while Citry decodes
             # them in the attribute.
@@ -78,7 +86,7 @@ def _check_formaction(attrs: Mapping[str, object] | None) -> None:
 def _pop_case_insensitive(attrs: dict[str, object], name: str) -> object | None:
     value: object | None = None
     for authored_name in tuple(attrs):
-        if authored_name.lower() == name:
+        if attr_name_text(authored_name).lower() == name:
             value = attrs.pop(authored_name)
     return value
 
@@ -86,9 +94,24 @@ def _pop_case_insensitive(attrs: dict[str, object], name: str) -> object | None:
 def _get_case_insensitive(attrs: Mapping[str, object] | None, name: str) -> object | None:
     value: object | None = None
     for authored_name, authored_value in (attrs or {}).items():
-        if authored_name.lower() == name:
+        if attr_name_text(authored_name).lower() == name:
             value = authored_value
     return value
+
+
+def _client_attribute_value(value: object) -> str | None:
+    """Return the text the browser reads from `value` once the server writes it into an attribute."""
+    # `None` and `False` write no attribute. The Button renders through Vue,
+    # which writes `True` on a non-boolean attribute such as `tabindex` as
+    # the text `true`, so the browser data says the same.
+    if value is None or value is False:
+        return None
+    if value is True:
+        return "true"
+    # `attribute_text` decodes a `Markup` value's character references and
+    # always returns a plain `str`, so the browser data matches the server
+    # HTML and never holds a `str` subclass that cannot be sent as JSON.
+    return attribute_text(value)
 
 
 def _build_button_snapshot(component: Any, kwargs: Any) -> dict[str, Any]:
@@ -243,9 +266,11 @@ class CButton(LibraryComponent):
     ) -> dict[str, object]:
         return {
             # The browser runtime writes this back into the link, so it gets
-            # the same check as the server-rendered href.
-            "href": None if kwargs.href is None else check_link_url("CButton href", kwargs.href),
-            "tabIndex": _get_case_insensitive(kwargs.attrs, "tabindex"),
+            # the same check as the server-rendered href, and the same text.
+            "href": (
+                None if kwargs.href is None else _client_attribute_value(check_link_url("CButton href", kwargs.href))
+            ),
+            "tabIndex": _client_attribute_value(_get_case_insensitive(kwargs.attrs, "tabindex")),
             "serverDefaults": {
                 "disabled": kwargs.disabled,
                 "loading": kwargs.loading,

@@ -16,6 +16,7 @@ from citry_ui.components._anchored_layer import ANCHORED_LAYER_RUNTIME_DEPENDENC
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
+    attr_name_text,
     citry_ui_owned_value,
     is_vue_directive_attribute,
     merge_root_attrs,
@@ -368,7 +369,7 @@ def _copy_attrs(
     for key, attr_value in copied.items():
         if not isinstance(key, str):
             raise TypeError(f"CCommandPalette {destination} requires string attribute names.")
-        normalized = key.casefold()
+        normalized = attr_name_text(key).casefold()
         if normalized in seen:
             raise ValueError(f"CCommandPalette {destination} cannot contain duplicate case variants.")
         seen.add(normalized)

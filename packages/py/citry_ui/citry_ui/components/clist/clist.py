@@ -12,6 +12,7 @@ from citry_ui.components._attrs import (
     CStyleValue,
     merge_root_attrs,
     reject_citry_ui_reserved_attr,
+    reject_data_item_vue_name,
     reject_vue_directive_attrs,
 )
 from citry_ui.components._url import check_link_url
@@ -125,7 +126,13 @@ def _choice(component: str, name: str, value: object, allowed: tuple[str, ...]) 
     return plain
 
 
-def _attrs(component: str, value: Mapping[str, object] | None, owned: frozenset[str]) -> dict[str, object]:
+def _attrs(
+    component: str,
+    value: Mapping[str, object] | None,
+    owned: frozenset[str],
+    *,
+    refuse_vue_names: bool = False,
+) -> dict[str, object]:
     if value is not None and not isinstance(value, Mapping):
         raise TypeError(f"{component} attrs must be a mapping or None, got {value!r}.")
     copied = dict(value or {})
@@ -135,6 +142,10 @@ def _attrs(component: str, value: Mapping[str, object] | None, owned: frozenset[
     reject_vue_directive_attrs(copied, component)
     for key, attr_value in copied.items():
         reject_citry_ui_reserved_attr(key, attr_value, where=f"{component} attrs")
+        # Vue reads `is` and `key` on an element itself, so every list item
+        # refuses both names, as data items do.
+        if refuse_vue_names:
+            reject_data_item_vue_name(key, where=f"{component} attrs")
     return copied
 
 
@@ -274,8 +285,12 @@ class CListItem(LibraryComponent):
             "has_start": "start" in self.raw_slots,
             "has_description": "description" in self.raw_slots,
             "has_end": "end" in self.raw_slots,
-            "attrs": merge_root_attrs(_attrs("CListItem", kwargs.attrs, _ITEM_OWNED), kwargs.class_, kwargs.style),
-            "surface_attrs": _attrs("CListItem surface", kwargs.surface_attrs, _SURFACE_OWNED),
+            "attrs": merge_root_attrs(
+                _attrs("CListItem", kwargs.attrs, _ITEM_OWNED, refuse_vue_names=True),
+                kwargs.class_,
+                kwargs.style,
+            ),
+            "surface_attrs": _attrs("CListItem surface", kwargs.surface_attrs, _SURFACE_OWNED, refuse_vue_names=True),
         }
 
     template = """

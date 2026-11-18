@@ -11,6 +11,7 @@ from citry import LibraryComponent, SlotInput, merge_attrs
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
+    attr_name_text,
     is_vue_directive_attribute,
     merge_root_attrs,
     reject_citry_ui_reserved_attr,
@@ -324,7 +325,7 @@ def _editor_attrs(column: CDataGridColumn) -> dict[str, str | int | float | bool
     allowed = _EDITOR_ATTRS[column.editor]
     for key, raw in dict(value or {}).items():
         reject_citry_ui_reserved_attr(key, raw, where=f"CDataGrid column {column.key!r} editor_attrs")
-        if not isinstance(key, str) or key.casefold() not in allowed:
+        if not isinstance(key, str) or attr_name_text(key).casefold() not in allowed:
             raise ValueError(
                 f"CDataGrid column {column.key!r} editor_attrs cannot contain {key!r} for editor={column.editor!r}."
             )
@@ -334,7 +335,7 @@ def _editor_attrs(column: CDataGridColumn) -> dict[str, str | int | float | bool
             )
         if isinstance(raw, float) and not math.isfinite(raw):
             raise ValueError(f"CDataGrid column {column.key!r} editor_attrs[{key!r}] must be finite.")
-        copied[key.casefold()] = raw
+        copied[attr_name_text(key).casefold()] = raw
     return copied
 
 

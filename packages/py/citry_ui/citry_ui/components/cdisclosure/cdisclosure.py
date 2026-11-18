@@ -14,6 +14,7 @@ from citry_ui.components._anchored_layer import (
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
+    attr_name_text,
     html_attr_binding_target,
     is_vue_directive_attribute,
     merge_root_attrs,
@@ -339,7 +340,7 @@ def _validate_attrs(input_name: str, attrs: dict[str, object], owned: frozenset[
         if not isinstance(key, str):
             msg = f"{owner} requires string keys, got {key!r}."
             raise TypeError(msg)
-        normalized = key.casefold()
+        normalized = attr_name_text(key).casefold()
         reject_citry_ui_reserved_attr(key, attr_value, where=owner)
         # A Vue directive could rebind an owned attribute, change the part's
         # structure, or add a listener, so Python data cannot carry it.

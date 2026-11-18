@@ -315,3 +315,14 @@ def test_messages_are_final_component_member_and_cover_browser_outputs():
     members = list(CTransferList.__dict__)
     assert members.index("messages") > members.index("css_file")
     assert "messages" not in CTransferListItem.__dict__
+
+
+def test_count_label_fills_placeholders_as_plain_text():
+    # The browser code fills the label by replacing `{selected}` and
+    # `{total}` as text, so the server does the same: a format spec, or a
+    # literal `{{x}}`, stays in the label as typed rather than padding the count.
+    html = _render(
+        '<c-CTransferList count_label="{selected}/{total} {total:>9} {{x}}">'
+        '<c-CTransferListItem value="a" label="A" /></c-CTransferList>'
+    )
+    assert "0/1 {total:&gt;9} {{x}}" in html

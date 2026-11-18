@@ -11,6 +11,7 @@ from citry_ui.components._anchored_layer import ANCHORED_LAYER_RUNTIME_DEPENDENC
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
+    attr_name_text,
     merge_root_attrs,
     reject_citry_ui_reserved_attr,
     reject_vue_directive_attrs,
@@ -277,7 +278,7 @@ def _copy_destination_attrs(
         if not isinstance(key, str):
             msg = f"CSplitButton {input_name} requires string keys, got {key!r}."
             raise TypeError(msg)
-        normalized = key.casefold()
+        normalized = attr_name_text(key).casefold()
         if normalized in seen:
             msg = f"CSplitButton {input_name} cannot contain duplicate case variants of {key!r}."
             raise ValueError(msg)

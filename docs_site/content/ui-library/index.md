@@ -45,10 +45,11 @@ These inputs need checks of your own:
 
 - Build attribute maps (`attrs=` and the other `*_attrs=` arguments)
   in your own code. Citry UI raises `ValueError` for a key such as
-  `onclick`, a key the component sets itself, or a key that starts
-  with `data-citry-`, `data-cui-`, `data-cev` or `data-cid`. Citry's
-  browser code finds its elements by those names, so a key from
-  request data could make it act on the element. Citry UI does not
+  `onclick`, a key the component sets itself, `is` or `key`, or a key
+  that starts with `data-citry-`, `data-cui-`, `data-cev` or
+  `data-cid`. Citry's browser code finds its elements by those names,
+  and `is` and `key` change which element is rendered, so a key from
+  request data could make the page act differently. Citry UI does not
   check what the other names mean. Choose the values of these keys
   in your own code too, because each one makes the browser act:
     - a URL, such as `formaction`, `href`, or `src`, which Citry UI

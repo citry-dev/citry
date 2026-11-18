@@ -14,7 +14,7 @@ from citry_ui.components._attrs import (
     reject_citry_ui_reserved_attr,
     reject_vue_directive_attrs,
 )
-from citry_ui.components._i18n import uses_catalog_default
+from citry_ui.components._i18n import fill_label, uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_html_id
 
 CFormCollectionSize = Literal["sm", "md", "lg"]
@@ -654,9 +654,9 @@ class CInternalFormCollectionItem(LibraryComponent):
             "remove_value": declaration.remove_value or f"remove:{declaration.value}",
             "move_up_value": declaration.move_up_value or f"move-up:{declaration.value}",
             "move_down_value": declaration.move_down_value or f"move-down:{declaration.value}",
-            "remove_label": kwargs.labels["remove"].format(item=declaration.label),
-            "move_up_label": kwargs.labels["move_up"].format(item=declaration.label),
-            "move_down_label": kwargs.labels["move_down"].format(item=declaration.label),
+            "remove_label": fill_label(kwargs.labels["remove"], item=declaration.label),
+            "move_up_label": fill_label(kwargs.labels["move_up"], item=declaration.label),
+            "move_down_label": fill_label(kwargs.labels["move_down"], item=declaration.label),
             "catalog_remove": kwargs.catalog["remove"],
             "catalog_up": kwargs.catalog["move_up"],
             "catalog_down": kwargs.catalog["move_down"],

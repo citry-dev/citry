@@ -176,10 +176,10 @@ def test_data_item_attrs_refuse_names_vue_reads(
     app: Citry, case: str, name: str, value: str, *, interactive: bool
 ) -> None:
     """A data item's `attrs` cannot set `is` or `key`, whatever the letter case and the value."""
-    # The editor map takes a short list of input attributes, so it refuses
-    # these names with its own message; every other map uses the shared one.
-    message = "cannot contain" if case == "CDataGridColumn.editor_attrs" else "reserved in a data item's attrs"
-    with pytest.raises(ValueError, match=f"{name!r}.*{message}|{message}.*{name!r}|{name!r}. {message}"):
+    # Every map, the editor map included, runs the shared reserved-name check
+    # first, so every case gets the shared message.
+    message = "'is' and 'key' are reserved"
+    with pytest.raises(ValueError, match=f"{name!r}. {message}"):
         _render(app, case, {name: value}, interactive=interactive)
 
 
@@ -190,7 +190,7 @@ def test_data_item_attrs_refuse_names_vue_reads(
 @pytest.mark.parametrize("value", ["svg", "math", "mglyph", "malignmark", "vue:svg", "div", "", None, False])
 def test_every_spelling_and_value_is_refused(app: Citry, name: str, value: object) -> None:
     """The check reads only the name, so no letter case and no value gets through, also `None` or `False`."""
-    with pytest.raises(ValueError, match="reserved in a data item's attrs"):
+    with pytest.raises(ValueError, match="'is' and 'key' are reserved"):
         _render(app, "CDataGridRow.attrs", {name: value})
 
 
@@ -203,7 +203,7 @@ def test_str_subclass_name_cannot_hide_is() -> None:
         def translate(self, table: object) -> str:
             return "title"
 
-    with pytest.raises(ValueError, match="reserved in a data item's attrs"):
+    with pytest.raises(ValueError, match="'is' and 'key' are reserved"):
         reject_data_item_vue_name(Disguised("is"), where="CTable row 'r' attrs")
 
 

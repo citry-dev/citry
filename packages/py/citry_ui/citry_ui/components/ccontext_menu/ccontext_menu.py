@@ -11,6 +11,7 @@ from citry_ui.components._anchored_layer import ANCHORED_LAYER_RUNTIME_DEPENDENC
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
+    attr_name_text,
     citry_ui_owned_value,
     is_vue_directive_attribute,
     merge_root_attrs,
@@ -147,7 +148,7 @@ def _copy_attrs(
         if not isinstance(key, str):
             msg = f"CContextMenu {input_name} requires string keys, got {key!r}."
             raise TypeError(msg)
-        normalized = key.casefold()
+        normalized = attr_name_text(key).casefold()
         if normalized in seen:
             msg = f"CContextMenu {input_name} cannot contain duplicate case variants of {key!r}."
             raise ValueError(msg)

@@ -12,6 +12,7 @@ from citry_ui.components._attrs import (
     CStyleValue,
     merge_root_attrs,
     reject_citry_ui_reserved_attr,
+    reject_data_item_vue_name,
     reject_vue_directive_attrs,
 )
 from citry_ui.components._validation import reject_owned_attrs
@@ -147,6 +148,8 @@ def _attrs(
     owned: frozenset[str],
     class_: CClassValue | None,
     style: CStyleValue | None,
+    *,
+    refuse_vue_names: bool = False,
 ) -> dict[str, object]:
     if attrs is not None and not isinstance(attrs, Mapping):
         raise TypeError(f"{owner} attrs must be a mapping or None, got {attrs!r}.")
@@ -157,6 +160,10 @@ def _attrs(
     reject_vue_directive_attrs(copied, owner)
     for key, attr_value in copied.items():
         reject_citry_ui_reserved_attr(key, attr_value, where=f"{owner} attrs")
+        # Vue reads `is` and `key` on an element itself, so every list item
+        # refuses both names, as data items do.
+        if refuse_vue_names:
+            reject_data_item_vue_name(key, where=f"{owner} attrs")
     return merge_root_attrs(copied, class_, style)
 
 
@@ -252,7 +259,9 @@ class CTimelineItem(LibraryComponent):
             _TimelineDeclaration(
                 state=_choice("CTimelineItem state", kwargs.state, _STATES),
                 side=_choice("CTimelineItem side", kwargs.side, _ITEM_SIDES),
-                attrs=_attrs("CTimelineItem", kwargs.attrs, _ITEM_OWNED, kwargs.class_, kwargs.style),
+                attrs=_attrs(
+                    "CTimelineItem", kwargs.attrs, _ITEM_OWNED, kwargs.class_, kwargs.style, refuse_vue_names=True
+                ),
                 content=cast("Slot[CTimelineItemDefaultSlotData]", slots.default),
                 opposite=cast("Slot[CTimelineItemOppositeSlotData] | None", slots.opposite),
                 indicator=cast("Slot[CTimelineItemIndicatorSlotData] | None", slots.indicator),
