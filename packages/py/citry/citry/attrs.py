@@ -923,9 +923,12 @@ def format_attrs(attrs: Mapping[str, Any]) -> Markup:
       HTML to the text a browser would read, so a ``"`` in it cannot end
       the attribute.
 
-    Each name is checked to be well formed, but names that ``c-bind``
-    refuses, such as ``onclick`` or ``srcdoc``, are not refused here.
-    Choose the names in your own code; never use keys from request data.
+    Each name is checked to be well formed. Names that ``c-bind`` refuses
+    are still accepted here: ``onclick`` and other handlers, ``srcdoc`` and
+    other names whose value the browser reads as markup, and the names
+    Citry uses to find its own elements (``c-render-id``, ``data-cid-*``,
+    ``data-ccss-*``). Choose the names in your own code; never use keys
+    from request data.
 
     Example::
 

@@ -220,8 +220,42 @@ class Events:
         return actions.Redirect(target)
 ```
 
-Outside Django, follow the cases Django's function rejects when you write
-your own check. Citry plans a built-in check
+In a Flask or FastAPI app, install the `django` package and call the
+same function. It needs no Django settings. Pass the host names your
+site serves:
+
+```python
+from django.utils.http import (
+    url_has_allowed_host_and_scheme,
+)
+
+is_safe = url_has_allowed_host_and_scheme(
+    data.next,
+    allowed_hosts={"shop.example"},
+    require_https=True,
+)
+target = data.next if is_safe else "/"
+```
+
+`actions.Redirect` raises `ValueError` for a URL with a control
+character, such as a tab, even when Django's function accepts it. The
+call then fails instead of redirecting, which is safe.
+
+If you write your own check, do what Django's function does: check the
+URL twice, once as written and once with every `\` changed to `/`, and
+refuse it when either reading leaves your site. A check that only reads
+`urllib.parse.urlsplit(url).hostname`, and accepts an empty host name or
+your own, lets these through:
+
+- `https://other.example\@shop.example/`: Python sees `shop.example`,
+  browsers go to `other.example`;
+- `https:\\other.example/` and `/\/other.example/`: Python sees no host
+  name, browsers go to `other.example`;
+- `https:other.example/`, `https:/other.example/`, and
+  `///other.example/`: Python sees no host name, and browsers can go to
+  `other.example`.
+
+Citry plans a built-in check
 ([#568](https://github.com/citry-dev/citry/issues/568)).
 
 ## Check URL attributes { #check-url-attributes }
@@ -289,6 +323,15 @@ origin, and event calls sent by the built-in transport do not follow HTTP
 redirects. See
 [`Citry.configure`](/reference/browser-apis/#citry-configure).
 
+### Block page framing
+
+These checks do not stop clickjacking: another site shows your page in
+a hidden frame and gets the visitor to click a button in it. The click
+is a real call from your own page, so every check above passes. Django's
+`XFrameOptionsMiddleware`, which new Django projects enable, sends
+`X-Frame-Options: DENY`. On other frameworks, send this header from your
+app or proxy: `Content-Security-Policy: frame-ancestors 'self'`.
+
 ### Use Django's token { #use-djangos-token }
 
 Django's `CsrfViewMiddleware` checks Citry's routes like any other view, so
@@ -346,6 +389,16 @@ token is part of the rendered HTML, and Django gives a different token
 string on every request. Keep the hidden input in a part of the page that
 is not cached; see
 [Protect private output](/performance/caching/#protect-private-output).
+
+On a site served only over HTTPS, you can name the cookie
+`__Host-csrftoken`. A browser accepts a cookie with that prefix only
+when it has the `Secure` flag, `Path=/`, and no `Domain`, so only your
+exact host can set it. In Django's settings, set
+`CSRF_COOKIE_NAME = "__Host-csrftoken"` and `CSRF_COOKIE_SECURE = True`,
+and leave `CSRF_COOKIE_DOMAIN` unset and `CSRF_COOKIE_PATH` at `/`. Then
+call [`Citry.configure`](/reference/browser-apis/#citry-configure) with
+`{csrf: {cookie: "__Host-csrftoken"}}`. Without that call, event calls
+send no token and Django refuses them with a 403.
 
 ### Tokens inside forms { #csrf-tokens-in-forms }
 
@@ -420,12 +473,20 @@ Citry.configure({
 makes still run, and so does your framework's own CSRF protection: it does
 not exempt a Django route from `CsrfViewMiddleware`.
 
-### `GET` handlers skip CSRF
+### Keep `GET`, `HEAD` read-only { #get-handlers-skip-csrf }
 
 `GET` event handlers skip every CSRF check, because a `GET` must only read
 data. Citry makes sure the call uses the declared HTTP method, but it cannot
 tell whether your Python code changes anything. Declare a handler as `GET`
 only when calling it twice has the same effect as calling it once.
+
+`HEAD` and `OPTIONS` are read-only methods in HTTP too, and Django's
+CSRF token check skips both. Citry still runs the checks in
+[What Citry always checks](#what-citry-always-checks) and any `_csrf`
+function you set. Accept `HEAD` or `OPTIONS` only on a handler that
+changes nothing, whether you list it in `@event(methods=...)` or write a
+`head` or `options` method on a
+[`ViewEvents`][citry.ext.events.ViewEvents] class.
 
 ## Limit request sizes { #limit-event-request-sizes }
 
@@ -859,6 +920,16 @@ recursive class ([nesting limit](#check-event-data)).
 Events needs Pydantic 2.13.0 or newer for a Pydantic v2 `data` or State
 class, including one used inside a plain `data` class. On an older
 Pydantic, defining the component raises `RuntimeError`.
+
+A Pydantic model `data` class accepts what Pydantic accepts, which is
+more than a plain class or a dataclass accepts: `"5"` and `true` pass
+for an `int` field, and a field the model does not declare is dropped
+without an error. To refuse unknown fields, set `extra="forbid"` in the
+model's `model_config`, or in the base class's for a
+[`model_base`](/concepts/inputs-and-validation/#model-base).
+`strict=True` also refuses the text a plain form sends for a number, so
+it breaks form posts. Use a dataclass or a plain class when you need
+the stricter check.
 
 Citry checks a Pydantic v2 class with the same rules as the class,
 apart from the limits on this page. A few things differ:

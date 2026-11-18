@@ -189,8 +189,12 @@ It follows the same rules as attributes in a template:
 
 One rule differs from `c-bind`: `format_attrs()` accepts names such as
 `onclick`, `innerHTML`, and `srcdoc`, whose values the browser runs or
-reads as markup. Choose the names in your own code, never from request
-data (a query parameter, form field, or header).
+reads as markup. It also accepts the names Citry uses to find its own
+elements, such as `c-render-id`, `data-cid-*`, and `data-ccss-*`, which
+can make Citry copy another component's HTML into the page (see
+[Names Citry reserves](#names-citry-reserves)). Choose the names in your
+own code, never from request data (a query parameter, form field, or
+header).
 
 When Vue renders an interactive component, a `True` value on an attribute
 that is not a boolean HTML attribute renders as `data-open="true"` rather
