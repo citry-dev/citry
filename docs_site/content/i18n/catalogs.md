@@ -72,8 +72,9 @@ refuses a package that has no `_compiled` files. See
 
 Treat catalog files like source code: your team and your translators
 write them. Never generate them from request data or from text a site
-visitor saved; pass a visitor's values as variables, as
-[Add messages](/i18n/messages/#add-messages) shows.
+visitor saved. Request data is anything a visitor sends, such as a query
+parameter, form field, or header. Pass a visitor's values as variables
+instead, as [Add messages](/i18n/messages/#add-messages) shows.
 
 Write each message's `@param` comments only in the source locale:
 

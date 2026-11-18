@@ -106,10 +106,11 @@ class Heading(Component):
 ```
 
 Attributes follow the same rules as on a tag you write by hand: `class` and
-`style` values are combined into one string, a `False` or `None` value leaves the attribute out,
-and values are escaped unless they provide trusted HTML through
-`__html__()`. The one difference is an inline event handler, which a
-`<c-element>` with `c-is` or `c-bind` refuses (see
+`style` values are combined into one string, a `False` or `None` value
+leaves the attribute out, and values are escaped unless they provide
+trusted HTML through `__html__()`. The main difference is that a
+`<c-element>` with `c-is` or [`c-bind`](/syntax/attributes/#c-bind-spread)
+raises `ValueError` for some attribute names, such as `onclick` (see
 [`<c-element>` limits](#c-element-limits)).
 
 If the tag never changes, write it directly. `<h2>` is clearer than
@@ -180,7 +181,7 @@ such as `clipPath` work. Any other value raises `ValueError`.
 Void elements are recognized in any letter case, so `BR` renders compact
 `<BR/>` and rejects a body, just like `br`.
 
-### Refused tags
+### Tags `<c-element>` refuses { #refused-tags }
 
 A `<c-element>` that has `c-is` or `c-bind` will not render a tag the
 browser handles in a special way, in any letter case. It raises
@@ -205,16 +206,18 @@ there. The body may then hold text, `{{ }}` values, nested `<c-element>`
 tags, and elements written in the template, with `c-if` or `c-for`
 around them. Citry raises `ValueError` for a `Markup` value that holds a
 tag, and for a `<c-raw>` block, a child component, a `<c-slot>`, or a
-`<script>` element in the body. When the body needs one of these, write the `<svg>` or `<math>` element directly in the template,
-for example in a `c-if` branch. The same rule applies to the MathML tags
+`<script>` element in the body. When the body needs one of these, write
+the `<svg>` or `<math>` element directly in the template, for example in
+a `c-if` branch. The same rule applies to the MathML tags
 `mglyph` and `malignmark`: inside `<mi>` or `<mtext>` they make the
 browser read their contents as MathML again.
 
 A `<c-element>` can render `textarea` and `title`. The browser shows any
 tag inside them as text, and Citry escapes your values. In a component
-without Vue (no `js` and no server events), a tag inside shows as literal
-text. In an interactive component, put only text inside: a tag, a child
-component, `<c-raw>`, or a `Markup` value there raises `TypeError`,
+without Vue (none of the things in
+[When Vue turns on](/vue/#when-vue-turns-on)), a tag inside shows as
+literal text. In an interactive component, put only text inside: a tag, a
+child component, `<c-raw>`, or a `Markup` value there raises `TypeError`,
 because Vue would create real elements and the page would change once Vue
 starts. A `title` inside `<svg>` or `<math>` is SVG's or MathML's own
 element and can hold child elements.
@@ -232,17 +235,18 @@ lowercase.
 ### `<c-element>` limits
 
 - A void element such as `br` or `img` cannot have a body.
-- A `<c-element>` that has `c-is` or `c-bind` refuses an inline event
-  handler: an attribute that starts with `on`, or `innerHTML`,
-  `outerHTML`, or `srcdoc`. It refuses one you wrote in the template as
-  well as one passed in as data, because it cannot tell them apart. Use a
-  Vue `@click` in a component with `js`, or write a plain tag in a `c-if`
-  branch. A plain `<c-element is="div" onclick="...">` with no `c-bind`
-  makes an ordinary element, so it works.
-- It also refuses `ref_for`, `ref_key`, `c-ref`, and a `ref` passed in as
-  data. In a component with `js`, Vue stores the element in the
-  component value with that name. A `ref="name"` you write in the
-  template works.
+- A `<c-element>` that has `c-is` or `c-bind` refuses a name that starts
+  with `on`, such as `onclick`, and the names `innerHTML`, `outerHTML`,
+  and `srcdoc`. It raises `ValueError`, whether you wrote the name in the
+  template or passed it in as data, because it cannot tell them apart.
+  Use `@click` (Citry then adds Vue to the page; see
+  [When Vue turns on](/vue/#when-vue-turns-on)), or write a plain tag in
+  a `c-if` branch. A `<c-element is="div" onclick="...">` with no
+  `c-bind` makes an ordinary element, so it works.
+- A `<c-element>` that has `c-is` or `c-bind` also refuses `ref_for`,
+  `ref_key`, `c-ref`, and a `ref` passed in as data. In a component with
+  its own JavaScript (`js`), Vue stores the element in the component's
+  own value of that name. A `ref="name"` you write in the template works.
 - A `<c-element>` that has `c-is` or `c-bind` also refuses the names
   Citry reserves for its own use, such as `c-render-id`, `data-cid-*`,
   and `data-citry-key`, whether you wrote them or passed them in. It
