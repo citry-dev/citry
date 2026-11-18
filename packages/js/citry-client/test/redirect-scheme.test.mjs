@@ -62,10 +62,16 @@ const realm = (value) => {
   return vm.runInNewContext("JSON.parse(__json)", context);
 };
 
+// A refused redirect rejects the `applyActions` Promise, so its message is collected from the
+// rejection, next to anything the runtime logs.
 async function redirect(url) {
   assigned.length = 0;
   errors.length = 0;
-  await context.Citry.events.applyActions(realm([{ action: "redirect", url }]));
+  try {
+    await context.Citry.events.applyActions(realm([{ action: "redirect", url }]));
+  } catch (error) {
+    errors.push(error.message);
+  }
 }
 
 // Escapes, so that no control character sits in the source file.
@@ -89,6 +95,42 @@ for (const [name, url] of Object.entries(REFUSED)) {
     assert.match(errors[0], /^\[Citry\] refused a redirect to a URL with the "[a-z]+" scheme/);
   });
 }
+
+test("a refused redirect rejects the applyActions Promise and logs nothing", async () => {
+  assigned.length = 0;
+  errors.length = 0;
+  await assert.rejects(
+    context.Citry.events.applyActions(realm([{ action: "redirect", url: "javascript:void 0" }])),
+    /refused a redirect to a URL with the "javascript" scheme/,
+  );
+  assert.deepEqual(assigned, []);
+  assert.deepEqual(errors, [], "the caller gets the error, so the console stays quiet");
+  // A URL that leaves the page's origin rejects too, with the resolver's own message.
+  const saved = { ...context.location };
+  Object.assign(context.location, { href: "about:srcdoc" });
+  context.origin = "http://app.test";
+  try {
+    await assert.rejects(
+      context.Citry.events.applyActions(realm([{ action: "redirect", url: "next" }])),
+      /does not resolve to this page's origin/,
+    );
+  } finally {
+    Object.assign(context.location, saved);
+    delete context.origin;
+  }
+  assert.deepEqual(assigned, []);
+});
+
+test("a refused redirect marked wait: false is logged and the applyActions Promise resolves", async () => {
+  assigned.length = 0;
+  errors.length = 0;
+  await context.Citry.events.applyActions(realm([{ action: "redirect", url: "javascript:void 0", wait: false }]));
+  // The action runs without holding up the call, so its failure arrives after the Promise settles.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(assigned, []);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /refused a redirect to a URL with the "javascript" scheme/);
+});
 
 // Each URL and the address the page goes to: relative ones resolve against the page's own
 // address, as the browser would without a `<base>` element and as the no-JavaScript form path does.
@@ -141,7 +183,10 @@ test("a redirect whose URL is not a string is refused with its own message", asy
       errors.length = 0;
       const actions = vm.runInNewContext("[{action: 'redirect', url: undefined}]", context);
       actions[0].url = url;
-      await context.Citry.events.applyActions(actions);
+      await assert.rejects(context.Citry.events.applyActions(actions), (error) => {
+        errors.push(error.message);
+        return true;
+      });
       assert.deepEqual(assigned, [], `url ${String(url)}`);
       assert.deepEqual(errors, ["[Citry] refused a redirect because its URL is not a string."], `url ${String(url)}`);
     }

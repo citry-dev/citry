@@ -297,7 +297,11 @@ home page, with no warning.
 
 If a redirect with another scheme reaches the browser another way, such
 as through browser code you wrote that calls `Citry.events.applyActions()`,
-the browser logs an error and stays on the page.
+the browser stays on the page and the call fails: the Promise that
+`applyActions()` returns rejects with an error that says why. A redirect
+action marked `wait: false` does not hold up the call, so its error
+cannot reach the Promise: Citry logs it to the console and the Promise
+resolves.
 
 ## `PushUrl`, `ReplaceUrl` { #change-the-url }
 
