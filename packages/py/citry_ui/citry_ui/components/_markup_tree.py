@@ -10,6 +10,11 @@ MathML, where a browser reads it as elements, and it reports end tags that
 a browser ignores, such as ``</link>``. ``MarkupTreeParser`` follows the
 browser's rules for these and tells the check when an element opens and
 when it closes.
+
+Citry keeps a copy of this parser in
+``packages/py/citry/citry/util/_markup_tree.py`` for its own checks, because
+``citry`` does not import ``citry_ui``. When you change how one copy reads
+HTML, make the same change in the other.
 """
 
 from __future__ import annotations
@@ -254,6 +259,9 @@ _SCOPED_END_TAGS = frozenset(
 _HEADINGS = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
 # End tags a browser reads in the body without closing anything there.
 _IGNORED_END_TAGS = frozenset({"body", "head", "html"})
+# End tags of a table cell or caption and the table parts around it, which
+# close a select opened inside the cell or caption.
+_TABLE_END_TAGS = frozenset({"caption", "table", "tbody", "td", "tfoot", "th", "thead", "tr"})
 
 # Start tags that first close an open ``<p>``, from the HTML standard's rules
 # for start tags "in body".
@@ -347,21 +355,33 @@ class MarkupTreeParser(LongReferenceSafeParser, Generic[T]):
       table cell sits between the end tag and its match. ``</br>`` and a
       ``</p>`` with no open paragraph create an empty element, and
       ``</form>`` closes only the form, leaving the elements inside it open.
-      Inside an open ``<select>``, only the end tags of the select and its
-      options close anything.
+      Inside an open ``<select>``, ``</select>`` closes the select and
+      everything opened inside it, ``</br>`` creates a ``<br>``, ``</p>``
+      closes a paragraph opened inside the select or else creates an empty
+      one, ``</template>`` and the end tag of the table cell or caption
+      around the select (or of its row, section or table) close the select
+      with it, and any other end tag closes only an element opened inside
+      the select.
     - A start tag closes what the browser closes for it: an open ``<p>``
       before ``<div>`` and the other block elements, an open ``<li>``,
       ``<dd>``, ``<dt>``, ``<button>`` or heading before another of its
-      kind, and an open ``<a>`` before a new ``<a>``.
+      kind, an open ``<a>`` before a new ``<a>``, and an open ``<select>``
+      before ``<input>`` or before a nested ``<select>`` tag, which the
+      browser then drops.
     - ``<span/>`` opens a span in HTML; the ``/`` closes an element only in
       SVG and MathML. ``<image>`` in HTML creates an ``<img>``.
 
-    It does not close an ``<option>`` before another or a ``<select>``
-    before a nested one. It does not model the elements a browser moves: content placed before
-    a ``<table>``, or a block element that an end tag such as ``</b>``, or
-    a second ``<a>``, moves out of a formatting element. Those elements stay
-    where they were opened here, which can hide an extra root element from
-    a check that counts roots. ``<noscript>`` content is read as markup,
+    It does not close an ``<option>`` before another or before ``<hr>``.
+    It does not model the elements a browser moves or opens again. A
+    browser moves content placed before a ``<table>`` out in front of it,
+    moves a block element out of a formatting element after an end tag
+    such as ``</b>`` or a second ``<a>``, and opens a formatting element
+    such as ``<b>`` again after ``</div>`` closed it. Outside a select, it
+    also does not close a table cell before ``<td>`` or ``<tr>``, or for
+    ``</td>``, ``</tr>`` or ``</table>`` while another element such as a
+    ``<div>`` is open inside the cell. Here those elements stay where they
+    were opened, which can hide an extra root element from a check that
+    counts roots. ``<noscript>`` content is read as markup,
     as in a browser with scripting off; with scripting on it is text, so a
     check of a region should refuse ``<noscript>`` there.
     """
@@ -474,6 +494,15 @@ class MarkupTreeParser(LongReferenceSafeParser, Generic[T]):
             in_template = self._last("html:template") >= 0
             if tag == "form" and self._form_open and not in_template:
                 return
+            # ``<input>`` and a nested ``<select>`` close an open select
+            # first, and the browser drops the nested ``<select>`` tag, so
+            # content after either one sits outside the select.
+            if tag in {"input", "select"}:
+                select = self._last("html:select")
+                if select >= 0 and select >= self._last("scope"):
+                    self._close_to(select)
+                    if tag == "select":
+                        return
             self._close_for_start_tag(tag)
             if tag == "form" and not in_template:
                 self._form_open = True
@@ -493,7 +522,7 @@ class MarkupTreeParser(LongReferenceSafeParser, Generic[T]):
         if tag == "a":
             # An open ``<a>`` closes before a new one. When a block element
             # was opened inside it, the browser moves that block out instead,
-            # which is not modelled, so the block stays open.
+            # which is not modeled, so the block stays open.
             match = self._last("html:a")
             if (
                 match > max(self._last(f"html:{name}") for name in _FORMATTING_MARKERS)
@@ -576,12 +605,33 @@ class MarkupTreeParser(LongReferenceSafeParser, Generic[T]):
 
     def _html_end(self, tag: str) -> None:
         """Apply the HTML rules for an end tag to the open elements."""
-        # Inside an open ``<select>``, browsers ignore every end tag except
-        # those of the select and its options, so ``</div>`` there leaves the
-        # select and the elements around it open.
+        # Inside an open ``<select>``, an end tag closes only an element
+        # opened inside the select, so ``</div>`` whose ``<div>`` is outside
+        # leaves the select and the elements around it open, apart from
+        # ``</template>`` and the table end tags handled below.
+        # ``</select>`` closes the select and everything opened inside it.
         select = self._last("html:select")
-        if select >= 0 and select >= self._last("scope") and tag not in {"select", "option", "optgroup"}:
-            return
+        if select >= 0 and select >= self._last("scope"):
+            if tag == "select":
+                self._close_to(select)
+                return
+            # ``</br>`` creates a ``<br>`` there too, and a ``</p>`` with no
+            # paragraph opened inside the select creates an empty one inside
+            # it, leaving a paragraph around the select open.
+            if tag == "br":
+                self._start("br", [], self_closing=False)
+                return
+            if tag == "p" and self._last("html:p") < select:
+                self._start("p", [], self_closing=False)
+                self._close_to(len(self.open_elements) - 1)
+                return
+            # ``</template>`` reaches the template rule below, which closes
+            # the template around the select.
+            if self._last(f"html:{tag}") < select and tag != "template":
+                target = self._table_end_target(tag)
+                if target is not None:
+                    self._close_to(target)
+                return
         if tag in VOID_ELEMENTS:
             # The browser ignores a void end tag, except that ``</br>`` creates
             # a ``<br>``.
@@ -630,6 +680,37 @@ class MarkupTreeParser(LongReferenceSafeParser, Generic[T]):
             self._close_to(match)
         elif special < 0:
             self.unmatched_end_tag(tag)
+
+    def _table_end_target(self, tag: str) -> int | None:
+        """
+        Return the position of the open element a table end tag closes from inside a cell or caption.
+
+        A select inside a cell does not hide the cell from ``</td>``, so
+        that end tag, and the end tag of the row, section or table around
+        the cell, close the select along with the cell. ``None`` means the
+        browser ignores the end tag.
+        """
+        if tag not in _TABLE_END_TAGS:
+            return None
+        cell = max(self._last("html:td"), self._last("html:th"), self._last("html:caption"))
+        table = self._last("html:table")
+        template = self._last("html:template")
+        # The cell must belong to the nearest table, with no template
+        # opened between them, or the browser is not reading a cell here.
+        if cell < 0 or cell < table or cell < template:
+            return None
+        cell_tag = self.open_elements[cell].tag
+        if tag == cell_tag:
+            return cell
+        if tag == "table":
+            return table if table > template else None
+        if cell_tag in {"td", "th"} and tag in {"tr", "tbody", "thead", "tfoot"}:
+            # A row or section closes only when it sits inside the nearest
+            # table. An implied ``<tbody>`` is not modeled; the browser then
+            # stays inside the table until ``</table>``, which closes it here too.
+            match = self._last(f"html:{tag}")
+            return match if match > max(table, template) else None
+        return None
 
     def _end_form(self) -> None:
         """Apply ``</form>`` outside a template: the browser removes only the form element."""
