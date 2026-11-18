@@ -1063,10 +1063,16 @@ do. Two things decide how much you can trust a template with:
 - **Formatting methods that follow paths.** A format string such as
   `'{0.name}'` reads attributes by name, and it skips the checks above. So
   `format` and `format_map` are blocked on every kind of string: `str`,
-  subclasses of `str` such as `Markup`, and `collections.UserString`. Every
-  method of a `string.Formatter` is blocked, and so is building an
+  subclasses of `str` such as `Markup`, and `collections.UserString`.
+  Reading the method is blocked as well as calling it. Every method of a
+  `string.Formatter` is blocked, and so is building an
   `operator.attrgetter` or `operator.methodcaller`. Use an f-string
   instead.
+- **Handing a blocked function to another call.** A function such as
+  `list.sort` calls its `key=` argument itself, without the sandbox's
+  checks. So a call is blocked when one of its arguments is a function
+  the sandbox blocks, such as `items.sort(key=obj.delete)` for a method
+  marked `@unsafe`.
 - **Statements.** Assignments, `del`, `import`, `raise`, `assert`,
   `async`/`await`, and `yield` are not expressions.
 - **Names the sandbox uses itself.** The sandbox's own helpers have names
@@ -1133,11 +1139,13 @@ not guaranteed to block every way out:
   allowed until you block it, as shown next.
 - **Helpers that call other functions or look up names from text run
   without the checks.** The sandbox checks the calls and lookups that the
-  expression text writes. A function you put in the context that calls its
-  arguments (`map`, `functools.reduce`, the `key=` argument of `sorted`
-  or `list.sort`) or reads an attribute from a string (a `getattr`-style
-  helper, `inspect`, `importlib`, Django's `format_html`) does that work
-  unchecked. Do not put such helpers in the context.
+  expression text writes. A function you put in the context that calls
+  functions it finds in its arguments (`map`, `functools.reduce`,
+  `sorted`, `operator.call`) or reads an attribute from a string (a
+  `getattr`-style helper, `inspect`, `importlib`, Django's
+  `format_html`) does that work unchecked. The sandbox blocks a blocked
+  function passed straight to a call, but not one inside a list. Do not
+  put such helpers in the context.
 - **Dict keys that start with `_` are not hidden.** `data['_key']` is
   blocked, but `data.get('_key')`, looping over `data`, and
   `'%(_key)s' % data` read the same item.

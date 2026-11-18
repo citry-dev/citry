@@ -8,6 +8,7 @@ from citry_core import _rust
 from citry_core.safe_eval import error as error_module
 from citry_core.safe_eval.error import error_context, format_error_with_context
 from citry_core.safe_eval.sandbox import (
+    find_unsafe_callable_argument,
     is_safe_attribute,
     is_safe_callable,
     is_safe_variable,
@@ -444,6 +445,15 @@ def call(
     is_safe, replacement_message = is_safe_callable(func)
     if not is_safe:
         error_msg = f"function '{func!r}' is unsafe"
+        if replacement_message:
+            error_msg += f". {replacement_message}"
+        raise SecurityError(error_msg)
+    # A function that receives a refused function as an argument, such as `list.sort` with
+    # `key=`, would call it without passing through this check.
+    refused = find_unsafe_callable_argument(args, kwargs)
+    if refused is not None:
+        argument, replacement_message = refused
+        error_msg = f"function '{argument!r}' is unsafe and cannot be passed to '{func!r}'"
         if replacement_message:
             error_msg += f". {replacement_message}"
         raise SecurityError(error_msg)
