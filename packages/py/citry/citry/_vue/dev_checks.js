@@ -41,13 +41,34 @@
   // Any other member the checks read from a node, found on its prototypes so a form field with the
   // same name cannot stand in for it (`<input name="localName">` would otherwise change which tag
   // the form seems to be). A member no prototype defines (a test's plain-object node) is read
-  // directly.
-  const memberOf = (node, key) => {
-    for (let proto = Object.getPrototypeOf(node); proto !== null; proto = Object.getPrototypeOf(proto)) {
-      const descriptor = Object.getOwnPropertyDescriptor(proto, key);
-      if (descriptor !== undefined) return descriptor.get !== undefined ? descriptor.get.call(node) : descriptor.value;
+  // directly. The comparison reads members millions of times on a large page, so the search up the
+  // prototype chain runs once per prototype and member, and its answer is kept for the rest of the
+  // page: a prototype is shared by every node of its kind, and a field's name only ever adds a
+  // property to the form itself, never to a prototype.
+  const memberDescriptors = new WeakMap();
+  const descriptorOf = (proto, key) => {
+    let descriptors = memberDescriptors.get(proto);
+    if (descriptors === undefined) memberDescriptors.set(proto, (descriptors = new Map()));
+    let descriptor = descriptors.get(key);
+    if (descriptor === undefined) {
+      // `null` records "no prototype defines it", so a later miss skips the walk as well.
+      descriptor = null;
+      for (let owner = proto; owner !== null; owner = Object.getPrototypeOf(owner)) {
+        const own = Object.getOwnPropertyDescriptor(owner, key);
+        if (own !== undefined) {
+          descriptor = own;
+          break;
+        }
+      }
+      descriptors.set(key, descriptor);
     }
-    return node[key];
+    return descriptor;
+  };
+  const memberOf = (node, key) => {
+    const proto = Object.getPrototypeOf(node);
+    const descriptor = proto === null ? null : descriptorOf(proto, key);
+    if (descriptor === null) return node[key];
+    return descriptor.get !== undefined ? descriptor.get.call(node) : descriptor.value;
   };
   const getAttributeOf = (element, name) => memberOf(element, "getAttribute").call(element, name);
   const SHELL_SELECTOR = '[data-allow-mismatch="children"]';
@@ -69,8 +90,9 @@
   // component's type key (its class name plus a short code) when the author gave no name.
   const CITRY_NAME_PREFIX = "CitryComponent_";
 
-  const isElement = node => node !== null && typeof node === "object" && memberOf(node, "nodeType") === 1;
-  const isText = node => node !== null && typeof node === "object" && memberOf(node, "nodeType") === 3;
+  const nodeKind = node => (node !== null && typeof node === "object" ? memberOf(node, "nodeType") : 0);
+  const isElement = node => nodeKind(node) === 1;
+  const isText = node => nodeKind(node) === 3;
 
   // Whitespace never decides a difference: the server and Vue condense it the same way, and the
   // browser's parser merges neighboring text nodes that Vue keeps apart.
@@ -97,8 +119,9 @@
     return allowsKind(getAttributeOf(current, ALLOW_ATTRIBUTE), kind);
   };
 
-  const sameTag = (served, browser) =>
-    memberOf(served, "localName") === memberOf(browser, "localName") && memberOf(served, "namespaceURI") === memberOf(browser, "namespaceURI");
+  // An element's tag and namespace as one string, so two elements have the same tag exactly when
+  // these strings are equal.
+  const tagOf = element => memberOf(element, "namespaceURI") + " " + memberOf(element, "localName");
 
   // Group a node list into runs of text that the browser's parser would read as one text node:
   // text nodes with nothing but comments or other text between them. Vue keeps an empty text node
@@ -108,13 +131,16 @@
     const runs = [];
     let current = null;
     for (const node of nodes) {
-      if (isText(node)) {
+      // One read of the node's type serves both tests: this loop runs for every pair the
+      // pairing scores, so it is among the hottest code here.
+      const kind = nodeKind(node);
+      if (kind === 3) {
         if (current === null) {
           current = [];
           runs.push(current);
         }
         if (withoutSpace(node.data)) current.push(node.data);
-      } else if (isElement(node)) {
+      } else if (kind === 1) {
         current = null;
       }
     }
@@ -394,6 +420,10 @@
         budget.left -= rows * columns;
         stopIfSpent();
       }
+      // Each element's tag is read once here: classify compares every served element with every
+      // browser element, and reading the tag from the prototypes for each pair would cost more
+      // than all the other work for a pair whose tags differ.
+      const servedTags = servedElements.map(tagOf), browserTags = browserElements.map(tagOf);
       // Two branches of a browser-only v-if can share a tag and attributes and differ only
       // further down, and the browser's branch must pair with its own served copy, not with the
       // first one. That needs the whole subtree, but only for a tag the served side has more of.
@@ -404,23 +434,18 @@
       // wrong way.
       const extra = new Set();
       const counts = new Map();
-      for (const element of servedElements) {
-        const tag = memberOf(element, "namespaceURI") + " " + memberOf(element, "localName");
-        counts.set(tag, (counts.get(tag) || 0) + 1);
-      }
-      for (const element of browserElements) {
-        const tag = memberOf(element, "namespaceURI") + " " + memberOf(element, "localName");
-        counts.set(tag, (counts.get(tag) || 0) - 1);
-      }
+      for (const tag of servedTags) counts.set(tag, (counts.get(tag) || 0) + 1);
+      for (const tag of browserTags) counts.set(tag, (counts.get(tag) || 0) - 1);
       for (const [tag, count] of counts) if (count > 0) extra.add(tag);
-      const classify = (served, browser) => {
-        if (!sameTag(served, browser)) return UNPAIRED;
+      const classify = (row, column) => {
+        if (servedTags[row] !== browserTags[column]) return UNPAIRED;
+        const served = servedElements[row], browser = browserElements[column];
         // A difference in the pair's own attributes or text is also one in its subtree, and
         // costs far less to find, so only a pair that agrees there may be compared further.
         const shallow = shallowDifference(served, browser, boundary, scoreMeter());
         stopIfSpent();
         if (shallow !== null) return DIFFERS;
-        if (!extra.has(memberOf(served, "namespaceURI") + " " + memberOf(served, "localName")) || budget.left <= 0) return AGREES;
+        if (!extra.has(servedTags[row]) || budget.left <= 0) return AGREES;
         if (subtreeDepth >= MAX_SUBTREE_DEPTH) return AGREES;
         budget.left--;
         const textAgreesHere = textCouldAgree(served, browser);
@@ -431,7 +456,7 @@
         // The own attributes and text agree, which is all a shallow score would read.
         return subtreeDiffers(served, browser, false) ? DIFFERS : AGREES;
       };
-      const kinds = servedElements.map(served => browserElements.map(browser => classify(served, browser)));
+      const kinds = servedTags.map((_, row) => browserTags.map((_, column) => classify(row, column)));
       // Agreeing pairs come first: one counts for more than every differing pair the pairing
       // could hold, so a pairing never gives up an agreeing pair to pair more elements. Among
       // pairings with the most agreeing pairs, a differing pair still beats leaving both
