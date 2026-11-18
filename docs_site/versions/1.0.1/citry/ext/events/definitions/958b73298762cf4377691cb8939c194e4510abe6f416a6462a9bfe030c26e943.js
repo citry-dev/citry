@@ -1,0 +1,102 @@
+(function(Vue){
+const { resolveDirective: _resolveDirective, withDirectives: _withDirectives, toDisplayString: _toDisplayString, createElementVNode: _createElementVNode, mergeProps: _mergeProps, openBlock: _openBlock, createElementBlock: _createElementBlock } = Vue
+
+function render(_ctx, _cache, $props, $setup, $data, $options) {
+  const _directive_citry_vue_owned = _resolveDirective("citry-vue-owned")
+  
+  return (_openBlock(), _createElementBlock("div", _mergeProps({ class: "cui-slider" }, _ctx.$citryPrepared.citryAttrs0), [
+    _createElementVNode("span", _mergeProps({ class: "cui-slider__visually-hidden" }, _ctx.$citryPrepared.citryAttrs1), _toDisplayString(_ctx.$citryPrepared.citryText0), 17 /* TEXT, FULL_PROPS */),
+    _createElementVNode("span", _mergeProps({ class: "cui-slider__visually-hidden" }, _ctx.$citryPrepared.citryAttrs2), _toDisplayString(_ctx.$citryPrepared.citryText1), 17 /* TEXT, FULL_PROPS */),
+    _withDirectives(_createElementVNode("input", _mergeProps({
+      type: "range",
+      "data-citry-ui-part": "native-input"
+    }, _ctx.$citryPrepared.citryAttrs3), null, 16 /* FULL_PROPS */), [
+      [_directive_citry_vue_owned, ['checked','value']]
+    ]),
+    _withDirectives(_createElementVNode("input", _mergeProps({
+      type: "range",
+      "data-thumb": "upper",
+      "data-citry-ui-part": "native-input"
+    }, _ctx.$citryPrepared.citryAttrs4), null, 16 /* FULL_PROPS */), [
+      [_directive_citry_vue_owned, ['checked','value']]
+    ]),
+    _withDirectives(_createElementVNode("input", _mergeProps({
+      type: "hidden",
+      "data-thumb": "single-or-lower",
+      "data-citry-ui-part": "readonly-transport"
+    }, _ctx.$citryPrepared.citryAttrs5), null, 16 /* FULL_PROPS */), [
+      [_directive_citry_vue_owned, 'value']
+    ]),
+    _withDirectives(_createElementVNode("input", _mergeProps({
+      type: "hidden",
+      "data-thumb": "upper",
+      "data-citry-ui-part": "readonly-transport"
+    }, _ctx.$citryPrepared.citryAttrs6), null, 16 /* FULL_PROPS */), [
+      [_directive_citry_vue_owned, 'value']
+    ]),
+    _createElementVNode("div", {
+      hidden: "",
+      "data-citry-ui-part": "control"
+    }, [
+      _createElementVNode("div", { "data-citry-ui-part": "track" }, [
+        _createElementVNode("span", { "data-citry-ui-part": "fill" }),
+        _createElementVNode("button", _mergeProps({
+          type: "button",
+          role: "slider",
+          "data-citry-ui-part": "thumb"
+        }, _ctx.$citryPrepared.citryAttrs7), [
+          _createElementVNode("span", { "data-citry-ui-part": "value" }, _toDisplayString(_ctx.$citryPrepared.citryText2), 1 /* TEXT */)
+        ], 16 /* FULL_PROPS */),
+        _createElementVNode("button", _mergeProps({
+          type: "button",
+          role: "slider",
+          "data-citry-ui-part": "thumb"
+        }, _ctx.$citryPrepared.citryAttrs8), [
+          _createElementVNode("span", { "data-citry-ui-part": "value" }, _toDisplayString(_ctx.$citryPrepared.citryText3), 1 /* TEXT */)
+        ], 16 /* FULL_PROPS */)
+      ])
+    ])
+  ], 16 /* FULL_PROPS */))
+}
+Object.prototype.hasOwnProperty.call(window,"__citryRuntimeDefinitions")||(window.__citryRuntimeDefinitions={});
+window.__citryRuntimeDefinitions["19cdc545c3fc5f164db6ec6c2567de95f5461cd4ebfd1a61b35bd17f56a6ee4f"]={render:render,target:"ordinary-vnodes/1",helperContract:"b103179315e9ac0096610edd010fca48bc708a210cc9a159d35dc92e398a91d5",directiveSignature:[],replacementSites:[],localCallRuns:[],localCalls:[],dynamicElements:[],opaqueHtmlSites:[],runtimeEventSites:[]};
+})(window.__citryRuntime.compilerRuntime.runtimeForDynamicElements([]));
+
+(function(Vue){
+const { resolveComponent: _resolveComponent, toDisplayString: _toDisplayString, createElementVNode: _createElementVNode, openBlock: _openBlock, createElementBlock: _createElementBlock, createBlock: _createBlock } = Vue
+
+function render(_ctx, _cache, $props, $setup, $data, $options) {
+  const _component_citry_c_range_slider_57248115 = _resolveComponent("citry-c-range-slider-57248115")
+  
+  return (_openBlock(), _createElementBlock("section", { class: "slider-example-stack" }, [
+    (_openBlock(), _createBlock(_component_citry_c_range_slider_57248115, {
+      value: _ctx.range,
+      onValueChange: (next)=>_ctx.range=next,
+      "citry-id": _ctx.$citryPrepared.calls.citryCall5fd4aa716da7e74f.id,
+      key: _ctx.$citryPrepared.calls.citryCall5fd4aa716da7e74f.key
+    }, null, 8 /* PROPS */, ["value", "onValueChange", "citry-id"])),
+    _createElementVNode("output", {
+      textContent: _toDisplayString(`Selected ${_ctx.range[0]} through ${_ctx.range[1]}`)
+    }, "Selected 20 through 80", 8 /* PROPS */, ["textContent"])
+  ]))
+}
+Object.prototype.hasOwnProperty.call(window,"__citryRuntimeDefinitions")||(window.__citryRuntimeDefinitions={});
+window.__citryRuntimeDefinitions["7518cb93f5f7b4ebbbd7a404a4a64a403d94f62d2940358121ac9a39feb19fa4"]={render:render,target:"ordinary-vnodes/1",helperContract:"b103179315e9ac0096610edd010fca48bc708a210cc9a159d35dc92e398a91d5",directiveSignature:[],replacementSites:[],localCallRuns:[],localCalls:[{"localId":"citryCall5fd4aa716da7e74f","typeKey":"CRangeSlider_7baa97","componentTag":"citry-c-range-slider-57248115","bindings":[{"kind":"prop","name":":value","value":"range","sourceStart":73,"sourceEnd":87},{"kind":"prop","name":":onValueChange","value":"(next)=>range=next","sourceStart":88,"sourceEnd":123}]}],dynamicElements:[],opaqueHtmlSites:[],runtimeEventSites:[]};
+})(window.__citryRuntime.compilerRuntime.runtimeForDynamicElements([]));
+
+(function(Vue){
+const { resolveComponent: _resolveComponent, openBlock: _openBlock, createElementBlock: _createElementBlock, createBlock: _createBlock } = Vue
+
+function render(_ctx, _cache, $props, $setup, $data, $options) {
+  const _component_citry_controlled_range_slider_6d8101a7 = _resolveComponent("citry-controlled-range-slider-6d8101a7")
+  
+  return (_openBlock(), _createElementBlock("main", null, [
+    (_openBlock(), _createBlock(_component_citry_controlled_range_slider_6d8101a7, {
+      "citry-id": _ctx.$citryPrepared.calls.citryCall1b8807f3cefd85ae.id,
+      key: _ctx.$citryPrepared.calls.citryCall1b8807f3cefd85ae.key
+    }, null, 8 /* PROPS */, ["citry-id"]))
+  ]))
+}
+Object.prototype.hasOwnProperty.call(window,"__citryRuntimeDefinitions")||(window.__citryRuntimeDefinitions={});
+window.__citryRuntimeDefinitions["2d0bc5a276a4483192d94f2e62c2320eeaa0b0d3404559d72f7faa0b129e33f6"]={render:render,target:"ordinary-vnodes/1",helperContract:"b103179315e9ac0096610edd010fca48bc708a210cc9a159d35dc92e398a91d5",directiveSignature:[],replacementSites:[],localCallRuns:[],localCalls:[{"localId":"citryCall1b8807f3cefd85ae","typeKey":"ControlledRangeSlider_44961c","componentTag":"citry-controlled-range-slider-6d8101a7","bindings":[]}],dynamicElements:[],opaqueHtmlSites:[],runtimeEventSites:[]};
+})(window.__citryRuntime.compilerRuntime.runtimeForDynamicElements([]));

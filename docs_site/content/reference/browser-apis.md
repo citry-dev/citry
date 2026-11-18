@@ -521,6 +521,9 @@ Promise. The Promise rejects when:
 - the array is not a valid action list;
 - an action targets a component that is no longer on the page;
 - the actions target components in different Vue apps;
+- a `redirect` action names a URL that Citry refuses to follow, such as
+  one with a scheme other than `http:` or `https:` (for a redirect with
+  `wait: false`, Citry logs the error instead);
 - a `state` action has no `publicState`, the component's public State
   values (this rejects with a `TypeError`).
 

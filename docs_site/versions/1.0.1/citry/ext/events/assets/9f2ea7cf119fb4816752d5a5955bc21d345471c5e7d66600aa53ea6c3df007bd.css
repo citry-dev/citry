@@ -1,0 +1,15 @@
+
+:where(.image-responsive) {
+  display: grid;
+  gap: 1rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+:where(.image-responsive__pair) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+}
+:where(.image-responsive article) { display: grid; gap: 0.5rem; }
+:where(.image-responsive h3, .image-responsive p) { margin: 0; }
+:where(.image-responsive [data-citry-ui-part="image-root"]) { inline-size: 100%; }

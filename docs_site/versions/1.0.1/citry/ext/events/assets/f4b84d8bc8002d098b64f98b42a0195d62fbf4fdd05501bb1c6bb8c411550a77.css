@@ -1,0 +1,9 @@
+
+:where(.archive-submenu-demo) {
+  display: grid;
+  place-items: start center;
+  min-block-size: 22rem;
+  padding-inline: 5rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}

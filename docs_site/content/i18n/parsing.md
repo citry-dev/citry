@@ -72,6 +72,31 @@ locale is invalid.
 With `decimal_or_scientific`, the exponent marker is ASCII `e` or `E`.
 The exponent digits still use the locale's digits.
 
+### Check scientific input
+
+With `decimal_or_scientific`, the exponent can be anywhere from -32767
+to 32767, so a few typed characters can give a `Decimal` with tens of
+thousands of digits. A Python format such as `f"{value:.2f}"` writes
+every one of them, which makes the page, or any text you build from
+it, huge. Check the size before you use the value:
+
+```python
+if not result.valid:
+    show_edit_again(result.input, result.error)
+elif (
+    result.value.adjusted() > 308
+    or result.value.as_tuple().exponent < -308
+):
+    show_edit_again(result.input, "out_of_range")
+else:
+    save_amount(result.value)
+```
+
+`adjusted()` gives the power of ten of the first digit:
+`Decimal("1.5E+7").adjusted()` is `7`. The exponent in `as_tuple()`
+is minus the number of decimal places. The limits of 308 are the ones
+Citry uses for [event data](/security/#check-event-data).
+
 ## Read percentages
 
 `PercentInput` says whether the user types the percent sign:

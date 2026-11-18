@@ -100,3 +100,7 @@ which holds strings, booleans, numbers, and non-empty lists of those.
     Citry's browser code cannot call a handler whose first method is `HEAD`
     or `OPTIONS`; it raises an error before sending. Call such a handler
     from a server-side HTTP client.
+
+    A handler that accepts `HEAD` or `OPTIONS` must only read data, like
+    a `GET` handler, because Django's CSRF token check skips both. See
+    [Keep `GET`, `HEAD` read-only](/security/#get-handlers-skip-csrf).

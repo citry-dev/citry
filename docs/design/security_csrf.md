@@ -292,7 +292,12 @@ gave event calls their own `csrf` setting. Every browser plugin receives a
 `host` object
 from the core runtime. Its `host.csrfHeaders(url)` returns
 `{[header]: token}`, or `{}` when there is no token or when `url` is not on
-the page's origin (including a URL that cannot be parsed). The i18n plugin
+the page's origin (including a URL that cannot be parsed). `url` must be a
+string or a `URL` object from the page's own window. Any other value, such
+as a `Request` or a `URL` created in another frame, returns `{}`, because
+turning it into text would not give the address the request goes to (a
+`Request` becomes `[object Request]`, which reads as a path on the page's
+own origin). The i18n plugin
 adds those headers to its message request. No extension reads another
 extension's browser state.
 

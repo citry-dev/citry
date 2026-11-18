@@ -41,8 +41,9 @@ const STACK_KIB: &str = "CITRY_ATTRIBUTE_RUN_STACK_KIB";
 /// Twice what html5gum 0.8.4 read on an 8 MiB stack in a release build.
 const MANY: usize = 100_000;
 
-/// The smallest default thread stack Python code meets (musl Linux), and
-/// the usual main-thread stack, which runs the work without a new segment.
+/// The smallest default thread stack Python code can meet (a thread that
+/// nobody sized, on musl Linux), and the usual main-thread stack, which runs
+/// the work without a new segment.
 const STACKS_KIB: [usize; 2] = [128, 8 * 1024];
 
 /// One tag with `count` attributes written the way `shape` names.

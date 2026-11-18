@@ -1,0 +1,33 @@
+
+:where(.scroll-area-lifecycle) {
+  display: grid;
+  gap: 1rem;
+  max-inline-size: 40rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.scroll-area-lifecycle__controls) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+:where(.scroll-area-lifecycle p) {
+  margin: 0;
+}
+
+:where(.scroll-area-lifecycle__content) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(16rem, 1fr));
+  gap: 1rem;
+  inline-size: 42rem;
+  min-block-size: 24rem;
+  padding: 1rem;
+}
+
+:where(.scroll-area-lifecycle__content p) {
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, Highlight 10%, Canvas);
+}

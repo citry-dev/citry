@@ -2,6 +2,7 @@ import {
   createI18nRuntimeState,
   createPerAppI18nService,
   createProviderTreeCore,
+  sameJsonContent,
   type CoreProviderNode,
 } from "./citry-i18n-core";
 import {
@@ -256,7 +257,7 @@ interface PluginGlobal extends Window {
       function artifactsAgree(left: MessageRuntime, right: MessageRuntime): boolean {
         for (const [message, entry] of Object.entries(left.artifact.messages)) {
           const other = right.artifact.messages[message];
-          if (other !== undefined && JSON.stringify(entry) !== JSON.stringify(other)) return false;
+          if (other !== undefined && !sameJsonContent(entry, other)) return false;
         }
         return true;
       }
