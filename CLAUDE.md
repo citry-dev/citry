@@ -116,6 +116,15 @@ carries the rules, or the work is done without them.
   the number of changed files, a package version, a tag, or a workflow
   setting you saw earlier may be wrong now. Say so when a fresh check
   contradicts something said earlier.
+- **Start text you post with the name of the model that wrote it.** When you
+  post a comment, open an issue or a pull request, write a review, or post
+  similar text on our GitHub repositories (`citry-dev` and
+  `django-components`), put the model name in parentheses on the first line,
+  such as `(Opus 5.5)`, then a blank line, then the text. Leave the prefix out
+  only when the maintainer tells you to post in their name. Before you post
+  anywhere else, ask whether to post in the maintainer's name (no prefix) or
+  as the agent (with the prefix). Brief subagents that post with the same
+  rule.
 - Do not merge a pull request unless the maintainer explicitly tells you to
   merge it; the maintainer reviews every pull request first. Open it ready
   for review and list it in your report. When the scope of a merge
