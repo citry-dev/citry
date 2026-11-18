@@ -846,6 +846,51 @@ def test_revision_change_during_replay_rolls_back_new_staged_write(monkeypatch) 
     assert app.cache.get("repair:key") is None
 
 
+@pytest.mark.parametrize(
+    ("new_value", "replayed"),
+    [
+        ("cnew~i18n-0", True),
+        ("cnew~i18n-0 not-an-id", False),
+        ("cnew~i18n-0  cnew~i18n-1", False),
+        ("cnew~i18n-x", False),
+    ],
+)
+def test_replay_checks_every_staged_binding_id(monkeypatch, new_value: str, replayed: bool) -> None:
+    app = Citry()
+    calls = 0
+
+    class Card(Component):
+        citry = app
+        template = "<p>card</p>"
+
+        class Cache:
+            enabled = True
+
+        def template_data(self, kwargs, slots):
+            nonlocal calls
+            calls += 1
+            return {}
+
+    render_prepared_direct(Card())
+    old_value = " ".join(f"cold~i18n-{index}" for index in range(len(new_value.split())))
+
+    def stage_replacement(*_args, **_kwargs):
+        return (
+            StagedRenderCacheContribution(
+                text_replacements=(
+                    (f'data-citry-i18n-binding="{old_value}"', f'data-citry-i18n-binding="{new_value}"'),
+                ),
+            ),
+        )
+
+    monkeypatch.setattr(app.extensions, "_stage_render_cache", stage_replacement)
+
+    render_prepared_direct(Card())
+
+    # A refused replacement drops the stored entry and renders the component again.
+    assert calls == (1 if replayed else 2)
+
+
 def test_public_component_cache_honors_ttl_expiry(monkeypatch) -> None:
     now = [100.0]
     monkeypatch.setattr("citry.cache.time.monotonic", lambda: now[0])

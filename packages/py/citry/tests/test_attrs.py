@@ -106,6 +106,24 @@ class TestFormatAttrs:
         assert format_attrs({"style": [style]}) == 'style="content: &#34;&amp;&#34;;"'
         assert format_attrs({"style": {"content": Markup("&lt;")}}) == 'style="content: &lt;;"'
 
+    def test_markup_class_dict_keys_are_decoded_once(self):
+        value = Markup("a&amp;b")
+        assert format_attrs({"class": {value: True}}) == 'class="a&amp;b"'
+        assert format_attrs({"class": [{value: True}, "c"]}) == 'class="a&amp;b c"'
+
+    def test_markup_style_property_names_are_decoded_once(self):
+        assert format_attrs({"style": {Markup("--a&amp;b"): "red"}}) == 'style="--a&amp;b: red;"'
+
+    def test_lazy_translations_work_as_class_names(self):
+        functional = pytest.importorskip("django.utils.functional")
+        name = functional.lazy(lambda: "active", str)()
+        assert format_attrs({"class": name}) == 'class="active"'
+        assert format_attrs({"class": [name, "btn"]}) == 'class="active btn"'
+        assert format_attrs({"class": {name: True, "off": False}}) == 'class="active"'
+        assert format_attrs({"class": ["btn", {name: True}]}) == 'class="btn active"'
+        # A later falsy entry still removes a name an earlier lazy entry added.
+        assert format_attrs({"class": [name, {"active": False}]}) == ""
+
     def test_markup_entities_keep_the_text_they_stand_for(self):
         # Markup's HTML is decoded to what a browser reads, then escaped, so
         # an entity is not escaped a second time.

@@ -44,6 +44,7 @@ from typing import Any, Literal, TypeAlias, cast
 import wrapt
 
 from citry._i18n_directives import looks_like_i18n_binding
+from citry._input_types import _is_django_lazy_text
 from citry.util import html as _html
 from citry.util.html import Markup, decode_attribute_entities, escape_attribute_value, escape_to_str, exact_str
 
@@ -574,6 +575,23 @@ def _attribute_text(value: Any) -> Any:
     return value
 
 
+def _class_piece(value: Any) -> Any:
+    """
+    Turn one piece of a class value into the text it stands for, when it is text.
+
+    A dict key or list item may be ``Markup`` (decoded once, so the writer
+    escapes it once), a ``Const`` marker, or a Django lazy translation, which
+    is not a ``str`` until it is resolved. Any other value is returned as it
+    is, so the caller's type checks still see it.
+    """
+    value = _attribute_text(_underlying(value))
+    if type(value) is not str and _is_django_lazy_text(value):
+        # The translation may resolve to a Django ``SafeString``, which has
+        # ``__html__`` like ``Markup``, so decode it the same way.
+        value = _attribute_text(str(value))
+    return value
+
+
 def normalize_class(value: ClassValue) -> str:
     """
     Turn a structured ``class`` value into a plain class string.
@@ -590,6 +608,9 @@ def normalize_class(value: ClassValue) -> str:
         normalize_class(["btn btn-lg", {"active": True, "hidden": False}])
         # -> "btn btn-lg active"
     """
+    # A lazy translation is not a str, so resolve it before the str check below.
+    if _is_django_lazy_text(value):
+        value = _class_piece(value)
     if isinstance(value, str):
         return value.strip()
 
@@ -598,7 +619,8 @@ def normalize_class(value: ClassValue) -> str:
         flattened = {}
         _collect_class(value, flattened)
     elif isinstance(value, Mapping):
-        flattened = dict(value)
+        flattened = {}
+        _merge_class_mapping(value, flattened)
     else:
         msg = f"Invalid class value: {value!r}"
         raise TypeError(msg)
@@ -614,10 +636,11 @@ def _class_tokens(value: str) -> tuple[str, ...]:
 
 def _collect_class(value: ClassValue, res: dict[str, bool]) -> None:
     """Apply nested class contributions to one ordered accumulator."""
-    # Defuse a transparent proxy (e.g. a Const-marked class string) so the
-    # whitespace split below sees a real str. Recursion re-enters here for
-    # each list element, so a marker nested inside a list is unwrapped too.
-    value = _attribute_text(_underlying(value))
+    # Turn a Const proxy, a Markup piece or a lazy translation into plain
+    # text, so the whitespace split below sees a real str and the writer
+    # escapes it once. Recursion re-enters here for each list element, so a
+    # piece nested in a list is handled too.
+    value = _class_piece(value)
     if isinstance(value, str):
         parts = _class_tokens(value) if type(value) is str and len(value) <= 2048 else _whitespace_re.split(value)
         for part in parts:
@@ -627,10 +650,16 @@ def _collect_class(value: ClassValue, res: dict[str, bool]) -> None:
         for item in value:
             _collect_class(item, res)
     elif isinstance(value, Mapping):
-        res.update(value)
+        _merge_class_mapping(value, res)
     else:
         msg = f"Invalid class value: {value!r}"
         raise TypeError(msg)
+
+
+def _merge_class_mapping(value: Mapping[Any, Any], res: dict[str, bool]) -> None:
+    """Merge a ``{class_name: enabled}`` mapping, reading each key as class text."""
+    for name, enabled in value.items():
+        res[_class_piece(name)] = enabled
 
 
 @lru_cache(maxsize=512)
@@ -695,7 +724,9 @@ def _collect_style(value: StyleValue, res: dict[str, Any]) -> None:
     elif isinstance(value, Mapping):
         for prop, val in value.items():
             if val is not None:
-                res[prop] = val  # noqa: PERF403 - avoid an intermediate mapping
+                # A Markup property name is decoded once, as a Markup value
+                # is below, so the writer does not escape it a second time.
+                res[_attribute_text(_underlying(prop))] = val
     else:
         msg = f"Invalid style value: {value!r}"
         raise TypeError(msg)

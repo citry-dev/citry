@@ -40,7 +40,7 @@ class PurePreparedPart:
 
 PureBodyPart: TypeAlias = "str | PureInteriorBody | PureLiveBodyItem | PurePreparedPart"
 PureBodyPlan: TypeAlias = tuple[PureBodyPart, ...]
-_PureBodyKey = tuple[type[Any], int, object]
+_PureBodyKey = tuple[type[Any], "_IdentityKey", object]
 _PureBodyCache = dict[_PureBodyKey, PureBodyPlan]
 _CURRENT_PURE_BODY_CACHE: ContextVar[_PureBodyCache | None] = ContextVar(
     "citry_pure_body_cache",
@@ -94,7 +94,9 @@ def pure_body_lookup(
         )
     except Exception:  # noqa: BLE001 - memoization must not add a render failure
         return None
-    key = (component_class, id(body), frozen)
+    # Hold the body itself in the key: a bare `id()` could be reused by a
+    # different body once the template cache drops this one mid-render.
+    key = (component_class, _IdentityKey(body), frozen)
     return key, cache.get(key)
 
 

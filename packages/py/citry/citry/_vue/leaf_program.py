@@ -45,7 +45,7 @@ from citry.nodes import (
     _validate_introduced_variables,
 )
 from citry.util import html as _html_module
-from citry.util.html import escape_to_str, exact_str, script_json
+from citry.util.html import escape_attribute_value, escape_to_str, exact_str, script_json
 
 from . import native_render as _native_render
 from .capture import (
@@ -1053,7 +1053,7 @@ def _row_plain_attr(name: str, value: object) -> str | None:
         return ""
     if value is True:
         return escape_to_str(name)
-    return f'{escape_to_str(name)}="{escape_to_str(value)}"'
+    return f'{escape_to_str(name)}="{escape_attribute_value(value)}"'
 
 
 def _row_formatted_attrs(
@@ -1179,6 +1179,7 @@ def _default_row_formatting() -> bool:
     """
     return (
         escape_to_str is _html_module._DEFAULT_ESCAPE_TO_STR
+        and escape_attribute_value is _html_module._DEFAULT_ESCAPE_ATTRIBUTE_VALUE
         and format_attrs is _DEFAULT_ROW_FORMAT_ATTRS
         and _has_default_attr_formatting(_format_resolved_attrs_to_str)
         and _html_module._escape_to_str_impl is _html_module._DEFAULT_ESCAPE_TO_STR_IMPL
@@ -2120,7 +2121,8 @@ class _RowHtmlWriterCodegen:
                         f"{pad}elif {value} is not None and {value} is not False:",
                         # Strings and floats always format; other values go
                         # through a helper, and its None drops the row HTML.
-                        f"{pad}    row_html.append({' ' + name + '=' + chr(34)!r} + _escape_to_str({value}) + '\"'"
+                        f"{pad}    row_html.append({' ' + name + '=' + chr(34)!r}"
+                        f" + _escape_attribute_value({value}) + '\"'"
                         f" if type({value}) in (str, float)"
                         f" else _row_int_attr({' ' + name + '=' + chr(34)!r}, {value}))",
                     )
@@ -2137,6 +2139,7 @@ class _RowHtmlWriterCodegen:
         namespace: dict[str, object] = {
             **self.namespace,
             "_escape_to_str": escape_to_str,
+            "_escape_attribute_value": escape_attribute_value,
             "_row_open_html": _row_open_html,
             "_row_append_root_open": _row_append_root_open,
             "_row_int_attr": _row_int_attr,
@@ -4375,6 +4378,12 @@ def static_leaf_parts_with_children(
     if value.cached_static_parts is not None and not preserve_dynamic_text:
         cached: list[str | RenderPart] = list(value.cached_static_parts)
         return cached
+    # A leaf replayed from the render cache keeps no operations to walk, only
+    # its stored parts. The stored typed parts keep each dynamic text value
+    # as its own part, which is what the serializer needs inside a textarea.
+    if preserve_dynamic_text and not value.operations and value.cached_typed_parts is not None:
+        typed: list[str | RenderPart | PreparedStaticText] = list(value.cached_typed_parts)
+        return typed
     output: list[str | RenderPart | PreparedStaticText] = []
     _materialize(
         value.operations,

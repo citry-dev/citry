@@ -414,3 +414,38 @@ def test_a_subclass_of_a_parser_that_opts_out_still_gets_the_browser_values() ->
         parser.feed('<p title="a&#1;b">')
         parser.close()
     assert seen == [[("title", "ab")], [("title", "a\x01b")]]
+
+
+def test_a_carriage_return_in_an_attribute_value_is_written_as_a_reference() -> None:
+    # The browser reads a raw carriage return in the page as a line feed.
+    assert escape_attribute_value("a\rb\r\nc") == "a&#13;b&#13;\nc"
+    assert escape_attribute_value(Markup("a&#13;b")) == "a&#13;b"
+    assert escape_attribute_value(Markup("a\rb")) == "a&#13;b"
+
+
+def test_a_static_page_keeps_a_carriage_return_in_an_attribute(monkeypatch: pytest.MonkeyPatch) -> None:
+    def page() -> str:
+        app = Citry(autodiscover=False)
+
+        class Note(Component):
+            citry = app
+
+            def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:
+                return {"plain": "a\rb", "marked": Markup("c&#13;d"), "rows": ["e\rf"]}
+
+            template = """
+                <main>
+                    <p c-title="plain">x</p>
+                    <p c-title="marked">y</p>
+                    <p c-for="row in rows" c-title="row">z</p>
+                </main>
+            """
+
+        return str(Note().render().serialize())
+
+    rust, python = render_both(page, monkeypatch)
+    for result in (rust.result, python.result):
+        written = str(result)
+        assert "\r" not in written
+        for value in ("a&#13;b", "c&#13;d", "e&#13;f"):
+            assert f'title="{value}"' in written

@@ -68,7 +68,7 @@ from citry.citry_render import (
     RenderPart,
 )
 from citry.client_directives import ComponentTagClientBindingKind
-from citry.ext.i18n.bindings import is_authored_values_expression
+from citry.ext.i18n.bindings import is_authored_values_expression, is_binding_id
 from citry.extension import OnRenderCacheExportContext, RenderCacheInstance
 from citry.util.id import gen_render_id, validate_render_id
 
@@ -533,6 +533,18 @@ def _replay_boundary_artifact(
             new_ids = new_value.split()
             if len(old_ids) != len(new_ids):
                 raise CacheArtifactError("extension changed the number of typed binding identities")
+            # Replay writes the new value into stored static HTML without
+            # escaping it again, so every token between the quotes must be a
+            # binding ID the i18n collector could have written, and the value
+            # must be exactly those IDs joined by single spaces.
+            if (
+                not all(is_binding_id(item) for item in (*old_ids, *new_ids))
+                or old_value != " ".join(old_ids)
+                or new_value != " ".join(new_ids)
+            ):
+                raise CacheArtifactError(
+                    "extension staged a replacement that holds something other than typed binding identities"
+                )
             for old_id, new_id in zip(old_ids, new_ids, strict=True):
                 previous_id = typed_replacements.setdefault(old_id, new_id)
                 if previous_id != new_id:
