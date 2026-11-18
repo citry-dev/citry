@@ -154,11 +154,9 @@ def test_output_parser_messages_show_control_characters_in_tag_names_as_escapes(
     assert "\x1b" not in problem
 
 
-# Each fill puts an element inside the checked region of the page in
-# Chromium, Firefox and WebKit, where the check must refuse it. Python's
-# HTMLParser alone reads the first group as text and closes the region early
-# on the second.
-HIDDEN_CONTENT = {
+# Chromium, Firefox and WebKit put a focusable element inside the checked
+# region for each of these fills, so the check must refuse each one.
+FOCUSABLE_IN_REGION = {
     "svg-style": "<svg><style><g tabindex=0></g></style></svg>",
     "svg-style-breakout": "<svg><style><span tabindex=0>x</span></style></svg>",
     "math-style": "<math><style><b tabindex=0>x</b></style></math>",
@@ -196,7 +194,7 @@ REGION_CHECKS = {
 }
 
 
-@pytest.mark.parametrize("fill", list(HIDDEN_CONTENT.values()), ids=list(HIDDEN_CONTENT))
+@pytest.mark.parametrize("fill", list(FOCUSABLE_IN_REGION.values()), ids=list(FOCUSABLE_IN_REGION))
 @pytest.mark.parametrize(("make_parser", "template"), list(REGION_CHECKS.values()), ids=list(REGION_CHECKS))
 def test_region_checks_refuse_focusable_content_the_browser_puts_in_the_region(
     make_parser: Callable[[], LongReferenceSafeParser], template: str, fill: str
@@ -251,6 +249,9 @@ def test_direct_item_check_counts_the_roots_a_browser_builds() -> None:
     # ``</form>`` closes only the form, so the item's root stays open and
     # the next item would sit inside it.
     assert _direct_items("<div><form><div></form></div>", "<div>b</div>")
+    # Inside an open ``<select>`` the browser ignores ``</div>``, so the next
+    # item would sit inside the first.
+    assert _direct_items("<div><select></div>", "<div>b</div>")
     # ``</link>`` closes nothing in a browser.
     assert not _direct_items("<div><link></link>a</div>")
     # An end tag that closes nothing inside the item could close an element
@@ -287,3 +288,4 @@ def test_direct_menu_check_sees_a_nested_button_or_link_close_the_root() -> None
     # before a new link, so each fill builds two roots.
     assert invalid("button", "<button>x<button>y</button></button>")
     assert invalid("a", "<a href='#'>x<a href='#'>y</a></a>")
+    assert invalid("button", "<button><span><select></span></button>")

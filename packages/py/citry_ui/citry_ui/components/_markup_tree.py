@@ -347,6 +347,8 @@ class MarkupTreeParser(LongReferenceSafeParser, Generic[T]):
       table cell sits between the end tag and its match. ``</br>`` and a
       ``</p>`` with no open paragraph create an empty element, and
       ``</form>`` closes only the form, leaving the elements inside it open.
+      Inside an open ``<select>``, only the end tags of the select and its
+      options close anything.
     - A start tag closes what the browser closes for it: an open ``<p>``
       before ``<div>`` and the other block elements, an open ``<li>``,
       ``<dd>``, ``<dt>``, ``<button>`` or heading before another of its
@@ -354,7 +356,8 @@ class MarkupTreeParser(LongReferenceSafeParser, Generic[T]):
     - ``<span/>`` opens a span in HTML; the ``/`` closes an element only in
       SVG and MathML. ``<image>`` in HTML creates an ``<img>``.
 
-    It does not model the elements a browser moves: content placed before
+    It does not close an ``<option>`` before another or a ``<select>``
+    before a nested one. It does not model the elements a browser moves: content placed before
     a ``<table>``, or a block element that an end tag such as ``</b>``, or
     a second ``<a>``, moves out of a formatting element. Those elements stay
     where they were opened here, which can hide an extra root element from
@@ -518,7 +521,9 @@ class MarkupTreeParser(LongReferenceSafeParser, Generic[T]):
                 self._close_to(open_button)
 
     def _close_in_scope_paragraph(self) -> None:
-        match = self._in_scope({"p"}, extra_limits=("button",))
+        # A paragraph outside an open ``<select>`` stays open for content
+        # placed inside the select.
+        match = self._in_scope({"p"}, extra_limits=("button", "select"))
         if match is not None and match >= 0:
             self._close_to(match)
 
@@ -571,6 +576,12 @@ class MarkupTreeParser(LongReferenceSafeParser, Generic[T]):
 
     def _html_end(self, tag: str) -> None:
         """Apply the HTML rules for an end tag to the open elements."""
+        # Inside an open ``<select>``, browsers ignore every end tag except
+        # those of the select and its options, so ``</div>`` there leaves the
+        # select and the elements around it open.
+        select = self._last("html:select")
+        if select >= 0 and select >= self._last("scope") and tag not in {"select", "option", "optgroup"}:
+            return
         if tag in VOID_ELEMENTS:
             # The browser ignores a void end tag, except that ``</br>`` creates
             # a ``<br>``.

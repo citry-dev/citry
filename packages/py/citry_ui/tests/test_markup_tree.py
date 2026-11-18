@@ -124,6 +124,10 @@ BROWSER_TREES = {
     "p-end-tag-leaves-svg": ("<svg><g></p><i></i></svg>", ["svg:svg", "svg:svg/svg:g", "p", "i"]),
     "textarea-is-text": ("<div><textarea></div><b></textarea><i></i></div>", ["div", "div/textarea", "div/i"]),
     "marked-section-ends-at-gt": ("<div><![if x]><b></b><![endif]></div>", ["div", "div/b"]),
+    "select-ignores-div-end-tag": (
+        "<div><select></div><span></span></select></div>",
+        ["div", "div/select", "div/select/span"],
+    ),
     "image-is-img": ("<div><image src=x><span></span></div>", ["div", "div/img", "div/span"]),
 }
 
@@ -162,11 +166,13 @@ def test_an_end_tag_hidden_by_a_scope_limit_is_ignored_not_reported() -> None:
 
 
 def test_end_tags_take_time_in_proportion_to_the_input_not_its_depth() -> None:
-    # Each end tag below matches nothing and sits under 20,000 open elements.
-    # Walking the open elements for each one would take many seconds.
-    depth = 20_000
+    # Each end tag below matches nothing and sits under 40,000 open elements.
+    # Walking the open elements for each one would take over a minute; the
+    # parser takes a fraction of a second, so the limit leaves a wide margin
+    # for a slow machine.
+    depth = 40_000
     parser = _Silent()
     started = time.perf_counter()
     parser.feed("<div>" + "<span>" * depth + "</i>" * depth)
     parser.close()
-    assert time.perf_counter() - started < 2
+    assert time.perf_counter() - started < 10
