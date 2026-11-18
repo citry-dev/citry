@@ -118,9 +118,16 @@ Only the URL carries over unchanged. Update each method body by hand:
 !!! warning "Add the CSRF token to every plain form"
 
     The forms on this page leave out the CSRF token to stay short. Django's
-    CSRF middleware still applies to Citry's routes, so a real form needs
+    CSRF middleware checks Citry's routes too, so a real form needs
     `{% csrf_token %}` or the equivalent `csrfmiddlewaretoken` field. See
     [Protect against CSRF](/security/#protect-event-posts-from-csrf).
+
+!!! warning "Keep `get`, `head`, and `options` read-only"
+
+    Django's CSRF token check skips `GET`, `HEAD`, and `OPTIONS`
+    requests, so the `get`, `head`, and `options` methods of a
+    `ViewEvents` class must only read data. See
+    [Keep `GET`, `HEAD` read-only](/security/#get-handlers-skip-csrf).
 
 ## Name each operation
 

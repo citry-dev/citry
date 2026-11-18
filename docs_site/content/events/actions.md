@@ -137,9 +137,7 @@ return actions.Dispatch("TaskRow:saved", {"title": title})
 
 Start the name with your component's name, as in `TaskRow:saved`. Names that
 start with `citry:` are reserved for Citry, so `actions.Dispatch` raises
-`ValueError` for them. A name such as `click` or `submit` also runs the
-page's own listeners for that event, so never build the name from
-request data (a query parameter, form field, or header).
+`ValueError` for them.
 
 The event starts at the first element of the component whose handler ran and
 bubbles up to `document`. It fires once, even when the component has several
@@ -162,6 +160,16 @@ $component({
 To hear the event anywhere else, such as in a parent component or page
 script, listen on an ancestor element, on `document`, or with
 [`Citry.events.on`](/reference/browser-apis/#citry-events-on).
+
+!!! warning "Choose the event name yourself"
+
+    Never build the name from request data (a query parameter, form
+    field, or header). A name such as `click` or `submit` runs the
+    page's own listeners for that event, including
+    [`@c-*` bindings](/events/bindings/) that call the server. If the
+    component's first element is a `<form>`, Firefox also submits that
+    form to its `action` on a `submit` event, and a listener cannot
+    cancel it.
 
 ## `Data` for JavaScript { #send-data-to-javascript }
 
@@ -283,12 +291,17 @@ home page, with no warning.
     another site. Check it before you redirect to it. A prefix check such
     as `url.startswith("/")` is not enough, because browsers treat
     `//other.example` and `/\other.example` as addresses on another site.
-    Django's `url_has_allowed_host_and_scheme` does a full check; see
-    [Check redirect URLs](/security/#check-redirect-urls).
+    Django's `url_has_allowed_host_and_scheme` does a full check. A
+    Flask or FastAPI app can call it after installing the `django`
+    package; see [Check redirect URLs](/security/#check-redirect-urls).
 
 If a redirect with another scheme reaches the browser another way, such
 as through browser code you wrote that calls `Citry.events.applyActions()`,
-the browser logs an error and stays on the page.
+the browser stays on the page and the call fails: the Promise that
+`applyActions()` returns rejects with an error that says why. A redirect
+action marked `wait: false` does not hold up the call, so its error
+cannot reach the Promise: Citry logs it to the console and the Promise
+resolves.
 
 ## `PushUrl`, `ReplaceUrl` { #change-the-url }
 
@@ -346,6 +359,16 @@ starts saving the file.
 A download cannot be combined with other actions in a list, and its handler
 must not change State, because the file response has no room for the new
 State. Either mistake makes the call fail.
+
+## Send your own response { #send-your-own-response }
+
+A `bundle=False` handler can return a
+[`RouteResponse`][citry.RouteResponse] to set the status, headers, and
+body itself. Like a download, it must leave State unchanged. Citry does
+not check the header names, header values, or `content_type` you give
+it, and not every web server refuses a line break (`\r` or `\n`) in a
+header. Reject line breaks and other control characters in any value
+that comes from request data.
 
 ## `None` skips re-render { #return-nothing }
 

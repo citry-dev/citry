@@ -4,6 +4,17 @@
 
 ### Fixes
 
+- An Events `Render` of a region that contains `<c-i18n c-client>` no
+  longer fails with "an i18n fragment uses a different project
+  configuration" when the server lists the same formats and parsers in
+  another order ([#660](https://github.com/citry-dev/citry/issues/660)).
+- `Citry.events.applyActions()` now rejects its Promise when Citry
+  refuses a redirect, such as one to a URL with a scheme other than
+  `http:` or `https:`, so your code learns that the page did not move.
+  Before, the browser only logged an error and the Promise resolved, so
+  code that awaits `applyActions()` may now need a `catch`. A redirect
+  marked `wait: false` is still only logged. An event call whose result
+  holds such a redirect now fails the same way.
 - A component with `Cache` turned on that writes a value into a
   `<textarea>` no longer comes back with an empty textarea when its
   render is replayed from the cache.

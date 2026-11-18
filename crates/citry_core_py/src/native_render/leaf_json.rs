@@ -115,13 +115,14 @@ const DIRECT_DEPTH: usize = 8;
 /// found.
 ///
 /// Python can run this on a thread with little stack, as little as 128 KiB
-/// on musl Linux or less after `threading.stack_size()`, and a stack guard
-/// cannot move work that reads Python objects onto a new stack: CPython 3.14
-/// and later check the stack pointer against the thread's own stack. So past
-/// `DIRECT_DEPTH` levels a container is written by `write_with_stack`, which
-/// keeps each container it has opened but not finished on a list. Both visit
-/// values in the same order, so the first value refused does not depend on
-/// where the walk switches.
+/// for a thread that nobody sized on musl Linux, or less after
+/// `threading.stack_size()`, and a stack guard cannot move work that reads
+/// Python objects onto a new stack: CPython 3.14 and later check the stack
+/// pointer against the thread's own stack. So past `DIRECT_DEPTH` levels a
+/// container is written by `write_with_stack`, which keeps each container it
+/// has opened but not finished on a list. Both visit values in the same
+/// order, so the first value refused does not depend on where the walk
+/// switches.
 fn write_value(
     out: &mut String,
     value: &Bound<'_, PyAny>,
