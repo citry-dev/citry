@@ -394,6 +394,7 @@ categories:
       - { key: Citry.events.configure, anchor: citry-events-configure, role: "js:function" }
       - { key: Citry.events.registerTransport, anchor: citry-events-register-transport, role: "js:function" }
       - { key: Citry.events.applyActions, anchor: citry-events-apply-actions, role: "js:function" }
+      - { key: Citry.fragments.load, anchor: citry-fragments-load, role: "js:function" }
 
   - kind: generated_python
     slug: attributes
