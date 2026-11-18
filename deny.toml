@@ -25,9 +25,15 @@ ignore = [
     { id = "RUSTSEC-2026-0368", reason = "zip extraction, unused; vendored ruff pins zip 8 (#378)" },
     { id = "RUSTSEC-2026-0369", reason = "zip extraction, unused; vendored ruff pins zip 8 (#378)" },
     { id = "RUSTSEC-2026-0429", reason = "zip extraction, unused; remove when the ruff pin reaches a release with zip 9 (#378)" },
-    # 0547 needs zip's `legacy-zip` feature, which the workspace pin leaves off
-    # (default-features = false); 0548 is in ZipStreamReader extraction.
+    # 0545 needs zip's `aes-crypto` feature and 0547 its `legacy-zip` feature,
+    # which the workspace pin leaves off (default-features = false); 0546 and
+    # 0548 are in archive extraction.
+    { id = "RUSTSEC-2026-0545", reason = "zip AES decryption, feature off and unused; vendored ruff pins zip 8 (#378)" },
+    { id = "RUSTSEC-2026-0546", reason = "zip extraction, unused; vendored ruff pins zip 8 (#378)" },
     { id = "RUSTSEC-2026-0547", reason = "zip legacy-zip decoders, feature off and unused; vendored ruff pins zip 8 (#378)" },
     { id = "RUSTSEC-2026-0548", reason = "zip stream extraction, unused; vendored ruff pins zip 8 (#378)" },
+    # chrono is in Cargo.lock only through ruff_db's optional quick-junit
+    # dependency; `cargo tree -i chrono --target all` finds nothing built.
+    { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained; locked by vendored ruff_db's optional quick-junit, never built (#378)" },
 ]
 
