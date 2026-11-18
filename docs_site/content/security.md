@@ -1063,7 +1063,8 @@ do. Two things decide how much you can trust a template with:
 - **Formatting methods that follow paths.** A format string such as
   `'{0.name}'` reads attributes by name, and it skips the checks above. So
   `format` and `format_map` are blocked on every kind of string: `str`,
-  subclasses of `str` such as `Markup`, and `collections.UserString`.
+  subclasses of `str` such as `Markup`, `collections.UserString`, and
+  Django lazy strings such as the result of `gettext_lazy()`.
   Reading the method is blocked as well as calling it. Every method of a
   `string.Formatter` is blocked, and so is building an
   `operator.attrgetter` or `operator.methodcaller`. Use an f-string
@@ -1143,9 +1144,9 @@ not guaranteed to block every way out:
   functions it finds in its arguments (`map`, `functools.reduce`,
   `sorted`, `operator.call`) or reads an attribute from a string (a
   `getattr`-style helper, `inspect`, `importlib`, Django's
-  `format_html`) does that work unchecked. The sandbox blocks a blocked
-  function passed straight to a call, but not one inside a list. Do not
-  put such helpers in the context.
+  `format_html`) does that work unchecked. The sandbox blocks a call that
+  is handed a blocked function directly, but not one inside a list. Do
+  not put such helpers in the context.
 - **Dict keys that start with `_` are not hidden.** `data['_key']` is
   blocked, but `data.get('_key')`, looping over `data`, and
   `'%(_key)s' % data` read the same item.

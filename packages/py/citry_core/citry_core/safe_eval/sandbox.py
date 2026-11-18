@@ -15,8 +15,8 @@ It refuses:
   The check compares the function, not its name, so a function passed in under another
   name, or wrapped in `functools.partial`, is refused too.
 - Text formatting that follows paths written inside the string: `format` and `format_map`
-  of any string type (`str`, its subclasses such as `markupsafe.Markup`, and
-  `collections.UserString`), every method of a `string.Formatter`, and building an
+  of any string type (`str`, its subclasses such as `markupsafe.Markup`,
+  `collections.UserString`, and Django lazy strings), every method of a `string.Formatter`, and building an
   `operator.attrgetter` or `operator.methodcaller`. Use f-strings instead. Reading
   `format` or `format_map` from a string is refused too, not only calling it, so the
   method cannot be handed to something else that calls it.
@@ -36,10 +36,11 @@ It is a second layer of protection. It does not make a template from a stranger 
   with `@unsafe`, or leave the object out of the context.
 - It checks only the lookups and calls that the expression text writes. A function that
   you pass in and that calls other functions or looks up names from text does so without
-  these checks. It refuses a refused function handed straight to a call, but not one
-  inside a list or other container. Examples are `map`, `functools.reduce`, `sorted`,
-  `operator.call`, a `getattr`-style helper, `inspect`, `importlib`, and
-  `logging.Formatter` with `{` style. Do not pass such helpers in.
+  these checks. Examples are `map`, `functools.reduce`, `sorted`, `operator.call`, a
+  `getattr`-style helper, `inspect`, `importlib`, and `logging.Formatter` with `{`
+  style. Do not pass such helpers in. A call that is handed a refused function directly
+  is refused; one inside a list or other container is not checked, and neither is a
+  function the app wrapped itself, such as in a lambda.
 - It hides an item key that starts with `_` only when the expression writes the lookup
   itself. `data["_key"]` is refused, but `data.get("_key")`, iterating over `data`, and
   `"%(_key)s" % data` read the same item.
@@ -87,6 +88,7 @@ import contextlib
 import functools
 import operator
 import string
+import sys
 import types
 from collections import UserString
 from collections.abc import Callable
@@ -265,13 +267,30 @@ def _is_internal_attribute(obj: Any, attr: str) -> bool:
     return attr.startswith("__")
 
 
+def _string_types() -> tuple[type, ...]:
+    """
+    Return the types whose `format` and `format_map` follow paths written in the text.
+
+    Besides `str` and `UserString`, this includes Django's lazy strings (`gettext_lazy(...)`,
+    `lazystr(...)`). They are not `str` instances, but Django copies the methods of `str`
+    onto them, so their `format` follows paths too. A template can choose the text when
+    the app passes a lazy-string function such as `gettext_lazy` in the context. Django's
+    class is looked up only when Django is already imported, so other apps never import it.
+    """
+    functional = sys.modules.get("django.utils.functional")
+    promise = getattr(functional, "Promise", None)
+    if isinstance(promise, type):
+        return (str, UserString, promise)
+    return (str, UserString)
+
+
 def _is_formatting_member(obj: Any, attr: str) -> bool:
     """
     Test if reading `attr` from `obj` gives a method that formats text by following paths.
 
     That is `format` or `format_map` on any `str` or `collections.UserString`, subclasses
-    included (the object or the class itself), and any method of `string.Formatter` on a
-    formatter or a formatter class.
+    included, or on a Django lazy string (the object or the class itself), and any method
+    of `string.Formatter` on a formatter or a formatter class.
 
     >>> _is_formatting_member(string.Formatter(), "vformat")
     True
@@ -287,7 +306,7 @@ def _is_formatting_member(obj: Any, attr: str) -> bool:
 
     if derives_from(string.Formatter):
         return attr in _FORMATTER_METHOD_NAMES
-    return attr in _FORMAT_METHOD_NAMES and derives_from((str, UserString))
+    return attr in _FORMAT_METHOD_NAMES and derives_from(_string_types())
 
 
 def is_safe_attribute(obj: Any, attr: str) -> bool:
@@ -298,7 +317,7 @@ def is_safe_attribute(obj: Any, attr: str) -> bool:
     - Starting with an underscore `_`
     - Internal attributes as set by `_is_internal_attribute`.
     - The methods that format text by following paths inside it: `format` and
-      `format_map` on any `str` or `UserString`, and the methods of a
+      `format_map` on any `str`, `UserString` or Django lazy string, and the methods of a
       `string.Formatter` (see `_is_formatting_member`).
     """
     # Non-string subscripts should be fine, as they should be found only
@@ -347,7 +366,7 @@ def _refusal_in(table: dict[Any, str | None], obj: Any) -> tuple[bool, str | Non
 
     A callable instance of a class that defines `__eq__` without `__hash__` cannot be
     hashed, so a plain `in` raises `TypeError`. Such an object cannot be a key of the
-    table either, so it is simply not listed. This matters because every callable passed
+    table either, so it is not listed. This matters because every callable passed
     as an argument is checked, and a template that passes one must keep working.
     """
     try:
@@ -447,7 +466,13 @@ def find_unsafe_callable_argument(args: tuple[Any, ...], kwargs: dict[str, Any])
     for value in (*args, *kwargs.values()):
         # Most arguments are plain data, and `callable()` keeps them off the slower check.
         if callable(value):
-            is_safe, replacement_message = is_safe_callable(value)
+            try:
+                is_safe, replacement_message = is_safe_callable(value)
+            except Exception:  # noqa: BLE001
+                # The check reads attributes of the object, and an object's own
+                # `__getattr__` or `__hash__` can raise anything. An object the sandbox
+                # cannot check is refused rather than handed on.
+                return (value, None)
             if not is_safe:
                 return (value, replacement_message)
     return None

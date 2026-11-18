@@ -4,14 +4,12 @@
 
 ### Fixed
 
-- Security: the expression sandbox no longer lets template text read
-  private attributes by handing a string's `format` method to another
-  function, such as `items.sort(key='{0._name}'.format)`. Reading
-  `format` or `format_map` from any string, `str` included, now raises
-  `SecurityError`, as calling them already did. A call is also refused
-  when one of its arguments is a function the sandbox would not call
-  itself, such as an `@unsafe` method, an `alters_data` method, or
-  `eval`. Use an f-string instead of `format`. See
+- Security: the expression sandbox now refuses reading `format` or
+  `format_map` from any string, `str` and Django lazy strings included,
+  as it already refused calling them. It also refuses a call when one of
+  its arguments is a function the sandbox would not call itself, such as
+  an `@unsafe` method, an `alters_data` method, or `eval`. Both raise
+  `SecurityError`. Use an f-string instead of `format`. See
   [GHSA-c42m-36vw-xvm3](https://github.com/citry-dev/citry/security/advisories/GHSA-c42m-36vw-xvm3).
 
 ## v2.1.1

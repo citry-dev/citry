@@ -15,6 +15,8 @@ test fails if the call went through, even when the result is thrown away.
 """
 
 import functools
+import sys
+import types
 from typing import Any
 
 import pytest
@@ -49,6 +51,17 @@ class Holder:
 
     def label(self, item: Any) -> str:
         return f"label-{item}"
+
+
+class RaisingLookup:
+    """A callable whose own attribute lookup raises something other than `AttributeError`."""
+
+    def __getattr__(self, name: str) -> Any:
+        raise KeyError(name)
+
+    def __call__(self, item: Any) -> Any:
+        CALLED.append("raising-lookup")
+        return item
 
 
 class UnhashableCallable:
@@ -149,3 +162,47 @@ class TestSafeFunctionsStillWork:
         refused = find_unsafe_callable_argument((1,), {"key": "{0}".format})
         assert refused is not None
         assert refused[1] == "Use f-strings instead."
+
+
+class FakePromise:
+    """Stands in for Django's lazy string: not a `str`, but with a `format` that follows paths."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    def format(self, *args: Any, **kwargs: Any) -> str:
+        return self.text.format(*args, **kwargs)
+
+    def format_map(self, mapping: Any) -> str:
+        return self.text.format_map(mapping)
+
+
+class TestDjangoLazyStrings:
+    """A lazy-string function in the context lets the template choose the format text."""
+
+    @pytest.fixture
+    def fake_django(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        module = types.ModuleType("django.utils.functional")
+        module.Promise = FakePromise  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "django.utils.functional", module)
+
+    @pytest.mark.usefixtures("fake_django")
+    @pytest.mark.parametrize(
+        "source",
+        [
+            "lazy('{0._trigger}').format(obj)",
+            "[obj].sort(key=lazy('{0._trigger}').format)",
+            "lazy('{o._trigger}').format_map({'o': obj})",
+        ],
+    )
+    def test_format_on_a_lazy_string_is_refused(self, source):
+        assert_refused(source, lazy=FakePromise, obj=Holder())
+
+    def test_with_real_django(self):
+        functional = pytest.importorskip("django.utils.functional")
+        assert_refused("[obj].sort(key=lazy('{0._trigger}').format)", lazy=functional.lazystr, obj=Holder())
+
+
+class TestArgumentsTheCheckCannotRead:
+    def test_an_argument_whose_lookup_raises_is_refused(self):
+        assert_refused("apply(f, 1)", apply=lambda f, x: f(x), f=RaisingLookup())
