@@ -1,0 +1,9 @@
+
+:where(.rare-trail) {
+  --cui-breadcrumbs-link-color: light-dark(#7c2d12, #fdba74);
+  --cui-breadcrumbs-current-color: light-dark(#4c1d95, #c4b5fd);
+  --cui-breadcrumbs-separator-color: light-dark(#9a3412, #fb923c);
+  --cui-breadcrumbs-gap: 0.8rem;
+  padding: 1rem;
+  border-block: 1px solid color-mix(in srgb, CanvasText 24%, transparent);
+}

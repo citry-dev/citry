@@ -1,0 +1,5 @@
+
+:where(.violet-list) {
+  --cui-list-current-background: light-dark(#ede9fe, #4c1d95);
+  --cui-list-radius: 1rem;
+}

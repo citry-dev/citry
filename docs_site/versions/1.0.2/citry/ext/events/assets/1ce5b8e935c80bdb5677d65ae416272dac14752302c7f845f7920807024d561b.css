@@ -1,0 +1,48 @@
+
+:where(.context-menu-focus) {
+  display: grid;
+  gap: 1rem;
+  min-block-size: 22rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.context-menu-focus > p) {
+  max-inline-size: 62ch;
+  margin: 0;
+}
+
+:where(.context-menu-focus__row) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, CanvasText 22%, transparent);
+  border-radius: 0.75rem;
+}
+
+:where(.context-menu-focus__row > span:first-child) {
+  display: grid;
+  gap: 0.25rem;
+}
+
+:where(.context-menu-focus__row:focus-visible) {
+  outline: 2px solid Highlight;
+  outline-offset: 2px;
+}
+
+:where(.context-menu-focus__fallbacks) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+}
+
+:where(.context-menu-focus__modal-target) {
+  padding: 0.75rem;
+  border: 1px solid color-mix(in srgb, CanvasText 22%, transparent);
+  border-radius: 0.5rem;
+  background: Canvas;
+  color: CanvasText;
+}

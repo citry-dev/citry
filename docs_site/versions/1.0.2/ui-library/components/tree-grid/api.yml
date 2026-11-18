@@ -1,0 +1,142 @@
+schema_version: 1
+family: tree-grid
+components: [CTreeGrid]
+
+inputs:
+  - id: ctree-grid-server-inputs
+    component: CTreeGrid
+    channel: server
+    entries:
+      - {id: columns, name: columns, type: 'Sequence[CTreeGridColumn]', default: {kind: required}, effect: Defines ordered aligned Columns; the first owns hierarchy controls.}
+      - {id: rows, name: rows, type: 'Sequence[CTreeGridRow]', default: {kind: required}, effect: Defines a finite recursive Row hierarchy.}
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Names the treegrid.}
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the root ID.}
+      - {id: expanded, name: expanded, type: 'Sequence[str]', default: {kind: literal, value: '()'}, effect: Supplies initially expanded branch Row keys.}
+      - {id: selection, name: selection, type: {display: CTreeGridSelection, interfaces: [CTreeGridSelection]}, default: {kind: literal, value: none}, effect: Enables no single or multiple Row selection.}
+      - {id: selected, name: selected, type: 'Sequence[str]', default: {kind: literal, value: '()'}, effect: Supplies initially selected Row keys.}
+      - {id: name, name: name, type: 'str | None', default: {kind: literal, value: null}, effect: Emits selected keys as repeated hidden inputs.}
+      - {id: form, name: form, type: 'str | None', default: {kind: literal, value: null}, effect: Associates hidden inputs with an external form.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables mutation activation and form output.}
+      - {id: density, name: density, type: {display: CTreeGridDensity, interfaces: [CTreeGridDensity]}, default: {kind: literal, value: comfortable}, effect: Selects Row height.}
+      - {id: expand-label, name: expand_label, type: str, default: {kind: literal, value: 'Expand {row}'}, effect: Overrides branch Expand names and must retain row.}
+      - {id: collapse-label, name: collapse_label, type: str, default: {kind: literal, value: 'Collapse {row}'}, effect: Overrides branch Collapse names and must retain row.}
+      - {id: expanded-label, name: expanded_label, type: str, default: {kind: literal, value: 'Expanded {row}'}, effect: Overrides expanded announcements and must retain row.}
+      - {id: collapsed-label, name: collapsed_label, type: str, default: {kind: literal, value: 'Collapsed {row}'}, effect: Overrides collapsed announcements and must retain row.}
+      - {id: selected-label, name: selected_label, type: str, default: {kind: literal, value: 'Selected {row}'}, effect: Overrides selected announcements and must retain row.}
+      - {id: unselected-label, name: unselected_label, type: str, default: {kind: literal, value: 'Unselected {row}'}, effect: Overrides unselected announcements and must retain row.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed root attributes.}
+      - {id: table-attrs, name: table_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed table attributes.}
+  - id: ctree-grid-client-inputs
+    component: CTreeGrid
+    channel: client
+    entries:
+      - {id: expanded, name: expanded, type: 'string[]', omitted: Uncontrolled server branch state., effect: Controls expanded branch keys.}
+      - {id: selected, name: selected, type: 'string[]', omitted: Uncontrolled server selection., effect: Controls selected Row keys.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server value., effect: Reactively disables behavior and inputs.}
+      - {id: on-expanded-change, name: onExpandedChange, type: function, omitted: No component callback runs., effect: Receives expansion requests.}
+      - {id: on-selection-change, name: onSelectionChange, type: function, omitted: No component callback runs., effect: Receives selection requests.}
+      - {id: on-cell-activate, name: onCellActivate, type: function, omitted: No component callback runs., effect: Receives Enter or double-click activation outside the hierarchy toggle.}
+
+slots:
+  - id: ctree-grid-slots
+    component: CTreeGrid
+    entries:
+      - {id: caption, name: caption, required: false, data: {display: '{}', interfaces: [CTreeGridCaptionSlotData]}, fallback: No native caption.}
+      - {id: toolbar, name: toolbar, required: false, data: {display: '{}', interfaces: [CTreeGridToolbarSlotData]}, fallback: No toolbar.}
+      - {id: header, name: header, required: false, data: {display: '{column, column_index}', interfaces: [CTreeGridHeaderSlotData]}, fallback: Column label.}
+      - {id: cell, name: cell, required: false, data: {display: '{row, column, cell, row_index, column_index, level, expanded, selected}', interfaces: [CTreeGridCellSlotData]}, fallback: Cell value.}
+
+events:
+  - id: ctree-grid-events
+    component: CTreeGrid
+    entries:
+      - {id: expanded, name: onExpandedChange, signature: {display: '(expanded: string[], detail: CTreeGridExpandedChangeDetail) => void', interfaces: [CTreeGridExpandedChangeDetail]}, trigger: A branch changes., detail: {display: '{expanded, previousExpanded, rowKey, rowExpanded, controlled, source, sourceEvent}', interfaces: [CTreeGridExpandedChangeDetail]}, behavior: Commits only while uncontrolled.}
+      - {id: selected, name: onSelectionChange, signature: {display: '(selected: string[], detail: CTreeGridSelectionChangeDetail) => void', interfaces: [CTreeGridSelectionChangeDetail]}, trigger: A Row selection toggles., detail: {display: '{selected, previousSelected, rowKey, rowSelected, controlled, source, sourceEvent}', interfaces: [CTreeGridSelectionChangeDetail]}, behavior: Commits only while uncontrolled.}
+      - {id: activate, name: onCellActivate, signature: {display: '(detail: CTreeGridCellActivateDetail) => void', interfaces: [CTreeGridCellActivateDetail]}, trigger: Enter or double-click activates a non-hierarchy Cell., detail: {display: '{rowKey, columnKey, rowIndex, columnIndex, sourceEvent}', interfaces: [CTreeGridCellActivateDetail]}, behavior: Reports without changing data.}
+
+methods: []
+
+css:
+  - id: ctree-grid-css
+    component: CTreeGrid
+    entries:
+      - {id: min-width, name: --cui-tree-grid-min-width, type: length, purpose: Computed minimum table width., default: Sum of Column widths}
+      - {id: row-height, name: --cui-tree-grid-row-height, type: length, purpose: Comfortable Row height., default: 3rem}
+      - {id: indent, name: --cui-tree-grid-indent, type: length, purpose: Per-level logical indent., default: 1.25rem}
+      - {id: border, name: --cui-tree-grid-border, type: complete border, purpose: Viewport Row and header boundaries., default: Adaptive 1px neutral}
+      - {id: surface, name: --cui-tree-grid-surface, type: color, purpose: Body surface., default: Canvas}
+      - {id: header, name: --cui-tree-grid-header-surface, type: color, purpose: Header surface., default: Adaptive neutral}
+      - {id: selected, name: --cui-tree-grid-selected-surface, type: color, purpose: Selected Row surface., default: Adaptive indigo}
+      - {id: focus, name: --cui-tree-grid-focus, type: color, purpose: Gridcell and expander focus., default: Highlight}
+
+attributes:
+  - id: ctree-grid-attributes
+    component: CTreeGrid
+    entries:
+      - {id: data-density, name: data-density, element: Root, type: {display: CTreeGridDensity, interfaces: [CTreeGridDensity]}, meaning: Reflects Row density.}
+      - {id: data-selection, name: data-selection, element: Root, type: {display: CTreeGridSelection, interfaces: [CTreeGridSelection]}, meaning: Reflects selection policy.}
+      - {id: data-disabled, name: data-disabled, element: Root and Row, type: present | absent, meaning: Reflects unavailable behavior.}
+      - {id: data-expanded, name: data-expanded, element: Row, type: present | absent, meaning: Reflects expanded branch state.}
+      - {id: data-selected, name: data-selected, element: Row, type: present | absent, meaning: Reflects selected state.}
+      - {id: data-row-key, name: data-row-key, element: Row and Cell, type: string, meaning: Exposes stable Row identity.}
+      - {id: data-parent-key, name: data-parent-key, element: Row, type: string | absent, meaning: Exposes parent identity.}
+      - {id: data-level, name: data-level, element: Row, type: positive integer string, meaning: Exposes hierarchy depth.}
+
+selectors:
+  - id: ctree-grid-selectors
+    component: CTreeGrid
+    entries:
+      - {id: root, selector: '[data-citry-ui-part="tree-grid"]', element: Root, purpose: Theme and state destination.}
+      - {id: toolbar, selector: '[data-citry-ui-part="toolbar"]', element: Optional div, purpose: Application controls.}
+      - {id: status, selector: '[data-citry-ui-part="status"]', element: Polite status, purpose: Expansion and selection announcements.}
+      - {id: viewport, selector: '[data-citry-ui-part="viewport"]', element: Scroll container, purpose: Narrow horizontal overflow.}
+      - {id: table, selector: '[data-citry-ui-part="table"]', element: Native table with treegrid role, purpose: Composite owner.}
+      - {id: header-cell, selector: '[data-citry-ui-part="header-cell"]', element: Columnheader, purpose: Column label.}
+      - {id: row, selector: '[data-citry-ui-part="row"]', element: Hierarchical Row, purpose: Expansion selection and hierarchy metadata.}
+      - {id: cell, selector: '[data-citry-ui-part="cell"]', element: Gridcell, purpose: Roving focus unit.}
+      - {id: hierarchy, selector: '[data-citry-ui-part="hierarchy"]', element: First-Cell wrapper, purpose: Indent branch control and content.}
+      - {id: expander, selector: '[data-citry-ui-part="expander"]', element: Native button, purpose: Pointer branch toggle.}
+      - {id: cell-content, selector: '[data-citry-ui-part="cell-content"]', element: Span, purpose: Cell slot destination.}
+      - {id: inputs, selector: '[data-citry-ui-part="inputs"]', element: Hidden span, purpose: Native selected-key controls.}
+
+interfaces:
+  - id: ctree-grid-aliases
+    kind: aliases
+    entries:
+      - {id: selection, name: CTreeGridSelection, definition: 'Literal["none", "single", "multiple"]'}
+      - {id: density, name: CTreeGridDensity, definition: 'Literal["compact", "comfortable", "spacious"]'}
+      - {id: align, name: CTreeGridAlign, definition: 'Literal["start", "center", "end"]'}
+      - {id: source, name: CTreeGridSource, definition: 'Literal["pointer", "keyboard", "reset"]'}
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+  - {id: ctree-grid-caption-slot, kind: record, name: CTreeGridCaptionSlotData, entries: []}
+  - {id: ctree-grid-toolbar-slot, kind: record, name: CTreeGridToolbarSlotData, entries: []}
+  - {id: ctree-grid-header-slot, kind: record, name: CTreeGridHeaderSlotData, entries: [{id: column, name: column, type: CTreeGridColumn, meaning: Current Column.}, {id: column-index, name: column_index, type: int, meaning: Zero-based Column index.}]}
+  - id: ctree-grid-cell-slot
+    kind: record
+    name: CTreeGridCellSlotData
+    entries:
+      - {id: row, name: row, type: CTreeGridRow, meaning: Current Row.}
+      - {id: column, name: column, type: CTreeGridColumn, meaning: Current Column.}
+      - {id: cell, name: cell, type: CTreeGridCell, meaning: Current Cell.}
+      - {id: row-index, name: row_index, type: int, meaning: Zero-based flattened Row index.}
+      - {id: column-index, name: column_index, type: int, meaning: Zero-based Column index.}
+      - {id: level, name: level, type: int, meaning: One-based hierarchy depth.}
+      - {id: expanded, name: expanded, type: bool, meaning: Initial branch expansion.}
+      - {id: selected, name: selected, type: bool, meaning: Initial Row selection.}
+  - {id: ctree-grid-expanded-detail, kind: record, name: CTreeGridExpandedChangeDetail, entries: [{id: expanded, name: expanded, type: 'list[str]', meaning: Requested expanded keys.}, {id: previous, name: previousExpanded, type: 'list[str]', meaning: Previous keys.}, {id: row-key, name: rowKey, type: str, meaning: Changed Row.}, {id: row-expanded, name: rowExpanded, type: bool, meaning: Requested Row state.}, {id: controlled, name: controlled, type: bool, meaning: Whether client state is controlled.}, {id: source, name: source, type: CTreeGridSource, meaning: Interaction source.}, {id: source-event, name: sourceEvent, type: object, meaning: Native Event.}]}
+  - {id: ctree-grid-selection-detail, kind: record, name: CTreeGridSelectionChangeDetail, entries: [{id: selected, name: selected, type: 'list[str]', meaning: Requested selected keys.}, {id: previous, name: previousSelected, type: 'list[str]', meaning: Previous keys.}, {id: row-key, name: rowKey, type: str, meaning: Changed Row.}, {id: row-selected, name: rowSelected, type: bool, meaning: Requested Row state.}, {id: controlled, name: controlled, type: bool, meaning: Whether client state is controlled.}, {id: source, name: source, type: CTreeGridSource, meaning: Interaction source.}, {id: source-event, name: sourceEvent, type: object, meaning: Native Event.}]}
+  - {id: ctree-grid-activate-detail, kind: record, name: CTreeGridCellActivateDetail, entries: [{id: row-key, name: rowKey, type: str, meaning: Activated Row.}, {id: column-key, name: columnKey, type: str, meaning: Activated Column.}, {id: row-index, name: rowIndex, type: int, meaning: Flattened Row index.}, {id: column-index, name: columnIndex, type: int, meaning: Column index.}, {id: source-event, name: sourceEvent, type: object, meaning: Native Event.}]}
+
+translations:
+  - id: ctree-grid-translations
+    component: CTreeGrid
+    entries:
+      - {id: expand, key: citry-ui-tree-grid-expand, purpose: Names a collapsed branch control., variables: 'row: str', override: '`expand_label` with `{row}`', updates: Imperative reactive `i18n.bind()`.}
+      - {id: collapse, key: citry-ui-tree-grid-collapse, purpose: Names an expanded branch control., variables: 'row: str', override: '`collapse_label` with `{row}`', updates: Imperative reactive `i18n.bind()`.}
+      - {id: expanded, key: citry-ui-tree-grid-expanded, purpose: Announces branch expansion., variables: 'row: str', override: '`expanded_label` with `{row}`', updates: Browser-created one-shot `i18n.tr()`.}
+      - {id: collapsed, key: citry-ui-tree-grid-collapsed, purpose: Announces branch collapse., variables: 'row: str', override: '`collapsed_label` with `{row}`', updates: Browser-created one-shot `i18n.tr()`.}
+      - {id: selected, key: citry-ui-tree-grid-selected, purpose: Announces Row selection., variables: 'row: str', override: '`selected_label` with `{row}`', updates: Browser-created one-shot `i18n.tr()`.}
+      - {id: unselected, key: citry-ui-tree-grid-unselected, purpose: Announces Row unselection., variables: 'row: str', override: '`unselected_label` with `{row}`', updates: Browser-created one-shot `i18n.tr()`.}

@@ -1,0 +1,10 @@
+
+:where(.remote-stars) {
+  max-width: 30rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#a5b4fc, #4338ca);
+  border-radius: 0.875rem;
+  background: Canvas;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}

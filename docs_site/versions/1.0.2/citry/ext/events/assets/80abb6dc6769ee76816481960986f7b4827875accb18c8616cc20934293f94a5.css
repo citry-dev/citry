@@ -1,0 +1,14 @@
+
+:where(.ocean-compose) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.ocean-compose__label) {
+  display: block;
+  margin-block-end: 0.5rem;
+  font-weight: 650;
+}

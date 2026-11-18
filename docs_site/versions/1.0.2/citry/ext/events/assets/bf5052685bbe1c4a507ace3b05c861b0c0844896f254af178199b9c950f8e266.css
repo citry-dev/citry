@@ -1,0 +1,40 @@
+
+:where(.launch-form) {
+  max-width: 36rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#bae6fd, #0c4a6e);
+  border-radius: 0.875rem;
+  background: Canvas;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.launch-form header) {
+  margin-block-end: 1rem;
+}
+
+:where(.launch-form h2, .launch-form p) {
+  margin: 0;
+}
+
+:where(.launch-form header p) {
+  margin-block-end: 0.3rem;
+  color: light-dark(#0369a1, #7dd3fc);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:where(.launch-form__actions) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  margin-block-start: 1rem;
+}
+
+:where(.launch-form__result) {
+  margin-block-start: 1rem;
+  color: color-mix(in srgb, currentColor 70%, transparent);
+  font-size: 0.875rem;
+}
