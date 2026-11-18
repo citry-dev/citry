@@ -72,8 +72,9 @@ You write the `messages` block as part of your source code, like the
 template, and your translators write the catalog files. Citry reads
 message text as Fluent, where braces pull in other messages and
 variables, so never build message text from request data or from text a
-site visitor saved. Pass a visitor's value as a variable instead, as
-`name=name` does above, and it shows as text.
+site visitor saved. Request data is anything a visitor sends, such as a
+query parameter, form field, or header. Pass a visitor's value as a
+variable instead, as `name=name` does above, and it shows as text.
 
 Messages work without any i18n settings. Citry then translates on the
 server into the source language only; it adds no browser code, language

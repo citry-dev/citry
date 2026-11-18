@@ -141,8 +141,8 @@ follows it.
 
 The `:` binding on `<c-slot>` and the `v-slot` value on `<c-fill>` are
 part of the template, so only the template author writes them. Request
-data reaches the fill only as values, such as the slot prop `row` or the
-outer component's `prefix`.
+data (anything a visitor sends) reaches the fill only as values, such as
+the slot prop `row` or the outer component's `prefix`.
 
 !!! warning "Vue does not check HTML, URLs, or attribute names"
 
