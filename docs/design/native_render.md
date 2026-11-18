@@ -642,8 +642,10 @@ values. That work reads and creates Python objects, so it cannot move to a
 stack taken from the heap the way the template parser's deep walks do
 (CPython 3.14 checks the stack pointer against the thread's own stack).
 Without a limit, a template nested deeply enough crashes the process on a
-thread with a small stack, for example the 128 KiB a thread gets by default
-on musl Linux.
+thread with a small stack, for example the 128 KiB that musl Linux gives a
+thread that nobody sized. (Python's own threads in the official
+`python:*-alpine` images get about 1 MiB, and `threading.stack_size()` can
+make any Python thread smaller.)
 
 So `Plan::new` and the PyO3 reader refuse a template past either of two
 limits, with a `ValueError` whose message starts with `too_deep:`.

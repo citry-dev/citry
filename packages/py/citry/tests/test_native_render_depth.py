@@ -13,11 +13,11 @@ every test reads the active limit from ``citry_core._rust`` rather than
 copying it.
 
 The first tests check the refusal and the rendering in this process. The last
-ones render on a fresh 128 KiB thread (the default thread stack on musl
-Linux) in a separate interpreter, so a crash fails one test rather than the
-run. Those cost an interpreter start each, so CI runs them in one Linux cell
-(``CITRY_NATIVE_DEPTH_PROBES=1``), while a local run always does, which checks
-a developer's debug build too.
+ones render on a fresh 128 KiB thread (the stack musl Linux gives a thread
+that nobody sized) in a separate interpreter, so a crash fails one test
+rather than the run. Those cost an interpreter start each, so CI runs them in
+one Linux cell (``CITRY_NATIVE_DEPTH_PROBES=1``), while a local run always
+does, which checks a developer's debug build too.
 """
 
 from __future__ import annotations

@@ -5,10 +5,11 @@
 //! guard a deep template overflows the stack and aborts the process. These
 //! tests run every step for templates at the nesting limits from #272
 //! (512 nested tags, 256 of them Citry logic) on threads with 128 KiB and
-//! 384 KiB stacks. 128 KiB is the default for threads on musl Linux. On it a
-//! render starts on a new 1 MiB segment, while 384 KiB is just enough to
-//! start on the thread's own stack, so the guard at each level must work in
-//! both. A crash aborts this test binary, which fails the test run.
+//! 384 KiB stacks. 128 KiB is what musl Linux gives a thread that nobody
+//! sized. On it a render starts on a new 1 MiB segment, while 384 KiB is
+//! just enough to start on the thread's own stack, so the guard at each
+//! level must work in both. A crash aborts this test binary, which fails the
+//! test run.
 
 use std::collections::HashMap;
 

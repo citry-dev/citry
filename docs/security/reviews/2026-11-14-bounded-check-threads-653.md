@@ -50,7 +50,8 @@ pull request adds or changes. Each deep-data test runs in a separate
 Python process, because too little stack would end the whole test run.
 
 - **Deep data from a small calling thread.** A thread with 128 KiB of stack
-  (the default on musl Linux, a C library some Linux builds use) checks
+  (the size musl Linux, a C library some Linux builds use, gives a thread
+  that nobody sized) checks
   data nested 1,000 levels. The cases are a chain of models, a
   self-referencing list type, Pydantic's `Json[...]` text of 1,000
   brackets, and a model whose validator validates again inside itself. It

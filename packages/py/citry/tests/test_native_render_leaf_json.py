@@ -975,12 +975,13 @@ def _nested_at_depth(depth: int, leaf: object = "bottom") -> object:
 
 @pytest.mark.parametrize("stack_kib", [128, 512])
 def test_rust_writes_deep_leaf_data_on_a_thread_with_a_small_stack(stack_kib: int) -> None:
-    # A thread gets the platform's default stack unless Python sets one:
-    # 128 KiB on musl Linux, also for Python's own threads, and 512 KiB on
-    # macOS for a thread started outside Python; `threading.stack_size()`
-    # gives any Python thread the same. Rust's walk reads Python objects, so
-    # no stack guard can help it; past a few levels it keeps the containers
-    # it has open on a list instead.
+    # A thread gets the platform's default stack unless Python sets one. On
+    # musl Linux a thread that nobody sized has 128 KiB (Python's own threads
+    # in the official python:*-alpine images get about 1 MiB). On macOS a
+    # thread started outside Python has 512 KiB. `threading.stack_size()`
+    # can give any Python thread a stack that small. Rust's walk reads Python
+    # objects, so no stack guard can help it; past a few levels it keeps the
+    # containers it has open on a list instead.
     deepest = _nested_at_depth(_first_too_deep_nesting() - 1)
     results: list[tuple[str, str]] = []
     previous = threading.stack_size(stack_kib * 1024)
