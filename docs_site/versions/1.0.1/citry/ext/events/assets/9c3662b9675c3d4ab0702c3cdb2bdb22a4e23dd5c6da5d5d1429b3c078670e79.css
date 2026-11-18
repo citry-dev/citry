@@ -1,0 +1,8 @@
+
+:where(.badge-icons) {
+  max-inline-size: 30rem;
+  padding: 1rem;
+  background: light-dark(#f4f0e7, #29251f);
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}

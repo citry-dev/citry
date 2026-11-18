@@ -1,0 +1,4 @@
+
+:where([data-citry-ui-part="item"]) {
+  display:flex;align-items:center;padding-inline:0.75rem;min-block-size:44px;
+}

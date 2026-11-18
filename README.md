@@ -155,7 +155,7 @@ Define a component in ordinary Python. Typed inputs catch misspellings and
 missing values, while `template_data()` chooses exactly what the template can
 read:
 
-```citry
+```py
 from citry import Component
 
 
@@ -204,7 +204,7 @@ Components compose through HTML-like tags. Static inputs look like ordinary
 HTML attributes; prefix an input with `c-` when its value is a Python
 expression:
 
-```citry-html
+```html
 <main>
   <c-Welcome name="Ada" c-messages="user.inbox" />
 </main>

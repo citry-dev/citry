@@ -1,0 +1,52 @@
+
+:where(.card-media) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+  max-width: 52rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.card-media h2) {
+  margin: 0;
+  font-size: 1rem;
+}
+
+:where(.card-media__illustration) {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+}
+
+:where(.card-media__swatches) {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  min-block-size: 10rem;
+}
+
+:where(.card-media__swatches span) {
+  display: grid;
+  place-items: end center;
+  padding: 0.5rem 0.2rem;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+:where(.card-media__clay) {
+  background: #a75f46;
+}
+
+:where(.card-media__linen) {
+  background: #b8a98c;
+  color: #241f18;
+}
+
+:where(.card-media__moss) {
+  background: #66704a;
+}
+
+:where(.card-media__walnut) {
+  background: #5d3a2a;
+}

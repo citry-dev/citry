@@ -345,6 +345,15 @@ class StaticWrapper(Extension):
     render_cache_version = 1
 ```
 
+With `"stateless"`, Citry stores what your render hooks added together
+with the cached entry, and adds it again each time it reuses that
+entry, without running the hooks. The cache key holds the component's
+inputs and `Cache.vary()`, not the other values your render hooks read,
+so the hooks must add the same output for every request that shares
+the key. Citry cannot detect a mismatch: output that depends on the
+user, such as a greeting, reaches every visitor who gets that entry.
+Use `"deny"` for such an extension.
+
 Use `"payload"` when reusing the output must also restore data your
 extension keeps. Return that data as plain JSON values from
 `export_render_cache()`. In `stage_render_cache()`, check the data and

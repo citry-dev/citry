@@ -44,6 +44,30 @@ export function ownValue<Value>(
   return Object.prototype.hasOwnProperty.call(record, key) ? record[key] : undefined;
 }
 
+/**
+ * Whether two JSON values hold the same content, with object keys compared as a set.
+ *
+ * The server writes the same configuration in different key orders on a first render and on an
+ * Events render, so comparing `JSON.stringify` output would report a difference that is not
+ * there. Array order still counts, because it carries meaning in this data.
+ */
+export function sameJsonContent(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (typeof left !== "object" || typeof right !== "object" || left === null || right === null) return false;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+    return left.every((item, index) => sameJsonContent(item, right[index]));
+  }
+  const leftKeys = Object.keys(left);
+  if (leftKeys.length !== Object.keys(right).length) return false;
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  return leftKeys.every(
+    (key) =>
+      Object.prototype.hasOwnProperty.call(rightRecord, key) && sameJsonContent(leftRecord[key], rightRecord[key]),
+  );
+}
+
 export function createI18nRuntimeState<
   Configuration,
   ProviderDefinition,

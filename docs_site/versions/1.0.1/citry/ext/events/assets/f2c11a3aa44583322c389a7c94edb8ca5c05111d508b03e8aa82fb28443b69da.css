@@ -1,0 +1,25 @@
+
+:where(.observation-catalog) {
+  max-width: 58rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.visibility) {
+  display: inline-flex;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+:where(.visibility--excellent) {
+  color: light-dark(#166534, #bbf7d0);
+  background: light-dark(#dcfce7, #14532d);
+}
+
+:where(.visibility--limited) {
+  color: light-dark(#9a3412, #fed7aa);
+  background: light-dark(#ffedd5, #7c2d12);
+}

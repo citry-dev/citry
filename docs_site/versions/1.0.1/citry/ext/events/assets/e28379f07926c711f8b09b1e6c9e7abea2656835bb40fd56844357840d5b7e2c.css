@@ -1,0 +1,5 @@
+
+:where(.responsive-popover) {
+  min-block-size: 14rem;
+  padding-block: 3rem;
+}

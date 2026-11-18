@@ -166,27 +166,20 @@
   // reason. The browser itself refuses one on another origin.
   const updateHistory = (mode, state, url) =>
     global.history[mode === "push" ? "pushState" : "replaceState"](state, "", resolveOnPage(url).href);
+  // A refused redirect throws, so the call that carried it fails: `Citry.events.applyActions`
+  // rejects its Promise and a sent call reports an error, and the caller learns that the page
+  // stayed where it was.
   const navigateToRedirect = url => {
     // A non-string has no text to read a scheme from, so it gets its own message instead of
     // being reported as a URL with an empty scheme.
-    if (typeof url !== "string") {
-      console.error("[Citry] refused a redirect because its URL is not a string.");
-      return;
-    }
+    if (typeof url !== "string")
+      throw new Error("[Citry] refused a redirect because its URL is not a string.");
     const scheme = redirectScheme(url);
-    if (scheme !== null && scheme !== "http" && scheme !== "https") {
-      console.error("[Citry] refused a redirect to a URL with the " + JSON.stringify(scheme) +
+    if (scheme !== null && scheme !== "http" && scheme !== "https")
+      throw new Error("[Citry] refused a redirect to a URL with the " + JSON.stringify(scheme) +
         " scheme; a redirect follows only http: and https: URLs and URLs with no scheme.");
-      return;
-    }
-    let target;
-    try {
-      target = resolveOnPage(url);
-    } catch (error) {
-      console.error(error.message);
-      return;
-    }
-    global.location.assign(target.href);
+    // `resolveOnPage` throws its own error for a URL that leaves the page's origin.
+    global.location.assign(resolveOnPage(url).href);
   };
 
   const apps = new Map();
@@ -409,7 +402,12 @@
   // that resolves to the page's own origin: a URL that resolves elsewhere (another site, an opaque or
   // unparseable URL) gets none. The page's origin is read from `origin`, which is "null" in a sandboxed
   // document even when its `location` has a real address, so such a page never reads its cookie here.
+  //
+  // Only a string or a `URL` is read. Turning any other object into text would read the wrong
+  // address: a `Request` becomes "[object Request]", a relative path on the page's own origin,
+  // whatever site the request is really for.
   const csrfHeaders = url => {
+    if (typeof url !== "string" && !(url instanceof URL)) return {};
     let target;
     try {
       target = new URL(String(url), pageDocument.baseURI);

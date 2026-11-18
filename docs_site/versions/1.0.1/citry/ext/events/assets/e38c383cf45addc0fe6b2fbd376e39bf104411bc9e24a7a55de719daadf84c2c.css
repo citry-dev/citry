@@ -1,0 +1,23 @@
+
+:where(.tags-input-paste) {
+  display: grid;
+  gap: 1rem;
+  max-inline-size: 38rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.tags-input-paste__sample) {
+  padding: 0.85rem;
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, CanvasText 6%, Canvas);
+}
+
+:where(.tags-input-paste__sample p) {
+  margin-block-start: 0;
+}
+
+:where(.tags-input-paste pre) {
+  margin: 0;
+  white-space: pre-wrap;
+}
