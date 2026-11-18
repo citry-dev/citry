@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import Any, ClassVar, Literal, TypedDict
 
 from citry import CitryRender, LibraryComponent, SlotInput, const_value
-from citry.util.html import LongReferenceSafeParser
 from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_DEPENDENCY,
 )
@@ -22,6 +21,7 @@ from citry_ui.components._attrs import (
 )
 from citry_ui.components._context import FORM_CONTEXT_KEY
 from citry_ui.components._heading import CHeadingLevel, resolve_heading_level
+from citry_ui.components._markup_tree import MarkupTreeParser, Namespace
 from citry_ui.components._validation import (
     first_attribute_occurrences,
     reject_owned_attrs,
@@ -234,24 +234,6 @@ _TITLE_HTML_ELEMENTS = frozenset(
     }
 )
 _TITLE_SVG_ELEMENTS = frozenset({"svg", "g", "path", "polyline", "line", "circle", "rect", "ellipse", "polygon"})
-_VOID_ELEMENTS = frozenset(
-    {
-        "area",
-        "base",
-        "br",
-        "col",
-        "embed",
-        "hr",
-        "img",
-        "input",
-        "link",
-        "meta",
-        "param",
-        "source",
-        "track",
-        "wbr",
-    }
-)
 _TITLE_REJECTED_ATTRS = frozenset(
     {
         "role",
@@ -385,45 +367,38 @@ def _title_attribute_problem(tag: str, attrs: list[tuple[str, str | None]]) -> s
     return None
 
 
-class _TitleOutputParser(LongReferenceSafeParser):
+class _TitleOutputParser(MarkupTreeParser[None]):
+    # Only the namespace of each open element matters: an element inside
+    # SVG must be one of the icon shapes, and its text is not title text.
+
     def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.stack: list[tuple[str, bool]] = []
+        super().__init__()
         self.problem: str | None = None
         self.text: list[str] = []
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        parent_svg = self.stack[-1][1] if self.stack else False
+    def open_element(self, tag: str, attrs: list[tuple[str, str | None]], namespace: Namespace) -> None:  # noqa: ARG002
+        parent_svg = bool(self.open_elements) and self.open_elements[-1].namespace == "svg"
         allowed = _TITLE_SVG_ELEMENTS if parent_svg else _TITLE_HTML_ELEMENTS
         if self.problem is None and tag not in allowed:
             self.problem = f"unsupported <{visible_markup_text(tag)}> element"
         if self.problem is None:
             self.problem = _title_attribute_problem(tag, attrs)
-        in_svg = parent_svg or tag == "svg"
-        if tag not in _VOID_ELEMENTS:
-            self.stack.append((tag, in_svg))
-
-    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        self.handle_starttag(tag, attrs)
-        if tag not in _VOID_ELEMENTS:
-            self.handle_endtag(tag)
-
-    def handle_endtag(self, tag: str) -> None:  # noqa: ARG002
-        if self.stack:
-            self.stack.pop()
 
     def handle_data(self, data: str) -> None:
-        if not self.stack or not self.stack[-1][1]:
+        if not self.open_elements or self.open_elements[-1].namespace != "svg":
             self.text.append(data)
 
 
-class _ContentOutputParser(LongReferenceSafeParser):
+class _ContentOutputParser(MarkupTreeParser[None]):
+    # The check reads each element on its own; the base parser only makes it
+    # see the elements a browser builds.
+
     def __init__(self, *, actions: bool) -> None:
-        super().__init__(convert_charrefs=True)
+        super().__init__()
         self.actions = actions
         self.problem: str | None = None
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+    def open_element(self, tag: str, attrs: list[tuple[str, str | None]], namespace: Namespace) -> None:  # noqa: ARG002
         if self.problem is not None:
             return
         # Read each repeated attribute at its first occurrence, as the browser does.
@@ -444,9 +419,6 @@ class _ContentOutputParser(LongReferenceSafeParser):
             return
         if self.actions and values.get("data-citry-ui-part") in {"disclosure", "accordion"}:
             self.problem = "nested Disclosure or Accordion roots are allowed only in panel content"
-
-    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        self.handle_starttag(tag, attrs)
 
 
 def _serialized(result: CitryRender, owner: str) -> str:

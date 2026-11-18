@@ -8,7 +8,6 @@ from hashlib import sha256
 from typing import Any, Literal, TypedDict, cast
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry.util.html import LongReferenceSafeParser
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
@@ -17,6 +16,7 @@ from citry_ui.components._attrs import (
     reject_data_item_vue_name,
     reject_vue_directive_attrs,
 )
+from citry_ui.components._markup_tree import MarkupTreeParser, Namespace
 from citry_ui.components._validation import (
     first_attribute_occurrences,
     reject_owned_attrs,
@@ -192,19 +192,25 @@ def _token(value: str) -> str:
     return sha256(value.encode()).hexdigest()[:12]
 
 
-class _TreeOutputParser(LongReferenceSafeParser):
+class _TreeOutputParser(MarkupTreeParser[str | None]):
+    # The value kept for each open element is its ``data-citry-ui-part``.
+
     def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.stack: list[str | None] = []
+        super().__init__()
         self.problem: str | None = None
         self.seen_tree = False
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+    def open_element(
+        self,
+        tag: str,
+        attrs: list[tuple[str, str | None]],
+        namespace: Namespace,  # noqa: ARG002
+    ) -> str | None:
         # Read each repeated attribute at its first occurrence, as the browser does.
         values = dict(first_attribute_occurrences(attrs))
         part = values.get("data-citry-ui-part")
-        parent = self.stack[-1] if self.stack else None
-        in_tree = self.seen_tree and bool(self.stack)
+        parent = self.open_elements[-1].value if self.open_elements else None
+        in_tree = self.seen_tree and bool(self.open_elements)
         if part == "tree" and not self.seen_tree:
             self.seen_tree = True
         elif in_tree and self.problem is None:
@@ -218,11 +224,7 @@ class _TreeOutputParser(LongReferenceSafeParser):
             }
             if parent in allowed and part not in allowed[parent]:
                 self.problem = f"{parent} contains unsupported element {visible_markup_text(tag)}"
-        self.stack.append(part)
-
-    def handle_endtag(self, tag: str) -> None:  # noqa: ARG002
-        if self.stack:
-            self.stack.pop()
+        return part
 
 
 def _validate_tree_output(rendered: object) -> None:

@@ -5,10 +5,9 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, ClassVar, Literal, cast
+from typing import Any, Literal, cast
 
 from citry import LibraryComponent, SlotInput, const_value, merge_attrs
-from citry.util.html import LongReferenceSafeParser
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
@@ -18,6 +17,7 @@ from citry_ui.components._attrs import (
     merge_root_attrs,
     reject_citry_ui_reserved_attr,
 )
+from citry_ui.components._markup_tree import MarkupTreeParser, Namespace
 from citry_ui.components._url import check_image_url
 from citry_ui.components._validation import first_attribute_occurrences
 
@@ -126,37 +126,21 @@ class _CImageVisualSlotData:
     pass
 
 
-class _CImageVisualParser(LongReferenceSafeParser):
-    _VOID: ClassVar[set[str]] = {
-        "area",
-        "base",
-        "br",
-        "col",
-        "embed",
-        "hr",
-        "img",
-        "input",
-        "link",
-        "meta",
-        "source",
-        "track",
-        "wbr",
-    }
+class _CImageVisualParser(MarkupTreeParser[bool]):
+    # The value kept for each open element says whether it sits inside a
+    # placeholder or fallback fill, whose content must hold nothing focusable.
 
     def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.visual_depth = 0
+        super().__init__()
         self.invalid = False
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+    def open_element(self, tag: str, attrs: list[tuple[str, str | None]], namespace: Namespace) -> bool:  # noqa: ARG002
         # Read each repeated attribute at its first occurrence, as the browser does.
         values = dict(first_attribute_occurrences(attrs))
-        if self.visual_depth == 0:
-            if values.get("data-citry-ui-part") in {"placeholder", "fallback"}:
-                self.visual_depth = 1
-            return
-        if tag not in self._VOID:
-            self.visual_depth += 1
+        in_fill = bool(self.open_elements) and self.open_elements[-1].value
+        if not in_fill:
+            # The fill wrapper itself is the component's own element.
+            return values.get("data-citry-ui-part") in {"placeholder", "fallback"}
         if (
             tag
             in {
@@ -167,6 +151,9 @@ class _CImageVisualParser(LongReferenceSafeParser):
                 "img",
                 "input",
                 "label",
+                # With scripting on, the browser reads its content as text,
+                # so the elements inside could close the fill early.
+                "noscript",
                 "object",
                 "select",
                 "textarea",
@@ -179,15 +166,7 @@ class _CImageVisualParser(LongReferenceSafeParser):
             or ("contenteditable" in values and (values["contenteditable"] or "").casefold() != "false")
         ):
             self.invalid = True
-
-    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        before = self.visual_depth
-        self.handle_starttag(tag, attrs)
-        self.visual_depth = before
-
-    def handle_endtag(self, tag: str) -> None:  # noqa: ARG002
-        if self.visual_depth:
-            self.visual_depth -= 1
+        return True
 
 
 def _plain_string(
