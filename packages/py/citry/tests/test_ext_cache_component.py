@@ -5,6 +5,7 @@ from __future__ import annotations
 import gc
 import json
 import logging
+import re
 import weakref
 from dataclasses import field
 from types import MappingProxyType
@@ -17,6 +18,7 @@ from citry.ext.cache.artifact import _decode_artifact
 from citry.ext.debug import Debug
 from citry.ext.dependencies.extension import EXTRA_KEY as DEPENDENCIES_EXTRA_KEY
 from citry.ext.dependencies.scripts import gen_cache_key, get_script
+from citry.util.html import escape_to_str
 
 
 class _RecordingCache(InMemoryCache):
@@ -1369,3 +1371,37 @@ class TestComponentCacheFailuresAndLifetime:
         class_ref = render_and_release()
         gc.collect()
         assert class_ref() is None
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        """
+            <textarea>{{ value }}</textarea>
+        """,
+        """
+            <div><textarea>{{ value }}</textarea></div>
+        """,
+    ],
+    ids=["root_textarea", "nested_textarea"],
+)
+@pytest.mark.parametrize("value", ["a<b", "\nfirst line"], ids=["plain", "leading_newline"])
+def test_a_replayed_textarea_keeps_its_dynamic_text(source: str, value: str) -> None:
+    app = Citry()
+
+    class Note(Component):
+        citry = app
+        template = source
+
+        class Cache:
+            enabled = True
+
+        def template_data(self, kwargs, slots):
+            return {"value": value}
+
+    fresh = Note().render().serialize()
+    replayed = Note().render().serialize()
+
+    # Only the render id differs between the two renders.
+    assert re.sub(r"data-cid-[a-z0-9]+", "", replayed) == re.sub(r"data-cid-[a-z0-9]+", "", fresh)
+    assert escape_to_str(value) in replayed

@@ -1565,7 +1565,14 @@ def test_page_whose_served_copy_would_break_its_security_policy_keeps_an_empty_h
     # A strict CSP rejects the inline handler, and a JavaScript policy
     # reports every Vue binding in served HTML. Sending the copy would make
     # a page that serialized cleanly fail or warn, so the host stays empty.
-    html = rendered.serialize(csp_nonce="cmVxdWVzdE5vbmNl" if "security_csp" in policy else None)
+    if "security_csp" in policy:
+        # The page's own CSP check sees only the empty host, so Citry says
+        # why it left the host empty, and strict mode still renders.
+        with pytest.warns(RuntimeWarning, match="Vue host empty") as caught:
+            html = rendered.serialize(csp_nonce="cmVxdWVzdE5vbmNl")
+        assert "'onclick'" in str(caught[0].message)
+    else:
+        html = rendered.serialize()
     assert re.search(r'<div id="citry-vue-[^"]+"></div>', html)
     admission = _admission(rendered)
     assert (admission.reason, admission.server_html) == ("security-policy", False)

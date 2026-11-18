@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import pytest
 
 from citry import Citry, Component
-from citry._pure import PurePreparedPart
+from citry._pure import PurePreparedPart, pure_body_cache_scope, pure_body_lookup, store_pure_body
 from citry._vue.capture import (
     PreparedBrowserBinding,
     PreparedElementClose,
@@ -171,6 +171,27 @@ def test_pure_component_memo_is_scoped_to_one_root_render() -> None:
     Page(value=probe).render()
     Page(value=probe).render()
     assert probe.calls == 2
+
+
+def test_pure_body_memo_never_matches_a_new_body_at_a_reused_address() -> None:
+    class Owner:
+        pass
+
+    with pure_body_cache_scope():
+        first: list = []
+        found = pure_body_lookup(Owner, first, {}, ())
+        assert found is not None
+        key, plan = found
+        assert plan is None
+        store_pure_body(key, ("stored",))
+        del first, found
+        # The memo keeps the first body alive, so no later body can take its
+        # address and be served the plan stored for it.
+        for _ in range(100):
+            other: list = []
+            looked_up = pure_body_lookup(Owner, other, {}, ())
+            assert looked_up is not None
+            assert looked_up[1] is None
 
 
 def test_pure_component_replays_transparent_control_flow_structure() -> None:

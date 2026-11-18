@@ -30,6 +30,7 @@ from citry.assets import HasHtml
 from citry.citry_render import CitryRender, selected_render_ids
 from citry.ext.dependencies.routes import SHARED_RUNTIME, asset_content_type, script_url
 from citry.ext.dependencies.scripts import (
+    _store_css_data_stylesheet,
     cache_asset,
     cache_component_css,
     cache_component_js,
@@ -1254,7 +1255,7 @@ def _maybe_serve_local_file(path: Path, comp_cls: type[Component]) -> _OwnedReso
 
 def publish_css_data_stylesheets(citry: Citry, render: CitryRender) -> None:
     """
-    Put the ``css_data()`` stylesheets of a page being written into this process's store, without a configured cache.
+    Make sure every ``css_data()`` stylesheet a page links is stored when the page is written.
 
     Without a configured cache, this process's store of page files is the
     only copy of these stylesheets, and it drops the ones used longest ago
@@ -1262,16 +1263,22 @@ def publish_css_data_stylesheets(citry: Citry, render: CitryRender) -> None:
     the page is written, not when it was rendered: other renders may fill the
     store in between. The caller holds the page's files (see
     ``citry._vue.events.hold_page_assets``), so the page can inline each
-    stylesheet and the browser can fetch each one it links. With a
-    configured cache, rendering already wrote them to the backend.
+    stylesheet and the browser can fetch each one it links.
+
+    With a configured cache, rendering already wrote them to the backend, but
+    an entry can be missing: the backend dropped it (it expired or hit a size
+    limit), or the render came from the render cache and never wrote it. The stylesheet
+    route can only serve what the backend holds, so each one is checked and
+    written again here. The backend can still drop it after the page is sent.
     """
     # _vue.events imports this module's package at load time, so importing
     # it here at load time would be circular.
     from citry._vue.events import keeps_assets_in_process_only, remember_css_data_stylesheet  # noqa: PLC0415
 
     captures = render.context.extra.get(EXTRA_KEY)
-    if not captures or not keeps_assets_in_process_only(citry):
+    if not captures:
         return
+    in_process = keeps_assets_in_process_only(citry)
     selected_ids = selected_render_ids(render)
     # Many instances share one stylesheet, so each key is stored once.
     published: set[str] = set()
@@ -1283,7 +1290,10 @@ def publish_css_data_stylesheets(citry: Citry, render: CitryRender) -> None:
         key = gen_cache_key(record.class_id, "css", css.variables_hash)
         if key not in published:
             published.add(key)
-            remember_css_data_stylesheet(citry, key, css.cache_value)
+            if in_process:
+                remember_css_data_stylesheet(citry, key, css.cache_value)
+            else:
+                _store_css_data_stylesheet(citry, record.class_id, css)
 
 
 def _locate_placeholders(html: str, placeholders: dict[str, str], key: str) -> list[tuple[int, str]]:
