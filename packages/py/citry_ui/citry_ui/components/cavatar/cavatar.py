@@ -11,6 +11,7 @@ from citry.attrs import validate_html_attr_name
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
+    attr_name_text,
     is_vue_directive_attribute,
     merge_root_attrs,
     reject_citry_ui_reserved_attr,
@@ -123,7 +124,7 @@ def _copy_attrs(
             )
             raise ValueError(msg)
         validate_html_attr_name(key, where=f"CAvatar {destination}")
-        normalized = key.casefold()
+        normalized = attr_name_text(key).casefold()
         reject_citry_ui_reserved_attr(key, attr_value, where=f"CAvatar {destination}")
         # The image's load and error events drive the Avatar's status, so an
         # inline handler there would run beside that logic.

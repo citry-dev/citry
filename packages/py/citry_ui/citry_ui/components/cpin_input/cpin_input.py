@@ -14,6 +14,7 @@ from citry_ui.components._aria import merge_idrefs
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
+    attr_name_text,
     get_html_form_owner,
     merge_root_attrs,
     reject_citry_ui_reserved_attr,
@@ -136,7 +137,7 @@ def _attrs(destination: str, value: Mapping[str, object] | None, owned: frozense
 def _pop_case_insensitive(attrs: dict[str, object], name: str) -> object | None:
     found: object | None = None
     for authored_name in tuple(attrs):
-        if authored_name.casefold() == name:
+        if attr_name_text(authored_name).casefold() == name:
             found = attrs.pop(authored_name)
     return found
 

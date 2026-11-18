@@ -12,6 +12,7 @@ from citry.util.html import LongReferenceSafeParser
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
+    attr_name_text,
     is_executable_event_attribute,
     is_vue_directive_attribute,
     merge_root_attrs,
@@ -338,7 +339,7 @@ def _copy_attrs(
             msg = f"CImage {destination} requires string attribute names."
             raise TypeError(msg)
         reject_citry_ui_reserved_attr(key, attr_value, where=f"CImage {destination}")
-        normalized = key.casefold()
+        normalized = attr_name_text(key).casefold()
         if normalized in owned or (reject_all_aria and normalized.startswith("aria-")):
             msg = f"CImage {destination} cannot override owned attribute {key!r}."
             raise ValueError(msg)

@@ -7,7 +7,13 @@ from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
 
 from citry import LibraryComponent, SlotInput
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    attr_name_text,
+    merge_root_attrs,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._context import FORM_CONTEXT_KEY
 from citry_ui.components._shared_component_assets import build_shared_component_assets
 from citry_ui.components._url import attribute_text, check_link_url
@@ -56,9 +62,9 @@ _LINK_FORM_ATTRS = {
 
 
 def _reject_link_form_attrs(attrs: Mapping[str, object] | None) -> None:
-    incompatible = sorted(key for key in attrs or {} if key.lower() in _LINK_FORM_ATTRS)
+    incompatible = sorted(key for key in attrs or {} if attr_name_text(key).lower() in _LINK_FORM_ATTRS)
     if incompatible:
-        names = ", ".join(repr(name) for name in incompatible)
+        names = ", ".join(repr(attr_name_text(name)) for name in incompatible)
         msg = f"CButton attrs {names} apply only to action buttons and cannot be used when href is set."
         raise ValueError(msg)
 
@@ -68,7 +74,9 @@ def _check_formaction(attrs: Mapping[str, object] | None) -> None:
     # same link check as CForm action. CSplitButton's primary_attrs reach here
     # through _build_button_snapshot too.
     for key, value in (attrs or {}).items():
-        if key.lower() == "formaction" and value is not None and not isinstance(value, bool):
+        # Compare the text Citry writes, not what a `str` subclass key
+        # answers from `lower()` or `__eq__`.
+        if attr_name_text(key).lower() == "formaction" and value is not None and not isinstance(value, bool):
             # Read the value as Citry writes it: str() would keep a Markup
             # value's character references undecoded, while Citry decodes
             # them in the attribute.
@@ -78,7 +86,7 @@ def _check_formaction(attrs: Mapping[str, object] | None) -> None:
 def _pop_case_insensitive(attrs: dict[str, object], name: str) -> object | None:
     value: object | None = None
     for authored_name in tuple(attrs):
-        if authored_name.lower() == name:
+        if attr_name_text(authored_name).lower() == name:
             value = attrs.pop(authored_name)
     return value
 
@@ -86,7 +94,7 @@ def _pop_case_insensitive(attrs: dict[str, object], name: str) -> object | None:
 def _get_case_insensitive(attrs: Mapping[str, object] | None, name: str) -> object | None:
     value: object | None = None
     for authored_name, authored_value in (attrs or {}).items():
-        if authored_name.lower() == name:
+        if attr_name_text(authored_name).lower() == name:
             value = authored_value
     return value
 

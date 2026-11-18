@@ -10,6 +10,7 @@ from citry import CitryRender, LibraryComponent, Slot, SlotInput
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
+    attr_name_text,
     is_vue_directive_attribute,
     merge_root_attrs,
     reject_citry_ui_reserved_attr,
@@ -96,7 +97,7 @@ def _reject_owned_attrs(
     location: str,
 ) -> None:
     for key, attr_value in (attrs or {}).items():
-        if key.lower() in owned:
+        if attr_name_text(key).lower() in owned:
             msg = f"{location} attrs cannot override owned attribute {key!r}."
             raise ValueError(msg)
         # `location` is "CTabs" or "CTabs tab_list_attrs"; name the input once.

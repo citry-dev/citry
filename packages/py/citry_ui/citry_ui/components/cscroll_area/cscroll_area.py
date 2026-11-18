@@ -13,6 +13,7 @@ from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
+    attr_name_text,
     is_executable_event_attribute,
     merge_root_attrs,
     reject_citry_ui_reserved_attr,
@@ -109,7 +110,7 @@ def _copy_attrs(value: Mapping[str, object] | None) -> dict[str, object]:
     reject_vue_directive_attrs(copied, "CScrollArea")
     for key, attr_value in copied.items():
         reject_citry_ui_reserved_attr(key, attr_value, where="CScrollArea attrs")
-        name = key.casefold()
+        name = attr_name_text(key).casefold()
         if name in _ALLOWED_PLAIN or name in _ALLOWED_ARIA:
             continue
         # Reserved `data-` names were already refused above.

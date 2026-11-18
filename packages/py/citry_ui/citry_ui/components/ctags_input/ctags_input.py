@@ -17,6 +17,7 @@ from citry_ui.components._aria import merge_idrefs
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
+    attr_name_text,
     get_html_form_owner,
     is_executable_event_attribute,
     is_vue_directive_attribute,
@@ -337,7 +338,7 @@ def _destination_attrs(
     for key, value in (attrs or {}).items():
         if not isinstance(key, str):
             raise TypeError(f"CTagsInput {destination} requires string keys, got {key!r}.")
-        normalized = key.casefold()
+        normalized = attr_name_text(key).casefold()
         # Listeners get their own message first because the typed callbacks
         # are the usual replacement for them.
         if is_executable_event_attribute(normalized):

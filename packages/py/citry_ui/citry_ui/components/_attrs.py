@@ -23,9 +23,25 @@ CStyleValue: TypeAlias = Union[  # noqa: UP007 - recursive on Python 3.10
 ]
 
 
+def attr_name_text(name: str) -> str:
+    """
+    Return the characters of the attribute name `name` as a plain `str`.
+
+    Citry writes the stored characters of a name into the page. A `str`
+    subclass can override `lower`, `casefold`, `startswith`, `__eq__` or
+    `__hash__` and return a different name, so every attribute-name check
+    in Citry UI reads the name through this first and compares the text the
+    browser will get. It repeats core `citry.util.html.exact_str`, which
+    citry 1.0.0, the oldest release Citry UI supports, does not have.
+    """
+    # Called on the class so an override on the subclass is never consulted;
+    # for a subclass it returns a copy whose type is exactly `str`.
+    return str.__str__(name)
+
+
 def _matching_html_attr_keys(attrs: Mapping[str, object], name: str) -> list[str]:
-    normalized_name = name.casefold()
-    return [key for key in attrs if isinstance(key, str) and key.casefold() == normalized_name]
+    normalized_name = attr_name_text(name).casefold()
+    return [key for key in attrs if isinstance(key, str) and attr_name_text(key).casefold() == normalized_name]
 
 
 def get_html_attr(
@@ -84,7 +100,7 @@ def is_vue_directive_attribute(name: str) -> bool:
     """Return whether an attribute name uses Vue directive syntax."""
     # HTML attribute names are case-insensitive, so `V-IF` must not slip past
     # a check that only knows the lowercase spelling.
-    return name.casefold().startswith(_VUE_DIRECTIVE_PREFIXES)
+    return attr_name_text(name).casefold().startswith(_VUE_DIRECTIVE_PREFIXES)
 
 
 def reject_vue_directive_attrs(
@@ -251,7 +267,7 @@ def reject_data_item_vue_name(name: object, *, where: str) -> None:
 
 def html_attr_binding_target(name: str) -> str | None:
     """Return the attribute a `:name`, `.name`, or `v-bind:name` binding sets, or None for any other name."""
-    normalized = name.casefold()
+    normalized = attr_name_text(name).casefold()
     if normalized.startswith("v-bind:"):
         target = normalized.split(":", 1)[1].split(".", 1)[0]
     elif normalized.startswith((":", ".")):
@@ -272,7 +288,7 @@ def is_executable_event_attribute(name: str) -> bool:
     template assembled from that data. Authored Vue attributes still go
     through the template compiler and are intentionally outside this check.
     """
-    normalized = name.casefold()
+    normalized = attr_name_text(name).casefold()
     return normalized.startswith(("on", "@", "v-on"))
 
 
@@ -295,6 +311,7 @@ __all__ = [
     "CClassValue",
     "CStyleValue",
     "CitryUiOwnedValue",
+    "attr_name_text",
     "citry_ui_owned_value",
     "get_html_attr",
     "get_html_form_owner",
