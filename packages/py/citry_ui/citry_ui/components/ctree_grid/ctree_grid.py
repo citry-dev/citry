@@ -17,7 +17,7 @@ from citry_ui.components._attrs import (
     reject_citry_ui_reserved_attr,
     reject_data_item_vue_name,
 )
-from citry_ui.components._i18n import uses_catalog_default
+from citry_ui.components._i18n import fill_label, uses_catalog_default
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -293,6 +293,7 @@ class CTreeGrid(LibraryComponent):
             "density",
             "disabled",
             "expanded",
+            "fill_label",
             "form",
             "has_caption",
             "has_toolbar",
@@ -460,6 +461,8 @@ class CTreeGrid(LibraryComponent):
             "density": kwargs.density,
             "catalog": catalog,
             "labels": labels,
+            # The template fills the expand and collapse labels per row.
+            "fill_label": fill_label,
             "has_toolbar": "toolbar" in self.raw_slots,
             "has_caption": "caption" in self.raw_slots,
             "attrs": merge_attrs(
@@ -527,7 +530,7 @@ class CTreeGrid(LibraryComponent):
                       type="button"
                       tabindex="-1"
                       c-disabled="disabled or row.source.disabled"
-                      c-aria-label="tr('citry-ui-tree-grid-collapse', row=row.source.label) if row.expanded and catalog['collapse'] else tr('citry-ui-tree-grid-expand', row=row.source.label) if catalog['expand'] else labels['collapse'].format(row=row.source.label) if row.expanded else labels['expand'].format(row=row.source.label)"
+                      c-aria-label="tr('citry-ui-tree-grid-collapse', row=row.source.label) if row.expanded and catalog['collapse'] else tr('citry-ui-tree-grid-expand', row=row.source.label) if catalog['expand'] else fill_label(labels['collapse'], row=row.source.label) if row.expanded else fill_label(labels['expand'], row=row.source.label)"
                       data-citry-tree-grid-expander
                       data-citry-ui-part="expander"
                     ><span aria-hidden="true">&#8250;</span></button>

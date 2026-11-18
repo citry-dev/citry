@@ -17,6 +17,7 @@ from citry_ui.components._aria import merge_idrefs
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
+    attr_name_text,
     get_html_form_owner,
     is_executable_event_attribute,
     is_vue_directive_attribute,
@@ -26,6 +27,7 @@ from citry_ui.components._attrs import (
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
 from citry_ui.components._form_control_runtime import FORM_CONTROL_RUNTIME_DEPENDENCY, FORM_CONTROL_STYLE_DEPENDENCY
+from citry_ui.components._i18n import fill_label
 from citry_ui.components._validation import validate_optional_boolean
 
 CTagsInputVariant = Literal["outline", "filled", "plain"]
@@ -336,7 +338,7 @@ def _destination_attrs(
     for key, value in (attrs or {}).items():
         if not isinstance(key, str):
             raise TypeError(f"CTagsInput {destination} requires string keys, got {key!r}.")
-        normalized = key.casefold()
+        normalized = attr_name_text(key).casefold()
         # Listeners get their own message first because the typed callbacks
         # are the usual replacement for them.
         if is_executable_event_attribute(normalized):
@@ -589,7 +591,7 @@ class CTagsInput(LibraryComponent):
                 value=value,
                 remove_label=self.i18n.tr("citry-ui-tags-input-remove", value=value)
                 if catalog_messages["remove_label"]
-                else cast("str", messages.remove_label).format(value=value),
+                else fill_label(cast("str", messages.remove_label), value=value),
             )
             for value in values
         )

@@ -17,6 +17,7 @@ from citry_ui.components._aria import merge_idrefs
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
+    attr_name_text,
     get_html_form_owner,
     is_executable_event_attribute,
     is_vue_directive_attribute,
@@ -206,7 +207,7 @@ def _attrs(
     for key, attr_value in copied.items():
         if not isinstance(key, str):
             raise TypeError(f"{owner} {input_name} requires string keys, got {key!r}.")
-        normalized = key.casefold()
+        normalized = attr_name_text(key).casefold()
         reject_citry_ui_reserved_attr(key, attr_value, where=f"{owner} {input_name}")
         # A Vue directive could rebind an owned attribute (including the
         # description links the component merges), change the structure, or

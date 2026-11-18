@@ -14,9 +14,10 @@ from citry_ui.components._attrs import (
     CStyleValue,
     merge_root_attrs,
     reject_citry_ui_reserved_attr,
+    reject_data_item_vue_name,
     reject_vue_directive_attrs,
 )
-from citry_ui.components._i18n import uses_catalog_default
+from citry_ui.components._i18n import fill_label, uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_html_id
 
 CSortableLayout = Literal["vertical", "horizontal", "grid"]
@@ -136,6 +137,8 @@ def _attrs(
     owned: frozenset[str],
     class_: CClassValue | None,
     style: CStyleValue | None,
+    *,
+    refuse_vue_names: bool = False,
 ) -> dict[str, object]:
     if attrs is not None and not isinstance(attrs, Mapping):
         raise TypeError(f"{owner} attrs must be a mapping or None, got {attrs!r}.")
@@ -145,6 +148,10 @@ def _attrs(
         if not isinstance(key, str):
             raise TypeError(f"{owner} attrs require string keys, got {key!r}.")
         reject_citry_ui_reserved_attr(key, attr_value, where=f"{owner} attrs")
+        # Vue reads `is` and `key` on an element itself, so every list item
+        # refuses both names, as data items do.
+        if refuse_vue_names:
+            reject_data_item_vue_name(key, where=f"{owner} attrs")
     # A Vue directive could rebind the order, drag handles, or ARIA state this
     # component owns, so none may arrive through Python data.
     reject_vue_directive_attrs(copied, owner)
@@ -364,7 +371,9 @@ class CSortableItem(LibraryComponent):
                 value=value,
                 label=cast("str", _plain("CSortableItem label", kwargs.label)),
                 disabled=bool(kwargs.disabled),
-                attrs=_attrs("CSortableItem", kwargs.attrs, _ITEM_OWNED, kwargs.class_, kwargs.style),
+                attrs=_attrs(
+                    "CSortableItem", kwargs.attrs, _ITEM_OWNED, kwargs.class_, kwargs.style, refuse_vue_names=True
+                ),
                 content=cast("Slot[CSortableItemSlotData] | None", slots.default),
                 handle=cast("Slot[CSortableItemSlotData] | None", slots.handle),
             )
@@ -455,7 +464,7 @@ class CInternalSortable(LibraryComponent):
             handle_label = (
                 self.i18n.tr("citry-ui-sortable-handle", item=item.label)
                 if kwargs.catalog["handle"]
-                else kwargs.labels["handle"].format(item=item.label)
+                else fill_label(kwargs.labels["handle"], item=item.label)
             )
             items.append(
                 {

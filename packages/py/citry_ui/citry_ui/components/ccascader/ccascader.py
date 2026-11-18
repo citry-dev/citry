@@ -17,7 +17,7 @@ from citry_ui.components._attrs import (
     reject_citry_ui_reserved_attr,
     reject_vue_directive_attrs,
 )
-from citry_ui.components._i18n import uses_catalog_default
+from citry_ui.components._i18n import fill_label, uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_html_id
 
 CCascaderSize = Literal["sm", "md", "lg"]
@@ -525,7 +525,7 @@ class CInternalCascader(LibraryComponent):
             },
             "catalog_placeholder": catalog["placeholder"],
             "catalog_empty": catalog["empty"],
-            "status": texts["selected"].format(path=joined) if joined else "",
+            "status": fill_label(texts["selected"], path=joined) if joined else "",
         }
 
     template = """

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from citry_ui.components._attrs import reject_citry_ui_reserved_attr
+from citry_ui.components._attrs import attr_name_text, reject_citry_ui_reserved_attr
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Mapping
@@ -51,13 +51,15 @@ def reject_owned_attrs(
     owned: Collection[str],
     component_name: str,
 ) -> None:
-    owned_lower = {name.lower() for name in owned}
+    owned_lower = {attr_name_text(name).lower() for name in owned}
     for key, attr_value in (attrs or {}).items():
         if not isinstance(key, str):
             msg = f"{component_name} attrs require string keys, got {key!r}."
             raise TypeError(msg)
-        if key.lower() in owned_lower:
-            msg = f"{component_name} attrs cannot override owned attribute {key!r}."
+        # A `str` subclass key could answer `lower()` or a set lookup with a
+        # different name from the text Citry writes, so compare that text.
+        if attr_name_text(key).lower() in owned_lower:
+            msg = f"{component_name} attrs cannot override owned attribute {attr_name_text(key)!r}."
             raise ValueError(msg)
         # Every component runs this on its attrs maps, so a component that
         # lists only the names it sets itself still refuses the names Citry's

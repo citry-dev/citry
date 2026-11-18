@@ -11,6 +11,7 @@ from citry import LibraryComponent, const_value
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
+    attr_name_text,
     merge_root_attrs,
     reject_citry_ui_reserved_attr,
     reject_vue_directive_attrs,
@@ -196,7 +197,7 @@ def _validate_icon_attrs(attrs: Mapping[str, object] | None) -> None:
     # accessible name, change structure, or attach a listener.
     reject_vue_directive_attrs(attrs, "CIcon")
     for key, attr_value in (attrs or {}).items():
-        normalized = key.lower()
+        normalized = attr_name_text(key).lower()
         if normalized.startswith("aria-") and normalized not in _ALLOWED_ARIA_ATTRS:
             msg = f"CIcon attrs cannot override owned accessibility attribute {key!r}."
             raise ValueError(msg)

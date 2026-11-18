@@ -15,6 +15,7 @@ from citry_ui.components._anchored_layer import (
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
+    attr_name_text,
     citry_ui_owned_value,
     is_vue_directive_attribute,
     merge_root_attrs,
@@ -412,7 +413,7 @@ def _validate_attrs(
     reject_owned_attrs(attrs, owned, component_name)
     normalized_keys: set[str] = set()
     for key, attr_value in attrs.items():
-        normalized = key.casefold()
+        normalized = attr_name_text(key).casefold()
         if normalized in normalized_keys:
             msg = f"{component_name} cannot contain duplicate case variants of {key!r}."
             raise ValueError(msg)

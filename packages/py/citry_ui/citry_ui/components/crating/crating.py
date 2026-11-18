@@ -16,6 +16,7 @@ from citry_ui.components._aria import merge_idrefs
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
+    attr_name_text,
     get_html_form_owner,
     merge_root_attrs,
     reject_citry_ui_reserved_attr,
@@ -26,7 +27,7 @@ from citry_ui.components._form_control_runtime import (
     FORM_CONTROL_RUNTIME_DEPENDENCY,
     FORM_CONTROL_STYLE_DEPENDENCY,
 )
-from citry_ui.components._i18n import uses_catalog_default
+from citry_ui.components._i18n import fill_label, uses_catalog_default
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -172,7 +173,7 @@ def _attrs(destination: str, value: Mapping[str, object] | None, owned: frozense
 def _pop_case_insensitive(attrs: dict[str, object], name: str) -> object | None:
     found: object | None = None
     for authored_name in tuple(attrs):
-        if authored_name.casefold() == name:
+        if attr_name_text(authored_name).casefold() == name:
             found = attrs.pop(authored_name)
     return found
 
@@ -365,7 +366,7 @@ class CRating(LibraryComponent):
             choice_label = (
                 self.i18n.tr("citry-ui-rating-value", value=formatted_value, max=formatted_max)
                 if catalog_value_label
-                else value_label_pattern.format(value=formatted_value, max=formatted_max)
+                else fill_label(value_label_pattern, value=formatted_value, max=formatted_max)
             )
             choices.append(
                 {

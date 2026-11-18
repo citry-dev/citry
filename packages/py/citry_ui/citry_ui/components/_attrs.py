@@ -23,9 +23,25 @@ CStyleValue: TypeAlias = Union[  # noqa: UP007 - recursive on Python 3.10
 ]
 
 
+def attr_name_text(name: str) -> str:
+    """
+    Return the characters of the attribute name `name` as a plain `str`.
+
+    Citry writes the stored characters of a name into the page. A `str`
+    subclass can override `lower`, `casefold`, `startswith`, `__eq__` or
+    `__hash__` and return a different name, so every attribute-name check
+    in Citry UI reads the name through this first and compares the text the
+    browser will get. It repeats core `citry.util.html.exact_str`, which
+    citry 1.0.0, the oldest release Citry UI supports, does not have.
+    """
+    # Called on the class so an override on the subclass is never consulted;
+    # for a subclass it returns a copy whose type is exactly `str`.
+    return str.__str__(name)
+
+
 def _matching_html_attr_keys(attrs: Mapping[str, object], name: str) -> list[str]:
-    normalized_name = name.casefold()
-    return [key for key in attrs if isinstance(key, str) and key.casefold() == normalized_name]
+    normalized_name = attr_name_text(name).casefold()
+    return [key for key in attrs if isinstance(key, str) and attr_name_text(key).casefold() == normalized_name]
 
 
 def get_html_attr(
@@ -84,7 +100,7 @@ def is_vue_directive_attribute(name: str) -> bool:
     """Return whether an attribute name uses Vue directive syntax."""
     # HTML attribute names are case-insensitive, so `V-IF` must not slip past
     # a check that only knows the lowercase spelling.
-    return name.casefold().startswith(_VUE_DIRECTIVE_PREFIXES)
+    return attr_name_text(name).casefold().startswith(_VUE_DIRECTIVE_PREFIXES)
 
 
 def reject_vue_directive_attrs(
@@ -118,6 +134,10 @@ _RESERVED_ATTR_PREFIXES = ("data-citry-", "data-cui-", "data-cev", "data-cid")
 # Only these names can carry a value Citry UI wrote; see `CitryUiOwnedValue`.
 _OWNED_VALUE_PREFIX = "data-citry-"
 _ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
+# Vue reads these two names on an element itself rather than writing them:
+# `is` picks the tag or custom element to create and `key` tells rows of a
+# list apart. On `<c-element>`, an `is` key also replaces the tag.
+_VUE_ELEMENT_NAMES = frozenset({"is", "key"})
 
 
 class CitryUiOwnedValue(str):
@@ -147,12 +167,13 @@ def reject_citry_ui_reserved_attr(
     extra_prefixes: tuple[str, ...] = (),
 ) -> None:
     """
-    Raise `ValueError` when an attribute name from Python is one that Citry's browser code reads.
+    Raise `ValueError` when an attribute name from Python is one that Citry UI, Vue or Citry's browser code reads.
 
     Every Citry UI `attrs=` and `*_attrs=` input calls this for each name. The
-    reserved names are every `data-citry-*` and `data-cui-*` name, and the
-    `data-cev*` and `data-cid*` names core Citry reads. A component may pass
-    `extra_prefixes` to reserve more.
+    reserved names are `is` and `key` (see `reject_data_item_vue_name`), every
+    `data-citry-*` and `data-cui-*` name, and the `data-cev*` and `data-cid*`
+    names core Citry reads. A component may pass `extra_prefixes` to reserve
+    more.
 
     Args:
         name: The attribute name to check. A non-string name is left to the caller's own type check.
@@ -162,15 +183,21 @@ def reject_citry_ui_reserved_attr(
         extra_prefixes: More reserved prefixes, in lowercase.
 
     Raises:
-        ValueError: When `name` starts with a reserved prefix, in any ASCII letter case, and `value` is not
-            `None`, `False`, or (for a `data-citry-` name) a `CitryUiOwnedValue`.
+        ValueError: When `name` is `is` or `key`, whatever its value, or starts with a reserved prefix and
+            `value` is not `None`, `False`, or (for a `data-citry-` name) a `CitryUiOwnedValue`. Names are
+            compared in any ASCII letter case.
 
     """
     if not isinstance(name, str):
         return
+    # Checked whatever the value, as the item maps check it, so one rule
+    # covers every map a component takes.
+    reject_data_item_vue_name(name, where=where)
     # Browsers compare attribute names after lowercasing ASCII letters only,
     # so `DATA-CITRY-X` is the same attribute and a non-ASCII lookalike is not.
-    folded = name.translate(_ASCII_LOWER)
+    # `str.translate` is called on the class so a `str` subclass cannot answer
+    # with another spelling than the text it renders as.
+    folded = str.translate(name, _ASCII_LOWER)
     reserved = _RESERVED_ATTR_PREFIXES + extra_prefixes
     if not folded.startswith(reserved):
         return
@@ -200,23 +227,20 @@ def reject_citry_ui_reserved_attrs(
         reject_citry_ui_reserved_attr(name, value, where=where, extra_prefixes=extra_prefixes)
 
 
-# Vue reads these two names on an element itself rather than writing them:
-# `is` names a custom element to create and `key` tells rows of a list apart.
-_DATA_ITEM_VUE_NAMES = frozenset({"is", "key"})
-
-
 def reject_data_item_vue_name(name: object, *, where: str) -> None:
     """
-    Raise `ValueError` when a data item's attribute map names `is` or `key`.
+    Raise `ValueError` when an attribute map names `is` or `key`.
 
-    `CTable`, `CDataGrid`, `CTreeGrid`, `CNativeSelect` and `CBreadcrumbs`
-    take an attribute map on each row, cell, column, option, group or item.
-    Those maps usually come from data, and `CDataGrid`, `CTreeGrid` and
-    `CNativeSelect` render their rows and options through Vue in the browser.
-    There `is` names a custom element for Vue to create and makes the server
-    leave the row out of its HTML, and `key` clashes with the key the
-    component gives each row, so neither may come from data. `CTable` and
-    `CBreadcrumbs` follow the same rule, so one rule covers every data item.
+    `reject_citry_ui_reserved_attr` runs this for every name in every Citry UI
+    `attrs=` and `*_attrs=` map, so a component's root attrs and the map on
+    each row, cell, column, option, group or item of `CTable`, `CDataGrid`,
+    `CTreeGrid`, `CNativeSelect` and `CBreadcrumbs` follow one rule. Those
+    item maps and the list item components also call this directly, right
+    after the shared check.
+
+    `is` would replace the tag a component renders, and no Citry UI component
+    takes a free tag name. Vue reads `key` itself to tell the rows of a list
+    apart, and the list components give each row a key of their own.
 
     Args:
         name: The attribute name to check. A non-string name is left to the caller's own type check.
@@ -232,10 +256,10 @@ def reject_data_item_vue_name(name: object, *, where: str) -> None:
     # server's HTML is `is`; refusing every spelling keeps one rule on both
     # paths. `str.translate` is called on the class so a `str` subclass
     # cannot answer with its own spelling.
-    if str.translate(name, _ASCII_LOWER) in _DATA_ITEM_VUE_NAMES:
+    if str.translate(name, _ASCII_LOWER) in _VUE_ELEMENT_NAMES:
         msg = (
-            f"{where} cannot set {name!r}. 'is' and 'key' are reserved in a data item's attrs, because Vue "
-            "reads them itself in Citry UI's grids and selects. Use a data-* name, such as 'data-key', for "
+            f"{where} cannot set {name!r}. 'is' and 'key' are reserved in Citry UI attrs, because 'is' would "
+            "change the element's tag and Vue reads 'key' itself. Use a data-* name, such as 'data-key', for "
             "your own value."
         )
         raise ValueError(msg)
@@ -243,7 +267,7 @@ def reject_data_item_vue_name(name: object, *, where: str) -> None:
 
 def html_attr_binding_target(name: str) -> str | None:
     """Return the attribute a `:name`, `.name`, or `v-bind:name` binding sets, or None for any other name."""
-    normalized = name.casefold()
+    normalized = attr_name_text(name).casefold()
     if normalized.startswith("v-bind:"):
         target = normalized.split(":", 1)[1].split(".", 1)[0]
     elif normalized.startswith((":", ".")):
@@ -264,7 +288,7 @@ def is_executable_event_attribute(name: str) -> bool:
     template assembled from that data. Authored Vue attributes still go
     through the template compiler and are intentionally outside this check.
     """
-    normalized = name.casefold()
+    normalized = attr_name_text(name).casefold()
     return normalized.startswith(("on", "@", "v-on"))
 
 
@@ -287,6 +311,7 @@ __all__ = [
     "CClassValue",
     "CStyleValue",
     "CitryUiOwnedValue",
+    "attr_name_text",
     "citry_ui_owned_value",
     "get_html_attr",
     "get_html_form_owner",

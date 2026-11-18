@@ -11,6 +11,7 @@ from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
+    attr_name_text,
     is_vue_directive_attribute,
     merge_root_attrs,
     reject_citry_ui_reserved_attr,
@@ -246,7 +247,7 @@ def _attrs(
         if not isinstance(key, str):
             msg = f"{owner} {input_name} requires string keys, got {key!r}."
             raise TypeError(msg)
-        normalized = key.casefold()
+        normalized = attr_name_text(key).casefold()
         reject_citry_ui_reserved_attr(key, attr_value, where=f"{owner} {input_name}")
         # A Vue directive could rebind an owned selection or relationship
         # attribute, change the structure, or attach a listener, so none may
