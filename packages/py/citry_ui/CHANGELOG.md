@@ -11,13 +11,14 @@
   takes plus `%`. Values such as `auto`, `calc(...)`, `var(...)` and a
   bare `0` now fail; before, any CSS text without `;`, braces or a
   comment was accepted.
-- The `attrs` of `CListItem` (and its `surface_attrs`), `CTimelineItem`,
-  `CTreeItem`, `CSortableItem`, `CTransferListItem`, `CVirtualListItem`
-  and the `CNativeSelect` root now raise `ValueError` for the attribute
-  names `is` and `key`, in any letter case, as the attrs of table rows
-  and select options do. Before, `key` failed the render of several of
-  these items with an unclear error. Use a `data-*` name, such as
-  `data-key`, for your own value.
+- Every `attrs=` and `*_attrs=` map of a Citry UI component now raises
+  `ValueError` for the attribute names `is` and `key`, in any letter
+  case, as the attrs of table rows and select options already do.
+  Citry UI used to accept them: `is` in the `attrs` of `CCard`,
+  `CContainer`, `CGrid`, `CGridItem`, `CRow`, `CCol` or `CSidebar`
+  replaced the tag the component renders (use `tag=` instead), and
+  `key` failed the render of several list items with an unclear error.
+  Use a `data-*` name, such as `data-key`, for your own value.
 - Labels with placeholders, such as `CTransferList(count_label=)` and
   the labels of `CSortable`, `CFormCollection`, `CTreeGrid`, `CRating`,
   `CCascader`, `CTagsInput` and `CToast`, are now filled on the server

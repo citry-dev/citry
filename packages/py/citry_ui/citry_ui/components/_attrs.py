@@ -118,6 +118,10 @@ _RESERVED_ATTR_PREFIXES = ("data-citry-", "data-cui-", "data-cev", "data-cid")
 # Only these names can carry a value Citry UI wrote; see `CitryUiOwnedValue`.
 _OWNED_VALUE_PREFIX = "data-citry-"
 _ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
+# Vue reads these two names on an element itself rather than writing them:
+# `is` picks the tag or custom element to create and `key` tells rows of a
+# list apart. On `<c-element>`, an `is` key also replaces the tag.
+_VUE_ELEMENT_NAMES = frozenset({"is", "key"})
 
 
 class CitryUiOwnedValue(str):
@@ -147,12 +151,13 @@ def reject_citry_ui_reserved_attr(
     extra_prefixes: tuple[str, ...] = (),
 ) -> None:
     """
-    Raise `ValueError` when an attribute name from Python is one that Citry's browser code reads.
+    Raise `ValueError` when an attribute name from Python is one that Citry UI, Vue or Citry's browser code reads.
 
     Every Citry UI `attrs=` and `*_attrs=` input calls this for each name. The
-    reserved names are every `data-citry-*` and `data-cui-*` name, and the
-    `data-cev*` and `data-cid*` names core Citry reads. A component may pass
-    `extra_prefixes` to reserve more.
+    reserved names are `is` and `key` (see `reject_data_item_vue_name`), every
+    `data-citry-*` and `data-cui-*` name, and the `data-cev*` and `data-cid*`
+    names core Citry reads. A component may pass `extra_prefixes` to reserve
+    more.
 
     Args:
         name: The attribute name to check. A non-string name is left to the caller's own type check.
@@ -162,12 +167,16 @@ def reject_citry_ui_reserved_attr(
         extra_prefixes: More reserved prefixes, in lowercase.
 
     Raises:
-        ValueError: When `name` starts with a reserved prefix, in any ASCII letter case, and `value` is not
-            `None`, `False`, or (for a `data-citry-` name) a `CitryUiOwnedValue`.
+        ValueError: When `name` is `is` or `key`, whatever its value, or starts with a reserved prefix and
+            `value` is not `None`, `False`, or (for a `data-citry-` name) a `CitryUiOwnedValue`. Names are
+            compared in any ASCII letter case.
 
     """
     if not isinstance(name, str):
         return
+    # Checked whatever the value, as the item maps check it, so one rule
+    # covers every map a component takes.
+    reject_data_item_vue_name(name, where=where)
     # Browsers compare attribute names after lowercasing ASCII letters only,
     # so `DATA-CITRY-X` is the same attribute and a non-ASCII lookalike is not.
     # `str.translate` is called on the class so a `str` subclass cannot answer
@@ -202,30 +211,20 @@ def reject_citry_ui_reserved_attrs(
         reject_citry_ui_reserved_attr(name, value, where=where, extra_prefixes=extra_prefixes)
 
 
-# Vue reads these two names on an element itself rather than writing them:
-# `is` names a custom element to create and `key` tells rows of a list apart.
-_DATA_ITEM_VUE_NAMES = frozenset({"is", "key"})
-
-
 def reject_data_item_vue_name(name: object, *, where: str) -> None:
     """
-    Raise `ValueError` when an item's attribute map names `is` or `key`.
+    Raise `ValueError` when an attribute map names `is` or `key`.
 
-    `CTable`, `CDataGrid`, `CTreeGrid`, `CNativeSelect` and `CBreadcrumbs`
-    take an attribute map on each row, cell, column, option, group or item.
-    Those maps usually come from data, and `CDataGrid`, `CTreeGrid` and
-    `CNativeSelect` render their rows and options through Vue in the browser.
-    There `is` names a custom element for Vue to create and makes the server
-    leave the row out of its HTML, and `key` clashes with the key the
-    component gives each row, so neither may come from data. `CTable` and
-    `CBreadcrumbs` follow the same rule, so one rule covers every data item.
+    `reject_citry_ui_reserved_attr` runs this for every name in every Citry UI
+    `attrs=` and `*_attrs=` map, so a component's root attrs and the map on
+    each row, cell, column, option, group or item of `CTable`, `CDataGrid`,
+    `CTreeGrid`, `CNativeSelect` and `CBreadcrumbs` follow one rule. Those
+    item maps and the list item components also call this directly, right
+    after the shared check.
 
-    The item components `CListItem`, `CTimelineItem`, `CTreeItem`,
-    `CSortableItem`, `CTransferListItem` and `CVirtualListItem`, and the
-    `CNativeSelect` root, follow the same rule for their own `attrs`.
-    `CTreeItem`, `CSortableItem`, `CTransferListItem` and `CVirtualListItem`
-    get a `key` from their parent, which a `key` from `attrs` would clash
-    with.
+    `is` would replace the tag a component renders, and no Citry UI component
+    takes a free tag name. Vue reads `key` itself to tell the rows of a list
+    apart, and the list components give each row a key of their own.
 
     Args:
         name: The attribute name to check. A non-string name is left to the caller's own type check.
@@ -241,10 +240,11 @@ def reject_data_item_vue_name(name: object, *, where: str) -> None:
     # server's HTML is `is`; refusing every spelling keeps one rule on both
     # paths. `str.translate` is called on the class so a `str` subclass
     # cannot answer with its own spelling.
-    if str.translate(name, _ASCII_LOWER) in _DATA_ITEM_VUE_NAMES:
+    if str.translate(name, _ASCII_LOWER) in _VUE_ELEMENT_NAMES:
         msg = (
-            f"{where} cannot set {name!r}. 'is' and 'key' are reserved here, because Vue reads them itself in "
-            "Citry UI's lists, grids and selects. Use a data-* name, such as 'data-key', for your own value."
+            f"{where} cannot set {name!r}. 'is' and 'key' are reserved in Citry UI attrs, because 'is' would "
+            "change the element's tag and Vue reads 'key' itself. Use a data-* name, such as 'data-key', for "
+            "your own value."
         )
         raise ValueError(msg)
 

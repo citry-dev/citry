@@ -92,6 +92,14 @@ def test_a_value_that_writes_no_attribute_passes(value: object) -> None:
     reject_citry_ui_reserved_attr("data-citry-dialog-close", value, where="CButton attrs")
 
 
+@pytest.mark.parametrize("name", ["is", "IS", "key", "kEy"])
+@pytest.mark.parametrize("value", ["x", None, False, citry_ui_owned_value("")])
+def test_is_and_key_are_refused_whatever_the_value(name: str, value: object) -> None:
+    """The shared check also refuses `is` and `key`, so every attrs map refuses them."""
+    with pytest.raises(ValueError, match=rf"CButton attrs cannot set {name!r}\. 'is' and 'key' are reserved"):
+        reject_citry_ui_reserved_attr(name, value, where="CButton attrs")
+
+
 def test_a_value_citry_ui_wrote_passes_for_a_data_citry_name() -> None:
     value = citry_ui_owned_value()
     assert isinstance(value, CitryUiOwnedValue)

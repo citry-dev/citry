@@ -259,7 +259,7 @@ def test_invalid_structural_inputs_fail_synchronously(inputs: str, error: str) -
         ("target_attrs", {"id": "hostile"}, "owned attribute"),
         ("target_attrs", {"role": "button"}, "owned attribute"),
         ("target_attrs", {"disabled": True}, "owned attribute"),
-        ("target_attrs", {"is": "fancy-button"}, "owned attribute"),
+        ("target_attrs", {"is": "fancy-button"}, "'is' and 'key' are reserved"),
         ("target_attrs", {"c-bind": "{}"}, "ownership directive"),
         ("target_attrs", {"v-bind:role": "button"}, "Vue directive"),
         ("target_attrs", {".disabled": "x"}, "Vue directive"),
