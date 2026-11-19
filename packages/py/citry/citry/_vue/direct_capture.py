@@ -28,6 +28,7 @@ from citry.attrs import (
 from citry.citry_element import _PreparedCallMetadata
 from citry.citry_render import (
     CitryRender,
+    OutsideSlotContentError,
     Placeholder,
     PreparedComponentBinding,
     RenderDecoration,
@@ -4108,7 +4109,7 @@ def _stable_owner(render_id: str | None, owners: Mapping[str, str]) -> str | Non
         # missing owner wrote slot content from outside that render: the
         # render is a child serialized on its own, and Vue cannot give the
         # slot content an owner inside the new app.
-        raise UnsupportedPreparedView(
+        raise OutsideSlotContentError(
             "This render holds slot content that a component outside it wrote, so it cannot be "
             "serialized on its own as a Vue app. Serialize the component that wrote the slot content instead."
         )

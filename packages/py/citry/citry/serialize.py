@@ -51,6 +51,7 @@ from citry.citry_render import (
     Placeholder,
     RenderDecoration,
     RenderFrame,
+    SerializedAssetEntry,
     SerializedAssets,
     SerializedRender,
     SerializedSecurity,
@@ -60,6 +61,7 @@ from citry.ext.dependencies.emission import (
     SEPARATE_ASSET_GROUPS,
     SEPARATE_ASSETS_KEY,
     SERIALIZATION_NOTE_KEYS,
+    SeparateAssets,
     separate_asset_pattern,
 )
 from citry.settings import (
@@ -727,9 +729,9 @@ def _serialize_render_result(
     # comments that carry this per-call random value, so the tags can be cut
     # out after the security checks have read the whole page. Data in the
     # page cannot guess the value, so it cannot forge a wrapper.
-    separate_token = token_hex(16) if deps_position == "separate" else None
-    if separate_token is not None:
-        root.context.extra[SEPARATE_ASSETS_KEY] = separate_token
+    separate_notes = SeparateAssets(token_hex(16)) if deps_position == "separate" else None
+    if separate_notes is not None:
+        root.context.extra[SEPARATE_ASSETS_KEY] = separate_notes
     owner = (
         root.owner_citry
         if root.owner_citry is not None
@@ -1165,9 +1167,9 @@ def _serialize_render_result(
     if session._script_security is not None:
         html = session._script_security.finalize(html)
 
-    if separate_token is None:
+    if separate_notes is None:
         return SerializedRender(html=html, security=session.freeze())
-    html, groups = _cut_separate_assets(html, separate_token)
+    html, groups = _cut_separate_assets(html, separate_notes)
     return SerializedRender(
         html=html,
         security=session.freeze(),
@@ -1177,18 +1179,26 @@ def _serialize_render_result(
     )
 
 
-def _cut_separate_assets(html: str, token: str) -> tuple[str, dict[str, SerializedAssets]]:
+def _cut_separate_assets(html: str, notes: SeparateAssets) -> tuple[str, dict[str, SerializedAssets]]:
     """
     Remove the wrapped asset tags from the finished page and group them.
 
     The tags stayed in the page until now, so the nonce, the integrity
     attributes and the CSP and JavaScript checks treated them exactly as
     the tags ``"smart"`` leaves in place. Cutting them out last keeps that.
+
+    Each wrapper holds the tag's index into ``notes.owners``, which the
+    dependency records filled, so each entry's owner comes from Citry's own
+    records and never from the tag's text.
     """
-    found: dict[tuple[str, str], list[str]] = {}
+    token = notes.token
+    found: dict[tuple[str, str], list[SerializedAssetEntry]] = {}
 
     def take(match: re.Match[str]) -> str:
-        found.setdefault((match[1], match[2]), []).append(match[3])
+        class_ids, instance = notes.owners[int(match[3])]
+        found.setdefault((match[1], match[2]), []).append(
+            SerializedAssetEntry(tag=match[4], class_ids=class_ids, instance=instance)
+        )
         return ""
 
     html = separate_asset_pattern(token).sub(take, html)
@@ -1199,13 +1209,16 @@ def _cut_separate_assets(html: str, token: str) -> tuple[str, dict[str, Serializ
             "An extension's on_serialize hook changed an asset tag that deps_position='separate' returns. "
             "Change dependency tags through on_dependencies instead."
         )
-    groups: dict[str, SerializedAssets] = {
-        group: SerializedAssets(
-            css=tuple(found.get((group, "css"), ())),
-            js=tuple(found.get((group, "js"), ())),
+    groups: dict[str, SerializedAssets] = {}
+    for group in SEPARATE_ASSET_GROUPS:
+        css_entries = tuple(found.get((group, "css"), ()))
+        js_entries = tuple(found.get((group, "js"), ()))
+        groups[group] = SerializedAssets(
+            css=tuple(entry.tag for entry in css_entries),
+            js=tuple(entry.tag for entry in js_entries),
+            css_entries=css_entries,
+            js_entries=js_entries,
         )
-        for group in SEPARATE_ASSET_GROUPS
-    }
     return html, groups
 
 

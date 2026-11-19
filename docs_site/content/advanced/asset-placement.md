@@ -189,6 +189,50 @@ With `"ignore"`, every group is empty, and with `"fragment"` it raises
 stay in the HTML, and a hook that changes one of the returned tags
 makes serialize raise `RuntimeError`.
 
+### Find a tag's components { #find-a-tags-components }
+
+Code that bundles or caches tags, such as a tool that compresses them
+into one file, needs to know where each tag came from. Each group's
+`css_entries` and `js_entries` (Experimental) hold the same tags as
+`css` and `js`, in the same order, each as a
+[`SerializedAssetEntry`][citry.SerializedAssetEntry]:
+
+- `class_ids` names the components that declared the tag, by their
+  [`class_id`][citry.Component.class_id]. It is empty for Citry's own
+  tags, such as the runtime, preload hints and each app's data and
+  start script, and usually for a Vue app's stylesheets. A tag that an
+  `on_dependencies()` hook adds or rebuilds names a component only
+  when the hook sets the tag's `origin_class_id`.
+- `instance` is `True` when the tag may hold data from one render: a
+  stylesheet with one component's `css_data()` values, every
+  `app_assets` tag, and any tag Citry cannot show is the same on every
+  render, such as one a hook adds or rebuilds. Keep such a tag out of a
+  file that other pages share. It is `False` only for `runtime_assets`
+  tags and for a component's own or `Dependencies` tags.
+
+Citry fills both from what it recorded while it rendered each
+component, so your code does not need to read the tags' attributes.
+This example keeps the component tags that every page can share, with
+the components that declared them:
+
+```python
+result = Page().render().serialize_result(
+    deps_position="separate",
+)
+shareable = [
+    (entry.tag, entry.class_ids)
+    for entry in result.component_assets.css_entries
+    if not entry.instance
+]
+```
+
+`combine_assets()` combines the entries too. A merged tag lists the
+components of every tag it replaced, and has `instance=True` when any
+of them does. When you pass a group that has tags but no entries, such
+as one you built yourself, the result has no entries for that kind of
+tag. Creating a `SerializedAssets` whose entries name other tags than
+its `css` or `js` raises `ValueError`.
+
 ### Split into several apps
 
 [`needs_browser_runtime()`][citry.CitryRender.needs_browser_runtime]
@@ -205,7 +249,10 @@ together inside one child.
 
 This works only when the child holds no slot content that a component
 outside it wrote, such as text the parent passed between the child's
-tags. Serializing such a child on its own raises `TypeError`.
+tags. Serializing such a child on its own raises
+[`OutsideSlotContentError`][citry.OutsideSlotContentError]
+(Experimental). Catch it to serialize the parent instead. It subclasses
+`TypeError`, so code that catches `TypeError` also catches it.
 
 This example serializes each interactive direct child of a render on
 its own:

@@ -17,7 +17,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from citry import Citry, Component, Const, Extension
+from citry import Citry, Component, Const, Extension, OutsideSlotContentError
 from citry._pure import PureInteriorBody
 from citry._serialization_security import _ScriptSecurityMaterializer
 from citry._simple_runtime import SimpleRender
@@ -667,7 +667,7 @@ def test_direct_capture_json_and_document_helpers_validate_boundaries() -> None:
     detached.component = Replay()
     assert not _matches_cache_replay_identity(detached, app, Replay)
     assert _stable_owner(None, {}) is None
-    with pytest.raises(UnsupportedPreparedView, match="slot content that a component outside it wrote"):
+    with pytest.raises(OutsideSlotContentError, match="slot content that a component outside it wrote"):
         _stable_owner("missing", {})
 
     nested_body = [
