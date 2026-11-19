@@ -123,8 +123,8 @@ categories:
       sandboxed expressions must not call, and `SecurityError` is what a blocked access raises.
       Three parts of this page are experimental and may change in a minor release:
       `RenderFrame`; the asset tags that `deps_position="separate"` returns
-      (`SerializedAssets`, the asset fields of `SerializedRender`, and
-      `CitryRender.needs_browser_runtime()`); and the API for embedding Citry tags
+      (`SerializedAssets`, the asset fields of `SerializedRender`,
+      `CitryRender.needs_browser_runtime()`, and `combine_assets()`); and the API for embedding Citry tags
       in another template engine (`CompiledBody`, `render_compiled_body` and
       `collect_compiled_body_fills`).
     symbols:
@@ -132,6 +132,7 @@ categories:
       - citry.CitryRender
       - citry.SerializedRender
       - citry.SerializedAssets
+      - citry.combine_assets
       - citry.SerializedSecurity
       - citry.SerializedScriptSecurity
       - citry.CitryContext

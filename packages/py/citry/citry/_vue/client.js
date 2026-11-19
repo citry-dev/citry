@@ -3102,15 +3102,51 @@
     const url = assetUrl(asset.source.url);
     return asset.owner.kind === "extension" ? JSON.stringify([appId, url]) : url;
   }
+  // A served stylesheet tag names the apps that may adopt it in `data-citry-vue-style-app`: one
+  // app id, or several separated by single spaces, so a page that combines several apps can keep
+  // one tag per file. Every id is 32 lowercase hex characters, as the manifest check requires, so
+  // a value of any other form, or one that repeats an id, names no app. Each app then treats it as
+  // another app's tag: on a mounted page the app requests the file itself, and on a standalone
+  // page the app does not start.
+  const STYLE_APP_LIST = /^[0-9a-f]{32}(?: [0-9a-f]{32})+$/;
+  // Each app checks every served tag at startup, so a list is parsed once, into a Set of its ids or
+  // null when it is malformed. A Map, so no list value can reach an inherited key. A page holds a
+  // few distinct lists, so the cache starts over past that rather than keep every value it met.
+  const styleAppLists = new Map();
+  const STYLE_APP_LISTS_KEPT = 64;
+  function styleNamesApp(element, appId) {
+    const value = element.getAttribute("data-citry-vue-style-app");
+    if (value === appId) return true;
+    // A list holds at least two 32-character ids, so anything shorter (one other app's id, no
+    // value) is already answered by the comparison above.
+    if (typeof value !== "string" || value.length < 65) return false;
+    let ids = styleAppLists.get(value);
+    if (ids === undefined) {
+      const list = STYLE_APP_LIST.test(value) ? value.split(" ") : [];
+      ids = new Set(list);
+      if (ids.size === 0 || ids.size !== list.length) ids = null;
+      if (styleAppLists.size >= STYLE_APP_LISTS_KEPT) styleAppLists.clear();
+      styleAppLists.set(value, ids);
+    }
+    return ids !== null && ids.has(appId);
+  }
   function existingStyleElement(appId, url) {
     return [...pageDocument.querySelectorAll('[data-citry-vue-style-app][data-citry-css-url]')]
-      .find(element => element.getAttribute("data-citry-vue-style-app") === appId &&
+      .find(element => styleNamesApp(element, appId) &&
         element.getAttribute("data-citry-css-url") === url) || null;
+  }
+  // Several apps may adopt one served tag, each in its own record. A record that lets go of the tag
+  // removes it only when no other record still holds it, so one app leaving keeps the others styled.
+  // A listed app that starts after the tag is gone treats the file as not served (see above).
+  function removeStyleElement(element) {
+    if (!element) return;
+    for (const record of loadedStyleUrls.values()) if (record.element === element) return;
+    element.remove();
   }
   function retireUnusedStyles() {
     for (const [key, record] of loadedStyleUrls) if (!record.refs.size && !record.stages.size) {
-      record.element?.remove();
       loadedStyleUrls.delete(key);
+      removeStyleElement(record.element);
     }
   }
   function abortStyleStage(stage) {
@@ -3167,7 +3203,7 @@
     // status shows in its resource timing entry where the browser reports one.
     // A failed link is replaced by a new request below, which reports the failure.
     const served = knownInitial ? [...pageDocument.querySelectorAll('link[rel="stylesheet"][data-citry-vue-style-app]')]
-      .find(element => element.getAttribute("data-citry-vue-style-app") === appId &&
+      .find(element => styleNamesApp(element, appId) &&
         element.getAttribute("href") === asset.source.url) || null : null;
     const timings = served ? performance.getEntriesByName(served.href) : [];
     const servedFailed = served !== null && (!served.sheet || timings.some(entry => entry.responseStatus >= 400));
@@ -3187,11 +3223,14 @@
           // If a stage retired this record while the probe ran, it already removed the link, and
           // a new request here would add a link that nothing owns.
           if (loaded || loadedStyleUrls.get(key) !== record) return;
-          served.remove();
+          // Leave the record first, so the link goes unless another app's record still holds it.
+          record.element = null;
+          removeStyleElement(served);
           return linkStyle(appId, asset, nonce, key, record);
         });
     } else {
-      served?.remove();
+      // This record is not stored yet, so only another app's record can keep a failed link.
+      removeStyleElement(served);
       record.promise = linkStyle(appId, asset, nonce, key, record);
     }
     loadedStyleUrls.set(key, record);

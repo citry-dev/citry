@@ -323,5 +323,5 @@ The release notes say when this list changes. Experimental now:
 - `RenderFrame` and `CitryRender.frame`
 - returning asset tags apart from the HTML: the `"separate"` value of
   `DepsPosition`, `SerializedAssets`, the `runtime_assets`,
-  `app_assets` and `component_assets` fields of `SerializedRender`, and
-  `CitryRender.needs_browser_runtime()`
+  `app_assets` and `component_assets` fields of `SerializedRender`,
+  `CitryRender.needs_browser_runtime()`, and `combine_assets()`

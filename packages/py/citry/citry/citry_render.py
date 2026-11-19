@@ -54,6 +54,7 @@ Example:
 
 from __future__ import annotations
 
+import re
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -67,7 +68,7 @@ from citry.slots import Slot
 from citry.util.html import decode_character_references, escape
 
 if TYPE_CHECKING:
-    from collections.abc import Generator, Iterator
+    from collections.abc import Generator, Iterable, Iterator
 
     from citry._vue.capture import (
         PreparedDynamicElementClose,
@@ -217,6 +218,96 @@ class SerializedAssets:
     js: tuple[str, ...] = ()
 
 
+# The attribute by which the browser runtime finds the stylesheet tags an
+# app may adopt. Its value is one app id, or several separated by single
+# spaces, each 32 lowercase hex characters.
+_STYLE_APP_ATTR_RE = re.compile(r' data-citry-vue-style-app="([0-9a-f]{32}(?: [0-9a-f]{32})*)"')
+
+
+def combine_assets(groups: Iterable[SerializedAssets]) -> SerializedAssets:
+    """
+    Combine the same group of asset tags from several renders, writing each shared tag once.
+
+    Pass one group from every render, such as each result's
+    `app_assets`, and write the returned tags in place of theirs. Call it
+    once per group, so the tags of one group never move into another.
+
+    - Identical tags are kept once, where they first appear.
+    - Stylesheet tags of several Vue apps that serve the same file become
+      one tag that names every one of those apps, so the browser runtime
+      lets each app use it. Each app's configuration data and start script
+      stay as they are, because they differ per app.
+    - Every other tag is kept as it is, with its `nonce` and `integrity`.
+
+    The tags come in the order of the groups you pass, and within a group
+    in the order the render gave them. A tag several renders share stays
+    where it first appears, so a later render's stylesheets can end up in
+    a different order than that render alone would write them.
+
+    Args:
+        groups: The same group, such as `app_assets`, from each
+            [`SerializedRender`][citry.SerializedRender] that
+            `serialize_result(deps_position="separate")` returned.
+
+    Returns:
+        One [`SerializedAssets`][citry.SerializedAssets] with the combined
+        `css` and `js` tags.
+
+    Experimental:
+        `combine_assets` is experimental. It may change in a minor release
+        without a deprecation period.
+
+    Example:
+        ```python
+        results = [
+            Widget().render().serialize_result(
+                deps_position="separate",
+            ),
+            Chart().render().serialize_result(
+                deps_position="separate",
+            ),
+        ]
+        apps = combine_assets(
+            result.app_assets for result in results
+        )
+        ```
+
+    """
+    groups = tuple(groups)
+    return SerializedAssets(
+        css=_combine_tags(tag for group in groups for tag in group.css),
+        js=_combine_tags(tag for group in groups for tag in group.js),
+    )
+
+
+def _combine_tags(tags: Iterable[str]) -> tuple[str, ...]:
+    """Keep each tag once, and merge stylesheet tags that differ only in the apps they name."""
+    # A tag kept as written is keyed by itself; a stylesheet tag that can be
+    # merged is keyed by its text before and after the app list, and collects
+    # the app ids of every tag with that key. A dict keeps first-seen order.
+    kept: dict[tuple[str, ...], list[str] | None] = {}
+    for tag in tags:
+        # Search only the opening tag, so text in a <style> body that looks
+        # like the attribute is never rewritten. Citry escapes `>` in
+        # attribute values, so the first `>` ends the opening tag.
+        matches = list(_STYLE_APP_ATTR_RE.finditer(tag, 0, tag.find(">") + 1))
+        ids = matches[0][1].split(" ") if len(matches) == 1 else []
+        # Only a tag with exactly one app attribute, naming each app once as
+        # the browser runtime requires, is merged; any other is kept as written.
+        if not ids or len(set(ids)) != len(ids):
+            kept.setdefault((tag,), None)
+            continue
+        match = matches[0]
+        # Tags with the same text around the list are byte-identical apart
+        # from the apps they name, so one tag stands for all of them with the
+        # same URL, nonce and integrity.
+        apps = cast("list[str]", kept.setdefault((tag[: match.start(1)], tag[match.end(1) :]), []))
+        for app_id in ids:
+            if app_id not in apps:
+                apps.append(app_id)
+    return tuple(key[0] if apps is None else f"{key[0]}{' '.join(apps)}{key[1]}" for key, apps in kept.items())
+
+
 @dataclass(frozen=True, slots=True)
 class SerializedRender:
     """
@@ -240,8 +331,9 @@ class SerializedRender:
             first of each set of identical tags and skip the rest.
         app_assets: **Experimental.** The tags of this render's one Vue
             app: its stylesheets, its configuration data and its start
-            script. Write every one of them, even when another app on the
-            page has a stylesheet with the same URL.
+            script. Write every one of them, or pass this group from
+            every render to [`combine_assets()`][citry.combine_assets],
+            which writes one stylesheet tag for the apps that share it.
         component_assets: **Experimental.** The other tags: component CSS
             and JavaScript when no component needs Vue, dependency files,
             and tags added by ``on_dependencies`` hooks. Write the first of

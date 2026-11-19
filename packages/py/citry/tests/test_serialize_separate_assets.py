@@ -7,8 +7,9 @@ so it can write each shared tag once. These tests lock three promises: the
 returned tags are exactly the tags ``"smart"`` would have inserted, with the
 same nonce, integrity and security results; each tag lands in the right group;
 and Vue hydrates the HTML as it does with ``"smart"``. They also lock the
-``CitryRender.needs_browser_runtime()`` check and the rule that a child
-component's render may be serialized as its own Vue app before its parent.
+``CitryRender.needs_browser_runtime()`` check, the rule that a child
+component's render may be serialized as its own Vue app before its parent,
+and how ``combine_assets()`` writes the tags of several renders once.
 """
 
 import re
@@ -16,7 +17,16 @@ import warnings
 
 import pytest
 
-from citry import Citry, CitryRender, Component, Extension, Markup, SerializedAssets, SerializedRender
+from citry import (
+    Citry,
+    CitryRender,
+    Component,
+    Extension,
+    Markup,
+    SerializedAssets,
+    SerializedRender,
+    combine_assets,
+)
 from citry._vue.serialization import hydration_admission
 from citry.ext.dependencies.types import Script, Style
 
@@ -131,6 +141,35 @@ def test_each_tag_lands_in_its_group() -> None:
         '<script type="module">',
     ]
     assert result.component_assets == SerializedAssets()
+
+
+@pytest.mark.parametrize("mounted", [True, False])
+def test_each_stylesheet_tag_names_its_one_app(mounted: bool) -> None:
+    # The runtime lets a host list several app ids in one tag's
+    # data-citry-vue-style-app, but Citry itself writes one render's tags, so
+    # each names exactly the one app, as every 1.x release has written it.
+    engine = _engine() if mounted else Citry(autodiscover=False)
+    widget, _ = _widgets(engine)
+    outputs = [widget().render().serialize()]
+    if mounted:
+        separate = widget().render().serialize_result(deps_position="separate")
+        outputs.append(separate.html + "".join(separate.app_assets.css))
+    for html in outputs:
+        app_id = re.search(r'<div id="citry-vue-([0-9a-f]{32})"', html)
+        assert app_id is not None
+        tags = re.findall(r"<(?:link|style)\b[^>]*data-citry-vue-style-app=[^>]*>", html)
+        assert len(tags) == 2
+        for tag in tags:
+            names = re.findall(r' data-citry-vue-style-app="([^"]*)"', tag)
+            assert names == [app_id[1]], tag
+            if mounted:
+                assert re.fullmatch(
+                    r'<link data-citry-css-url="(/citry/[^"]+\.css)" data-citry-vue-style-app="[0-9a-f]{32}"'
+                    r' rel="stylesheet" integrity="sha256-[^"]+" crossorigin="anonymous" href="\1"/>',
+                    tag,
+                ), tag
+            else:
+                assert tag.startswith('<style rel="stylesheet" data-citry-css-url="/assets/'), tag
 
 
 def test_a_separate_island_hydrates_like_smart() -> None:
@@ -465,3 +504,102 @@ $component({data() { return {n: 0}; }});
         child.serialize_result(deps_position="separate")
     # The parent still serializes whole.
     assert "text from the page" in rendered.serialize()
+
+
+_STYLE_APP = re.compile(r' data-citry-vue-style-app="([0-9a-f ]+)"')
+
+
+def test_combine_assets_writes_shared_tags_once_and_one_link_for_every_app() -> None:
+    widget, _ = _widgets(_engine())
+    results = [widget().render().serialize_result(deps_position="separate", csp_nonce=_NONCE) for _ in range(3)]
+    app_ids = [re.search(r'<div id="citry-vue-([0-9a-f]{32})"', result.html)[1] for result in results]  # type: ignore[index]
+
+    # The runtime group is the same for every render, so one copy remains.
+    assert combine_assets(result.runtime_assets for result in results) == results[0].runtime_assets
+    assert combine_assets(result.component_assets for result in results) == SerializedAssets()
+
+    apps = combine_assets(result.app_assets for result in results)
+    # One link per stylesheet file, naming the apps in the order passed, and
+    # otherwise the same bytes as each render's own link.
+    assert len(apps.css) == len(results[0].app_assets.css) == 2
+    for index, tag in enumerate(apps.css):
+        assert _STYLE_APP.findall(tag) == [" ".join(app_ids)]
+        for result in results:
+            assert _STYLE_APP.sub("", tag) == _STYLE_APP.sub("", result.app_assets.css[index])
+    # Each app keeps its own data block and start script, in order.
+    assert apps.js == tuple(tag for result in results for tag in result.app_assets.js)
+    for tag in (*apps.css, *apps.js):
+        assert f'nonce="{_NONCE}"' in tag, tag[:200]
+    assert all(' integrity="sha256-' in tag for tag in apps.css)
+
+    # Combining again, or in steps, gives the same tags.
+    assert combine_assets([apps]) == apps
+    assert combine_assets([combine_assets(r.app_assets for r in results[:2]), results[2].app_assets]) == apps
+
+
+def _link(apps: str, url: str = "/s.css", extra: str = "") -> str:
+    return (
+        f'<link data-citry-css-url="{url}" data-citry-vue-style-app="{apps}" rel="stylesheet"'
+        f' integrity="sha256-x" nonce="n"{extra} href="{url}"/>'
+    )
+
+
+def test_combine_assets_merges_only_tags_that_differ_in_their_apps_alone() -> None:
+    a, b, c = "a" * 32, "b" * 32, "c" * 32
+    groups = [
+        SerializedAssets(css=(_link(a), _link(a, "/t.css"), "<style>x</style>")),
+        SerializedAssets(
+            css=(
+                _link(b, "/t.css"),
+                # Another integrity, nonce or attribute is another tag.
+                _link(c, extra=' media="print"'),
+                _link(c).replace('nonce="n"', 'nonce="m"'),
+                "<style>x</style>",
+                _link(f"{b} {a}"),
+            )
+        ),
+    ]
+    assert combine_assets(groups).css == (
+        _link(f"{a} {b}"),
+        _link(f"{a} {b}", "/t.css"),
+        "<style>x</style>",
+        _link(c, extra=' media="print"'),
+        _link(c).replace('nonce="n"', 'nonce="m"'),
+    )
+    assert combine_assets(groups).js == ()
+    assert combine_assets([]) == SerializedAssets()
+
+
+_LOOKS_LIKE_ATTR = "p::after{content:' data-citry-vue-style-app=\"%s\"'}"
+
+
+@pytest.mark.parametrize(
+    ("tag", "other"),
+    [
+        # Text in a <style> body that looks like the attribute is not read.
+        (
+            f"<style>{_LOOKS_LIKE_ATTR % ('a' * 32)}</style>",
+            f"<style>{_LOOKS_LIKE_ATTR % ('c' * 32)}</style>",
+        ),
+        # Not an app list the browser runtime accepts.
+        (_link("A" * 32), _link("B" * 32)),
+        (_link("a" * 31), _link("b" * 31)),
+        (_link("a" * 32 + "  " + "b" * 32), _link("c" * 32 + "  " + "b" * 32)),
+        (_link("a" * 32 + " " + "a" * 32), _link("c" * 32)),
+        (_link("__proto__"), _link("__defineGetter__")),
+    ],
+)
+def test_combine_assets_keeps_tags_it_cannot_read_as_written(tag: str, other: str) -> None:
+    combined = combine_assets([SerializedAssets(css=(tag,)), SerializedAssets(css=(other, tag))])
+    assert combined.css == (tag, other)
+
+
+def test_combine_assets_reads_the_app_list_only_from_the_opening_tag() -> None:
+    body = _LOOKS_LIKE_ATTR % ("b" * 32)
+
+    def style(apps: str) -> str:
+        return f'<style data-citry-vue-style-app="{apps}">{body}</style>'
+
+    combined = combine_assets([SerializedAssets(css=(style("a" * 32),)), SerializedAssets(css=(style("c" * 32),))])
+    # The attribute names both apps, and the body is unchanged.
+    assert combined.css == (style("a" * 32 + " " + "c" * 32),)
