@@ -1,5 +1,5 @@
 """
-Tests for ``scan_document_tags``: which ``</head>``, ``</body>`` and ``<body>`` tags it reports.
+Tests for ``scan_document_tags``: which ``</head>`` and ``</body>`` tags it reports.
 
 Citry places CSS and JS at the tags this scan reports, so a reported tag
 must be one the browser reads as a tag. Text that only looks like a tag
@@ -120,7 +120,7 @@ def test_context_dependent_raw_text_reports_only_agreed_tags(body: str) -> None:
         '<svg><script href="/a.js"/></svg><div title="</script></body>"></div>',
         '<math><script/></math><div title="</script></body>"></div>',
         '<svg><script><![CDATA[<!--<script>]]></script></svg><div title="</script></body>"></div>',
-        # <p> makes the browser leave the SVG; the tracking stops trusting itself.
+        # <p> makes the browser leave the SVG; the scan stops tracking the SVG.
         '<svg><script><p title="</script></body>"></p>',
         # </div> may close an HTML element around the SVG.
         '<div><svg><g></div><style><p title="</style></body>"></p></style>',
@@ -138,6 +138,8 @@ def test_foreign_content_decoys_are_not_reported(body: str) -> None:
     "body",
     [
         "<svg><title/><path d='M0 0'/></svg>",
+        # "x=a />" ends in a space and "/", so the <g> is self-closing.
+        "<svg><g x=a /><path/></svg><style>.a{}</style>",
         "<svg><style/><g></g></svg>",
         "<svg><desc>An icon</desc><text>a &lt; b</text></svg>",
         "<math><mi>x</mi><mo>+</mo><mn>1</mn></math>",
@@ -161,11 +163,31 @@ def test_ordinary_svg_and_math_keep_the_real_tags(body: str) -> None:
         '<svg a=b/><style><p title="</style></body>"></p></style></svg>',
         # A self-closing <svg/> holds nothing, so this <style> is raw text.
         "<svg/><style></body></style>",
+        # In "x= />" and "x=a"/>" the "/" belongs to an unquoted value, so the
+        # inner <svg> stays open and </svg> leaves the reading in SVG, where
+        # <title> does not start raw text.
+        '<svg><svg x= /></svg><title><p title="</title></body>"></p></title></svg>',
+        '<svg><g x=a"/></g><svg x=a\'/></svg><title><p title="</title></body>"></p></title></svg>',
         # Many "</" before the script's end tag.
         "<script>" + "'</x>';" * 40 + "</body></script>",
     ],
 )
 def test_more_decoys_are_not_reported(body: str) -> None:
+    html = DOC.format(head="", body=body)
+    assert set(_ends(html)[1]) <= set(_real(html)[1])
+
+
+def test_svg_after_a_closed_select_keeps_the_real_tags() -> None:
+    # After </select> the page is read as plain HTML again, so a later SVG
+    # and an inline script with tag-like text do not hide the real </body>.
+    body = '<select><option>a</option></select><svg><title>x</title></svg><script>"<noscript>"</script>'
+    html = DOC.format(head="", body=body)
+    assert _ends(html) == _real(html)
+
+
+def test_svg_inside_template_content_is_read_both_ways() -> None:
+    # Closing the select leaves the template open, where an <svg> may be ignored.
+    body = '<template><select></select><svg><style><p title="</style></body>"></p></style></svg>'
     html = DOC.format(head="", body=body)
     assert set(_ends(html)[1]) <= set(_real(html)[1])
 
@@ -223,3 +245,31 @@ def test_too_much_work_reports_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
     body = "".join("<style>x</style>" for _ in range(20_000))
     html = DOC.format(head="", body=body)
     assert _ends(html) == ((), ())
+
+
+def test_very_deep_svg_is_read_without_tracking() -> None:
+    # Past the depth limit the reading stops tracking SVG, reads raw text both
+    # ways, and still agrees on the real tags after ordinary content.
+    body = "<svg>" + "<g>" * 300 + "</g>" * 300 + "</svg><p>x</p>"
+    html = DOC.format(head="", body=body)
+    assert _ends(html) == _real(html)
+
+
+def test_script_in_template_column_content_is_read_both_ways() -> None:
+    # Template content that starts with <col> ignores a <script> start tag,
+    # so the markup after it is tags, and its attribute value hides a decoy.
+    body = '<template><col><script><input value="</script></body></template>"></script></template>'
+    html = DOC.format(head="", body=body)
+    assert set(_ends(html)[1]) <= set(_real(html)[1])
+
+
+def test_very_many_open_selects_are_read_without_tracking() -> None:
+    body = "<select>" * 100 + '<style><p title="</style></body>"></p></style>'
+    html = DOC.format(head="", body=body)
+    assert set(_ends(html)[1]) <= set(_real(html)[1])
+
+
+def test_first_head_end_only_stops_at_the_first_real_head_end() -> None:
+    html = DOC.format(head='<meta content="</head>">', body="<p>x</p>")
+    tags = scan_document_tags(html, first_head_end_only=True)
+    assert tags.head_ends[:1] == _real(html)[0]

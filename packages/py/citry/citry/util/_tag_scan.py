@@ -17,15 +17,19 @@ tags and text, so Python only runs for the tags that matter here.
 Whether ``<style>`` or ``<script>`` starts raw text depends on where the
 element sits. Inside SVG and MathML the browser reads them as ordinary
 elements, so the scan keeps track of the SVG and MathML elements it is
-inside. Some markup makes that tracking unreliable: an HTML element inside
-SVG, a ``<select>`` or ``<template>`` (where a ``<style>`` may be ignored),
-or a fragment that may be inserted into any element. From there the scan
-follows both possible readings of each raw-text element and keeps only the
-tag positions that every reading agrees on.
+inside. Inside ``<select>`` or ``<template>`` the browser may ignore a
+raw-text element such as ``<style>`` or ``<script>``, or an ``<svg>``. Some markup makes the tracking unreliable: an
+HTML element inside SVG, an ``<svg>`` inside ``<select>``, or a fragment
+that may be inserted into any element. From there the scan follows both
+possible readings of each raw-text element and keeps only the tag
+positions that every reading agrees on.
 
-A position the scan is unsure of is left out. Callers then put the content
-at the start or end of the HTML, which is outside any tag, though CSS put
-before a doctype switches the page to quirks mode.
+The scan treats output that starts with a doctype or ``<html>`` as a whole
+page the browser opens on its own, not as a fragment.
+
+A position the scan is unsure of is left out. Callers then put CSS at the
+start of the HTML, which is outside any tag (though CSS before a doctype
+switches the page to quirks mode), and JS at its end.
 """
 
 from __future__ import annotations
@@ -111,23 +115,57 @@ _COMMENTS = (
 )
 _CDATA = r"(?-i:<!\[CDATA\[)"
 
-# Inside SVG or MathML: tokens that leave the open elements unchanged. A
-# self-closing tag opens nothing; this pattern accepts it only when a quote
-# or a space comes before "/>", where the "/" cannot belong to an unquoted
-# value. An element that holds only text is skipped with its end tag. Every
-# other tag goes to the exact step in Python.
-_FOREIGN_SKIPPED = (
-    _TEXT
-    + "|"
-    + _start_tags_except(_BREAKOUT)
-    + rf"(?<=[\"'{_WS}]/>)"
-    + rf"|<(?P<pair>[A-Za-z]{_TAG_NAME})"
-    + "".join(f"(?<!<{name})" for name in _BREAKOUT)
-    + rf"{_ATTRS}{_NOT_SELF_CLOSED}[^<]*</(?P=pair){_NAME_END}{_ATTRS}"
-    + "|"
-    + _COMMENTS
-    + rf"|{_CDATA}(?s:.*?)\]\]>"
-)
+# Inside SVG or MathML: tokens that leave the open elements unchanged.
+# - A self-closing tag opens nothing. This pattern takes only tags whose
+#   attribute values are all quoted or missing, where a "/" before ">" is
+#   always the self-closing mark; in "x= />" or "x=a"/>" the "/" belongs to
+#   an unquoted value and the element stays open, so such tags go to the
+#   exact step in Python.
+# - An element whose content is only these tokens is skipped with its end
+#   tag, up to two levels deep, so ordinary icons cost no Python steps. Its
+#   name must not be one whose start tag makes the browser leave SVG or
+#   MathML, or one whose content the browser reads as HTML.
+# Every other tag goes to the exact step in Python.
+_QUOTED_ATTRS = rf"(?>(?:[{_WS}]+[^{_WS}/>=\"'<]+(?:[{_WS}]*=[{_WS}]*(?:\"[^\"]*\"|'[^']*'))?)*)[{_WS}]*"
+_SELF_CLOSED_QUOTED = rf"<[A-Za-z]{_TAG_NAME}" + "".join(f"(?<!<{name})" for name in _BREAKOUT) + rf"{_QUOTED_ATTRS}/>"
+_NESTED_NAME_EXCLUDED = "".join(f"(?<!<{name})" for name in (*_BREAKOUT, *_INTEGRATION))
+# Each copy of the pattern needs its own group names; re refuses a repeated name.
+_names_used = iter(range(1_000_000))
+
+
+def _foreign_skipped(levels: int) -> str:
+    """
+    Return the pattern for tokens that leave the open SVG or MathML elements unchanged.
+
+    It includes whole elements nested up to ``levels`` deep.
+    """
+    pair = f"pair{next(_names_used)}"
+    tokens = (
+        _TEXT
+        + "|"
+        + _SELF_CLOSED_QUOTED
+        # An element whose content is only text, of any name except those
+        # that make the browser leave SVG or MathML; text reads the same even
+        # where the browser reads the content as HTML.
+        + rf"|<(?P<{pair}>[A-Za-z]{_TAG_NAME})"
+        + "".join(f"(?<!<{name})" for name in _BREAKOUT)
+        + rf"{_ATTRS}{_NOT_SELF_CLOSED}[^<]*</(?P={pair}){_NAME_END}{_ATTRS}"
+        + "|"
+        + _COMMENTS
+        + rf"|{_CDATA}(?s:.*?)\]\]>"
+    )
+    if levels > 0:
+        nested = f"nest{next(_names_used)}"
+        tokens += (
+            rf"|<(?P<{nested}>[A-Za-z]{_TAG_NAME}){_NESTED_NAME_EXCLUDED}{_ATTRS}{_NOT_SELF_CLOSED}"
+            rf"(?>(?:{_foreign_skipped(levels - 1)})*)</(?P={nested}){_NAME_END}{_ATTRS}"
+        )
+    return tokens
+
+
+# Two levels cover icons built from groups of paths; each level adds a copy
+# of the pattern, so deeper nesting goes to the exact step instead.
+_FOREIGN_SKIPPED_LEVELS = 2
 
 # re.ASCII keeps case-insensitive matching to ASCII letters, as browsers do:
 # without it, "\u017f" (long s) would match "s" and "<\u017fcript>" would be
@@ -137,9 +175,9 @@ _FLAGS = re.IGNORECASE | re.ASCII
 # Each pattern steps over the tokens that change nothing for its reading
 # (group "bulk"), then matches the next token that does, if any.
 _HEAD_BODY_END = rf"(?P<end></(?P<end_name>head|body){_NAME_END}{_ATTRS})"
-# HTML that the scan can follow exactly. A simple <svg> or <math> block
-# (closed, holding nothing that leaves it) is stepped over in one go, so a
-# page full of icons costs no Python steps.
+# Start tags that change how the rest of the page is read. In plain HTML, a
+# simple <svg> or <math> block (closed, holding nothing that leaves it) is
+# stepped over in one go, so a page full of icons costs few Python steps.
 _HTML_TAGS = (*_RAW_TEXT, "svg", "math", "select", "template", "frameset")
 _HTML_SKIPPED = (
     _TEXT
@@ -151,11 +189,12 @@ _HTML_SKIPPED = (
     + _COMMENTS
     + rf"|{_CDATA}[^>]*>"
 )
-_HTML_TOKEN = rf"(?:{_HEAD_BODY_END}|(?P<start><(?P<start_name>{_names(_HTML_TAGS)}){_NAME_END}{_ATTRS}))?"
+_HTML_TOKENS = rf"{_HEAD_BODY_END}|(?P<start><(?P<start_name>{_names(_HTML_TAGS)}){_NAME_END}{_ATTRS})"
+_HTML_TOKEN = rf"(?:{_HTML_TOKENS})?"
 
 
 def _foreign_block(name: str) -> str:
-    skipped = _FOREIGN_SKIPPED.replace("?P<pair>", f"?P<pair_{name}>").replace("(?P=pair)", f"(?P=pair_{name})")
+    skipped = _foreign_skipped(_FOREIGN_SKIPPED_LEVELS)
     return rf"<{name}{_NAME_END}{_ATTRS}{_NOT_SELF_CLOSED}(?>(?:{skipped})*)</{name}{_NAME_END}{_ATTRS}"
 
 
@@ -163,12 +202,26 @@ _HTML = re.compile(
     rf"(?P<bulk>(?>(?:{_HTML_SKIPPED}|{_foreign_block('svg')}|{_foreign_block('math')})*)){_HTML_TOKEN}",
     _FLAGS,
 )
-# After <select> or <template>. The browser may ignore an <svg> there, so
-# SVG and MathML blocks are not stepped over.
-_HTML_IN_CONTEXT = re.compile(rf"(?P<bulk>(?>(?:{_HTML_SKIPPED})*)){_HTML_TOKEN}", _FLAGS)
+# Inside <select> or <template>, until its end tag. The browser may ignore
+# an <svg> there, so SVG and MathML blocks are not stepped over, and the
+# end tags that close these elements are tokens of their own.
+_HTML_IN_CONTEXT = re.compile(
+    r"(?P<bulk>(?>(?:"
+    + _TEXT
+    + "|"
+    + _start_tags_except(_HTML_TAGS)
+    + "|"
+    + _end_tags_except(("head", "body", "select", "template"))
+    + "|"
+    + _COMMENTS
+    + rf"|{_CDATA}[^>]*>"
+    + r")*))"
+    + rf"(?:(?P<context_end></(?P<context_name>select|template){_NAME_END}{_ATTRS})|{_HTML_TOKENS})?",
+    _FLAGS,
+)
 # Inside SVG or MathML, before anything makes the tracking unreliable.
 _FOREIGN = re.compile(
-    rf"(?P<bulk>(?>(?:{_FOREIGN_SKIPPED})*))"
+    rf"(?P<bulk>(?>(?:{_foreign_skipped(_FOREIGN_SKIPPED_LEVELS)})*))"
     rf"(?:(?P<start><(?P<start_name>[A-Za-z]{_TAG_NAME}){_ATTRS})"
     rf"|(?P<end></(?P<end_name>[A-Za-z]{_TAG_NAME}){_ATTRS}))?",
     _FLAGS,
@@ -200,14 +253,15 @@ _ATTR_ITEM = re.compile(
     rf"(?>[{_WS}]*=[{_WS}]*(?>\"[^\"]*\"|'[^']*'|[^{_WS}>\"'][^{_WS}>]*|(?=>))|(?![{_WS}]*=))",
     _FLAGS,
 )
-# A page the browser opens on its own starts with a doctype or ``<html>``.
-# Anything else may be a fragment inserted into any element, even an SVG
-# element, so it is read in every way from the start.
+# The scan treats output that starts with a doctype or ``<html>`` as a whole
+# page the browser opens on its own. Anything else may be a fragment
+# inserted into any element, even an SVG element, so it is read in every
+# way from the start.
 _DOCUMENT_START = re.compile(rf"[{_WS}]*<(?:!doctype[{_WS}>]|html[{_WS}/>])", _FLAGS)
 
 # How the browser may be reading the HTML at a point:
 _HTML_MODE = 0  # as HTML, exactly as the scan does;
-_HTML_CONTEXT = 1  # as HTML, after <select> or <template>, where raw text may be ignored;
+_HTML_CONTEXT = 1  # as HTML inside <select> or <template>, where raw text may be ignored;
 _FOREIGN_MODE = 2  # inside the SVG or MathML elements the reading tracks;
 _UNSURE_MODE = 3  # in a way the scan cannot track, so raw text is read both ways.
 
@@ -217,8 +271,12 @@ _UNSURE_MODE = 3  # in a way the scan cannot track, so raw text is read both way
 _MAX_READINGS = 16
 # Readings that went out of step may search the rest of the page again and
 # again. Past this many characters read per character of HTML, the scan
-# gives up, so its time stays linear in the size of the page.
+# gives up, so it stops in time on a page built to slow it down.
 _WORK_PER_CHAR = 24
+# Past this many open SVG and MathML elements, or open <select> and
+# <template> elements, a reading stops tracking them.
+_MAX_FOREIGN_DEPTH = 256
+_MAX_CONTEXT_DEPTH = 64
 # How many "</" an end-tag search checks one by one before it falls back
 # to a regex search over the rest.
 _FIND_TRIES = 32
@@ -367,6 +425,8 @@ def _advance(scan: _Scan, reading: _Reading) -> list[_Reading]:
     if mode == _FOREIGN_MODE:
         return _advance_foreign(scan, match, stack, events)
     end = match.end()
+    if mode == _HTML_CONTEXT and match.group("context_end") is not None:
+        return [_leave_context(match.group("context_name").lower(), end, stack, events)]
     if match.group("end") is not None:
         event = ("/" + match.group("end_name").lower(), pos)
         return [(end, mode, stack, events | {event})]
@@ -384,13 +444,18 @@ def _advance(scan: _Scan, reading: _Reading) -> list[_Reading]:
             return [(end, mode, stack, events)]
         return [(end, _FOREIGN_MODE, (name,), events)]
     if name in {"select", "template"}:
-        return [(end, _HTML_CONTEXT, stack, events)]
+        if len(stack) >= _MAX_CONTEXT_DEPTH:
+            # Copying a very long list of open elements on each step would
+            # make the scan slow; such a page is read without the tracking.
+            return [(end, _UNSURE_MODE, (), events)]
+        return [(end, _HTML_CONTEXT, (*stack, name), events)]
     if name == "frameset":
         return [(end, _UNSURE_MODE, (), events)]
-    readings = [_after_raw_text(scan, name, end, mode, events)]
-    # In the modes below the element may be read as markup instead, and
+    readings = [_after_raw_text(scan, name, end, mode, stack, events)]
+    # In the modes below the element may be read as markup instead (a
+    # <template> whose content starts with <col> ignores even <script>), and
     # without scripting the browser reads <noscript> content as markup.
-    if mode == _UNSURE_MODE or (mode == _HTML_CONTEXT and name != "script") or name == "noscript":
+    if mode in {_UNSURE_MODE, _HTML_CONTEXT} or name == "noscript":
         readings.append((end, mode, stack, events))
     return readings
 
@@ -425,6 +490,10 @@ def _advance_foreign(scan: _Scan, match: re.Match[str], stack: tuple[str, ...], 
             if tag_end is not None:
                 return [(tag_end.end(), _FOREIGN_MODE, stack, events)]
         return [(pos, _UNSURE_MODE, (), events)]
+    if len(stack) >= _MAX_FOREIGN_DEPTH:
+        # Copying a very deep list of open elements on each step would make
+        # the scan slow; such a page is read without the tracking.
+        return [(pos, _UNSURE_MODE, (), events)]
     return [(end, _FOREIGN_MODE, (*stack, name), events)]
 
 
@@ -450,19 +519,36 @@ def _after(found: int, length: int, mode: int, events: _Events) -> _Reading:
     return (found + length, mode, (), events) if found >= 0 else (-1, mode, (), events)
 
 
-def _after_raw_text(scan: _Scan, name: str, pos: int, mode: int, events: _Events) -> _Reading:
+def _leave_context(name: str, end: int, stack: tuple[str, ...], events: _Events) -> _Reading:
+    """
+    Update the open ``<select>`` and ``<template>`` elements a reading tracks.
+
+    Called when the reading meets ``</select>`` or ``</template>``.
+    """
+    # </template> closes the innermost template and anything inside it. A
+    # </select> counts only when a select is the innermost element tracked:
+    # inside template content the browser ignores it, so keeping the stack
+    # unchanged errs on the side of reading raw text both ways.
+    if name == "template" and "template" in stack:
+        stack = stack[: len(stack) - 1 - stack[::-1].index("template")]
+    elif name == "select" and stack[-1:] == ("select",):
+        stack = stack[:-1]
+    return (end, _HTML_CONTEXT if stack else _HTML_MODE, stack, events)
+
+
+def _after_raw_text(scan: _Scan, name: str, pos: int, mode: int, stack: tuple[str, ...], events: _Events) -> _Reading:
     """Skip the raw text of an HTML ``name`` element that starts at ``pos``; return the reading after its end tag."""
     if name == "plaintext":
-        return (-1, mode, (), events)
+        return (-1, mode, stack, events)
     if name == "script":
         close = _script_end(scan, pos)
     else:
         close = scan.end_tag(name, pos)[1]
     if close < 0:
-        return (-1, mode, (), events)
+        return (-1, mode, stack, events)
     # The end tag's own attributes are read like a start tag's.
     tag_end = _TAG_END.match(scan.html, close)
-    return (tag_end.end(), mode, (), events) if tag_end is not None else (-1, mode, (), events)
+    return (tag_end.end(), mode, stack, events) if tag_end is not None else (-1, mode, stack, events)
 
 
 def _script_end(scan: _Scan, pos: int) -> int:

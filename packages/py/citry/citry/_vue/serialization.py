@@ -262,7 +262,7 @@ def _insert_script_preloads(html: str, content: str) -> str:
         return html
     # HTMLParser reads some markup differently from a browser (it reads
     # <script> as script text even inside SVG), so the hints go in only at
-    # the </head> the browser-rule scan also finds; elsewhere they could
+    # the </head> that scan_document_tags also finds; elsewhere they could
     # land inside an attribute value.
     head_ends = scan_document_tags(html, first_head_end_only=True).head_ends
     if not head_ends or head_ends[0] != end:

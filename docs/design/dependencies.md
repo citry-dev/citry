@@ -570,16 +570,18 @@ HTML with the browser's tokenizer rules, so end-tag text inside an attribute
 value, a comment or raw text is skipped (an interactive page writes `<` and
 `>` raw in attribute values, so a text search is not enough). The scan keeps
 track of the SVG and MathML elements it is inside, where `<script>` and
-`<style>` are ordinary elements. Where the browser could read a raw-text
-element in more than one way (inside `<select>` or `<template>`, after HTML
-inside SVG, or in a fragment inserted into an unknown element), the scan
-tries each way and uses only the tags every way agrees on. This is the
+`<style>` are ordinary elements. It also keeps track of open `<select>` and
+`<template>` elements. Where the browser could read a raw-text element in
+more than one way (inside `<select>` or `<template>`, after HTML inside
+SVG, or in a fragment inserted into an unknown element), the scan tries
+each way and uses only the tags every way agrees on. This is the
 hybrid answer to the (i)-vs-(ii) fork deferred in
 [`component_rendering.md`](component_rendering.md) section 5.2: structured
 placement where the user gave us structure (the placeholder tags), one scan
 of the page's tags as the fallback. If neither a placeholder nor a target
 tag exists (content with no `<head>`), or the scan cannot tell which tag is
-real, CSS is prepended and JS appended to the output.
+real, CSS is prepended and JS appended to the output. CSS prepended to a
+document lands before its doctype, which switches the page to quirks mode.
 
 Divergence from DJC, flagged: DJC duplicates all tags into *every*
 placeholder occurrence (and documents that as a footgun). Citry fills the

@@ -41,11 +41,11 @@ Here the component styles come before `overrides.css`, so the overrides
 win. Each tag takes no attributes and no content.
 
 Without these tags, Citry inserts CSS before the first `</head>` and
-JavaScript before the last `</body>`, in any letter case. Only real tags
-count: `</head>` written inside an attribute value, a comment, or a
-script is text, not a tag. When the HTML has no `</head>` or `</body>`,
-or Citry cannot tell which one is real, CSS goes at the start of the
-output and JavaScript at the end.
+JavaScript before the last `</body>`, matching these tags in any letter
+case. Only real tags count: `</head>` written inside an attribute value,
+a comment, or a script is text, not a tag. When the HTML has no
+`</head>` or `</body>`, or Citry cannot tell which one is real, CSS goes
+at the start of the output and JavaScript at the end.
 
 ## Choose a strategy { #choose-a-dependency-strategy }
 

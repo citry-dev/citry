@@ -71,10 +71,10 @@ def test_end_tag_text_in_an_attribute_stays_text(page: Any, decoy: str, route: s
     if wrap:
         html = f"<!DOCTYPE html><html><head></head><body>{html}</body></html>"
     # The runtime and stylesheet URLs are not served; only the markup matters.
-    page.route("**/*", lambda route: route.fulfill(status=404, body=""))
+    page.route("**/*", lambda handler: handler.fulfill(status=404, body=""))
 
     page.set_content(html)
-    # An <img> with a missing source fires onerror right after it loads.
+    # An <img> whose source fails to load fires onerror soon after it is inserted.
     page.wait_for_timeout(300)
 
     assert page.evaluate("window.__pwn") is None
