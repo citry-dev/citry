@@ -42,6 +42,7 @@ from citry.ext.dependencies.scripts import (
     uses_component,
 )
 from citry.ext.dependencies.types import Dependency, Script, Style
+from citry.util._tag_scan import scan_document_tags
 from citry.util.html import Markup, script_json
 
 if TYPE_CHECKING:
@@ -1492,8 +1493,8 @@ def _fill_placeholders(html: str, placeholders: list[tuple[int, str]], content: 
     return html
 
 
-_HEAD_OR_BODY_END_RE = re.compile(r"</(?:head|body)\s*>")
-_BODY_END_RE = re.compile(r"</body\s*>")
+_HEAD_END_TEXT_RE = re.compile(r"</head", re.IGNORECASE | re.ASCII)
+_BODY_END_TEXT_RE = re.compile(r"</body", re.IGNORECASE | re.ASCII)
 
 
 def _insert_default(html: str, content: str, kind: str) -> str:
@@ -1503,22 +1504,24 @@ def _insert_default(html: str, content: str, kind: str) -> str:
     exist, CSS is prepended and JS appended, so the tags are never silently
     dropped (django-components dropped them here; flagged divergence,
     docs/design/dependencies.md section 7.3).
+
+    Only a tag the browser reads as a tag counts, in any letter case. An
+    interactive page writes ``<`` and ``>`` raw in attribute values, so the
+    text ``</head>`` inside a value, a comment or a script is not a target:
+    a tag inserted there would end the attribute and turn the rest of the
+    value into markup.
     """
     target = None
-    if kind == "js":
-        # Search back from the end for the last </body>; scanning the whole
-        # page forward costs about a millisecond on a hydrated page.
-        end = len(html)
-        while (start := html.rfind("</body", 0, end)) >= 0:
-            if _BODY_END_RE.match(html, start) is not None:
-                target = start
-                break
-            end = start
-    else:
-        for match in _HEAD_OR_BODY_END_RE.finditer(html):
-            if match[0][2:6] == "head":
-                target = match.start()
-                break
+    # Most fragments hold no end-tag text at all, and the text search is far
+    # cheaper than reading the page's tags.
+    text_re = _BODY_END_TEXT_RE if kind == "js" else _HEAD_END_TEXT_RE
+    if text_re.search(html) is not None:
+        if kind == "js":
+            body_ends = scan_document_tags(html).body_ends
+            target = body_ends[-1] if body_ends else None
+        else:
+            head_ends = scan_document_tags(html, first_head_end_only=True).head_ends
+            target = head_ends[0] if head_ends else None
     if target is not None:
         return html[:target] + content + html[target:]
     return content + html if kind == "css" else html + content

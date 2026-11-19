@@ -35,6 +35,15 @@
 
 ### Fixes
 
+- Security: on an interactive page, a value in an HTML attribute that
+  contains `</head>` or `</body>` can no longer move Citry's CSS or JS
+  tags into that attribute. Before, the stylesheet link could end the
+  attribute and turn the rest of the value into markup that runs in
+  the browser, and a `</body>` made `serialize()` fail. Citry now puts
+  its tags only at the page's real `</head>` and `</body>`, in any
+  letter case, and at the start or end of the output when the page has
+  none. See
+  [GHSA-5mm2-p7xq-jchq](https://github.com/citry-dev/citry/security/advisories/GHSA-5mm2-p7xq-jchq).
 - You can now pass a `str` subclass, such as the `SafeString` URL
   that django-compressor produces, as `Script(url=...)` or
   `Style(url=...)`. Before, a page that Vue renders or an Events
