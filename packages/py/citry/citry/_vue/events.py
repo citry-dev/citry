@@ -660,7 +660,11 @@ class DirectVueEventsProducer:
 
     def __call__(self, renderable: CitryElement | CitryRender, context: RenderEncodingContext) -> dict[str, object]:
         app_id, revision, base_revision, root_occurrence_id = self._request_scope(renderable, context)
-        render = render_prepared_direct(renderable) if isinstance(renderable, CitryElement) else renderable
+        render = (
+            render_prepared_direct(renderable, template_globals=context.template_globals, provides=context.provides)
+            if isinstance(renderable, CitryElement)
+            else renderable
+        )
         if render.render_target != "prepared":
             raise TypeError("vue-prepared/1 requires a typed prepared CitryRender.")
         return self.prepare_from_render(
@@ -680,7 +684,13 @@ class DirectVueEventsProducer:
     ) -> dict[str, object]:
         """Prepare a private Mark wrapper without rerendering its payload."""
         app_id, revision, base_revision, _root_occurrence_id = self._request_scope(renderable, context)
-        render = render_prepared_marker_replacement(renderable, citry=context.citry, name=target.name)
+        render = render_prepared_marker_replacement(
+            renderable,
+            citry=context.citry,
+            name=target.name,
+            template_globals=context.template_globals,
+            provides=context.provides,
+        )
         return self.prepare_from_render(
             render,
             citry=context.citry,

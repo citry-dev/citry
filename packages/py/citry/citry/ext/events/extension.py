@@ -44,6 +44,7 @@ from citry.ext.events.handlers import (
     validate_csrf_value,
     validate_handler_signature,
     validate_methods_value,
+    validate_render_inputs_value,
     validate_route_methods,
     validate_timing_value,
 )
@@ -68,6 +69,7 @@ if TYPE_CHECKING:
     from citry._model_base import ModelBase
     from citry.citry import Citry
     from citry.component import Component
+    from citry.ext.events.dispatcher import EventRequest, RenderInputs
     from citry.extension import (
         ComponentIntrospectionContext,
         OnAttrsResolvedContext,
@@ -139,6 +141,7 @@ _FACTORY_DEFAULTS: dict[str, Any] = {
     "_methods": ("POST",),
     "_debounce": None,
     "_throttle": None,
+    "_render_inputs": None,
 }
 
 
@@ -206,6 +209,8 @@ class EventsInfo:
         methods: The component-level allowed HTTP methods, uppercase.
         debounce: The component-level debounce in milliseconds, or ``None``.
         throttle: The component-level throttle in milliseconds, or ``None``.
+        render_inputs: The ``_render_inputs`` function, resolved through the
+            three config levels; ``None`` when nothing configures one.
 
     """
 
@@ -219,6 +224,7 @@ class EventsInfo:
     methods: tuple[str, ...]
     debounce: int | None
     throttle: int | None
+    render_inputs: Callable[[EventRequest], RenderInputs] | None = None
 
 
 _EVENTS_INFO_ATTR = "_citry_events_info"
@@ -315,8 +321,8 @@ class EventsExtension(Extension):
         Underscore names are configuration and must be one of the recognized
         config attributes (``_guard``, ``_context``, ``_csrf``, ``_methods``,
         ``_debounce``, ``_throttle``, plus the engine-wide
-        ``_max_body_bytes``, ``_max_form_fields``, and ``_csrf_field_names``, which only
-        ``extensions_defaults`` may set);
+        ``_max_body_bytes``, ``_max_form_fields``, ``_csrf_field_names``, and ``_csp_nonce``,
+        which only ``extensions_defaults`` may set);
         on a component's ``Events`` class an underscore ``def`` is a private
         helper and is exempt.
         Unprefixed names are event handlers: they belong on a component's
@@ -361,6 +367,11 @@ class EventsExtension(Extension):
                         )
                         raise ValueError(msg)
                     _validate_engine_config_value(name, value)
+                    continue
+                if name == "_render_inputs" and component is None:
+                    # Checked when the engine is built, so a wrong default
+                    # fails at Citry(...) rather than at the first component.
+                    validate_render_inputs_value("extensions_defaults['events']['_render_inputs']", value)
                     continue
                 if name in CONFIG_NAMES:
                     continue
@@ -728,6 +739,13 @@ class EventsExtension(Extension):
             self._resolve_config_value(raw_events, "_throttle", defaults),
         )
 
+        # Resolved here like the other per-component names, so a bad value
+        # fails at class definition, not on the first call that renders.
+        render_inputs = validate_render_inputs_value(
+            f"Component {comp_name}: Events._render_inputs",
+            self._resolve_config_value(raw_events, "_render_inputs", defaults),
+        )
+
         handlers: dict[str, EventHandler] = {}
         if raw_events is not None:
             for method_name, func in collect_event_handlers(comp_name, raw_events).items():
@@ -786,6 +804,7 @@ class EventsExtension(Extension):
             methods=methods,
             debounce=debounce,
             throttle=throttle,
+            render_inputs=render_inputs,
         )
 
     def _resolve_config_value(self, raw_events_cls: type | None, name: str, defaults: Mapping[str, Any]) -> Any:

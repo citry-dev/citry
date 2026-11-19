@@ -92,6 +92,11 @@ class Events:
 The rule: if the new render needs a value, the handler must get it and pass
 it in.
 
+A value that every render needs from the request, such as the current user,
+does not have to be passed in by each handler. An app-wide function can
+supply it (experimental). See
+[Pass request values](/events/actions/#give-every-render-the-request-values).
+
 ## `:c-<field>` on inputs
 
 A `:c-<field>` attribute shows a State field in a form control. Give it a

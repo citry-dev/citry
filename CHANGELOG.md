@@ -11,6 +11,17 @@
   structured dependency URL". Citry still checks such a URL like any
   other.
 
+### Added
+
+- Experimental: a component that an event handler returns can now
+  read request values such as the current user or the locale, as it
+  does when a view renders the page. Set `_render_inputs` in
+  `extensions_defaults["events"]`, or on one component's `Events`
+  class, to a function that takes the event call's `EventRequest` and
+  returns a `RenderInputs` dict (from `citry.ext.events`): the `template_globals` and `provides`
+  Citry passes to `.render()` for that call's renders. See
+  [Pass request values](https://citry.dev/events/actions/#give-every-render-the-request-values).
+
 ## v1.0.3
 
 Citry 1.0.3 is a security release. It requires citry-core 2.1.2, which

@@ -16,13 +16,14 @@ on runtime, mypy, and pyright; see
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Generic
+from typing import TYPE_CHECKING, Any, ClassVar, Generic
 
 from typing_extensions import TypeVar
 
 from citry.extension import ExtensionConfig
 
 if TYPE_CHECKING:
+    from citry.ext.events.dispatcher import RenderInputsFunction
     from citry.util.routing import RouteRequest
 
 # The State type carried by ``self.state``. The PEP 696 default makes the
@@ -76,6 +77,16 @@ class Events(ExtensionConfig, Generic[StateT]):
     context: Any
     request: RouteRequest
     event: Any
+    if TYPE_CHECKING:
+        # Declared only for type checkers, so a component that assigns its own
+        # `_render_inputs` function is checked against the expected signature.
+        # It is config, not an ambient member, so it stays out of the runtime
+        # annotations. A ClassVar keeps the function unbound: Citry calls it
+        # with the request alone. Pyright checks the whole signature; mypy
+        # treats a Callable class attribute as a method, so it checks the
+        # return type and the number of parameters but not the parameter
+        # type. Citry checks the number of parameters at class definition.
+        _render_inputs: ClassVar[RenderInputsFunction | None]
 
     def url(
         self,

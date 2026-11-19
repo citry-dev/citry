@@ -29,6 +29,7 @@ from citry import Citry, Component, InMemoryCache
 from citry._protocol import events
 from citry.ext.events import actions, event
 from citry.ext.events import dispatcher as dispatcher_module
+from citry.ext.events import renderers as dispatcher_module_renderers
 from citry.ext.events.dispatcher import (
     CAPABILITIES_BASELINE_V1,
     CallEvent,
@@ -3565,3 +3566,341 @@ class TestPageCspNonce:
 
         with pytest.raises(ValueError, match="plain \\(not async\\) function"):
             _counter(_citry(extensions_defaults={"events": {"_csp_nonce": page_nonce}}))
+
+
+_NOT_SET = object()
+
+
+def _shows(output, *values):
+    """Whether every value appears in a render's output as one dynamic text part (a JSON string)."""
+    return all(json.dumps(value) in output for value in values)
+
+
+class TestRenderInputs:
+    """The engine-wide ``_render_inputs`` setting gives every Render the app's globals and provided values."""
+
+    VUE_HEADERS = {
+        "X-Citry-Vue-App": "app",
+        "X-Citry-Vue-Occurrence": "citryOccurrenceTest1",
+        "X-Citry-Vue-Revision": "0",
+    }
+    VUE_CAPABILITIES = {
+        "actions": ["render", "state"],
+        "swaps": ["morph"],
+        "renderers": ["vue-prepared/1", "html-fragment/1"],
+    }
+
+    def _greeter(self, c, *, own_inputs=_NOT_SET):
+        class GreeterState:
+            count: int = 0
+
+        class Greeter(Component):
+            citry = c
+
+            class Kwargs:
+                count: int = 0
+
+            State = GreeterState
+
+            class Events:
+                # The component-level form; left out when the test does not set it.
+                if own_inputs is not _NOT_SET:
+                    _render_inputs = own_inputs
+
+                def bump(self, state):
+                    state.count += 1
+                    return Greeter(count=state.count)
+
+                def swap(self, state):
+                    return Other()
+
+                def bump_twice(self, state):
+                    state.count += 1
+                    return [actions.Render(Greeter(count=state.count)), actions.Render(Greeter(count=state.count))]
+
+                def bump_marker(self, state):
+                    state.count += 1
+                    return actions.Render(Greeter(count=state.count), target="mark:greeting")
+
+                def prerendered(self, state):
+                    state.count += 1
+                    return Greeter(count=state.count).render(template_globals={"user": "handler"})
+
+                def quiet(self, state):
+                    return None
+
+            def template_data(self, kwargs, slots):
+                return {"count": kwargs.count, "locale": self.inject("locale", "none")}
+
+            template = """
+                <div>
+                  <c-mark name="greeting">
+                    <p>Hi {{ user }} ({{ locale }}) #{{ count }}</p>
+                  </c-mark>
+                  <button @c-click="bump">Bump</button>
+                </div>
+            """
+
+        class Other(Component):
+            citry = c
+            template = """
+                <p>Other for {{ user }}</p>
+            """
+
+        return Greeter
+
+    def _call(self, comp, handler):
+        return {
+            "componentClassId": comp.class_id,
+            "handlerName": handler,
+            "callerRenderId": "c9zk1q00",
+            "stateToken": mint_state_token(
+                comp.State(), class_id=comp.class_id, secret=SIGNING_KEY, max_age=None, max_bytes=8192
+            ),
+        }
+
+    def _inputs(self, seen):
+        def render_inputs(request):
+            seen.append(request)
+            return {"template_globals": {"user": "Ada"}, "provides": {"locale": "en-GB"}}
+
+        return render_inputs
+
+    def test_an_html_render_gets_the_globals_and_provides_and_the_function_gets_the_request(self):
+        seen = []
+        c = _citry(extensions_defaults={"events": {"_render_inputs": self._inputs(seen)}})
+        greeter = self._greeter(c)
+        [result] = _dispatch(c, self._call(greeter, "bump"))["results"]
+        [action] = result["actions"]
+        assert _shows(action["html"], "Ada", "en-GB")
+        [request] = seen
+        assert isinstance(request, EventRequest)
+
+    def test_a_vue_render_and_a_marker_render_get_them_too(self):
+        seen = []
+        c = _citry(extensions_defaults={"events": {"_render_inputs": self._inputs(seen)}})
+        greeter = self._greeter(c)
+        dispatcher = dispatcher_module_renderers.dispatcher_for(c)
+        ctx = TransportContext(transport="http", citry=c, headers=self.VUE_HEADERS)
+        for handler in ("bump", "bump_marker"):
+            envelope = _envelope(self._call(greeter, handler), capabilities=self.VUE_CAPABILITIES)
+            [result] = dispatcher.dispatch(envelope, ctx)["results"]
+            [render] = [action for action in result["actions"] if action["action"] == "render"]
+            assert render["renderer"] == "vue-prepared/1"
+            assert render["target"].startswith("mark:" if handler == "bump_marker" else "render:")
+            assert _shows(json.dumps(render["prepared"]), "Ada", "en-GB")
+        assert len(seen) == 2
+
+    def test_a_no_javascript_answer_gets_them_too(self):
+        seen = []
+        c = _citry(extensions_defaults={"events": {"_render_inputs": self._inputs(seen)}})
+        greeter = self._greeter(c)
+        ctx = TransportContext(transport="http", citry=c, response_mode="compat")
+        [result] = EventsDispatcher().dispatch(_envelope(self._call(greeter, "bump")), ctx)["results"]
+        [action] = result["actions"]
+        # The no-JavaScript answer is plain HTML, with no Vue data.
+        assert "Hi Ada (en-GB) #1" in action["html"]
+        assert len(seen) == 1
+
+    def test_a_component_an_extension_answers_with_gets_them_too(self):
+        seen = []
+        greeters = []
+
+        class Answer(Extension):
+            name = "answer"
+
+            def on_event(self, ctx):
+                return greeters[0](count=7)
+
+        c = _citry(extensions=[Answer], extensions_defaults={"events": {"_render_inputs": self._inputs(seen)}})
+        greeters.append(self._greeter(c))
+        [result] = _dispatch(c, self._call(greeters[0], "quiet"))["results"]
+        assert _shows(result["actions"][0]["html"], "Ada", "en-GB", "7")
+        assert len(seen) == 1
+
+    def test_the_function_runs_once_for_a_call_with_several_renders(self):
+        seen = []
+        c = _citry(extensions_defaults={"events": {"_render_inputs": self._inputs(seen)}})
+        greeter = self._greeter(c)
+        [result] = _dispatch(c, self._call(greeter, "bump_twice"))["results"]
+        assert [_shows(action["html"], "Ada", "en-GB") for action in result["actions"]] == [True, True]
+        assert len(seen) == 1
+
+    def test_a_render_the_handler_built_keeps_its_own_inputs(self):
+        def render_inputs(_request):
+            raise AssertionError("asked for render inputs the handler already supplied")
+
+        c = _citry(extensions_defaults={"events": {"_render_inputs": render_inputs}})
+        greeter = self._greeter(c)
+        [result] = _dispatch(c, self._call(greeter, "prerendered"))["results"]
+        html = result["actions"][0]["html"]
+        assert _shows(html, "handler", "none")
+        assert "Ada" not in html
+
+    def test_a_call_without_a_render_does_not_ask(self):
+        def render_inputs(_request):
+            raise AssertionError("asked for render inputs the answer does not need")
+
+        c = _citry(extensions_defaults={"events": {"_render_inputs": render_inputs}})
+        greeter = self._greeter(c)
+        [result] = _dispatch(c, self._call(greeter, "quiet"))["results"]
+        assert result["ok"] is True
+
+    def test_a_call_with_a_bad_state_token_never_reaches_the_function(self):
+        seen = []
+        c = _citry(extensions_defaults={"events": {"_render_inputs": self._inputs(seen)}})
+        greeter = self._greeter(c)
+        [result] = _dispatch(c, {**self._call(greeter, "bump"), "stateToken": "forged"})["results"]
+        assert result["ok"] is False
+        assert seen == []
+
+    def test_without_the_setting_a_render_sees_no_globals(self):
+        c = _citry()
+        greeter = self._greeter(c)
+        [result] = _dispatch(c, self._call(greeter, "bump"))["results"]
+        assert result["ok"] is False
+        assert result["error"]["code"] == "handler_error"
+
+    def test_a_function_that_raises_fails_the_call(self, caplog):
+        def render_inputs(_request):
+            raise RuntimeError("no session")
+
+        c = _citry(extensions_defaults={"events": {"_render_inputs": render_inputs}})
+        greeter = self._greeter(c)
+        with caplog.at_level(logging.ERROR, logger="citry"):
+            [result] = _dispatch(c, self._call(greeter, "bump"))["results"]
+        assert result["error"]["code"] == "handler_error"
+        assert any(isinstance(record.exc_info[1], RuntimeError) for record in caplog.records if record.exc_info)
+
+    def test_an_event_error_from_the_function_answers_with_its_status(self):
+        def render_inputs(_request):
+            raise EventError("Sign in again.", status=401)
+
+        c = _citry(extensions_defaults={"events": {"_render_inputs": render_inputs}})
+        greeter = self._greeter(c)
+        [result] = _dispatch(c, self._call(greeter, "bump"))["results"]
+        assert result["error"]["status"] == 401
+        assert result["error"]["message"] == "Sign in again."
+
+    @pytest.mark.parametrize(
+        ("returned", "message"),
+        [
+            (None, "must return a dict with the optional keys 'template_globals' and 'provides'; got NoneType"),
+            ({"globals": {}}, "returned unknown keys ['globals']"),
+            ({"template_globals": ["user"]}, "must return a mapping or None for 'template_globals'; got list"),
+            ({"provides": "en"}, "must return a mapping or None for 'provides'; got str"),
+        ],
+        ids=["none", "unknown-key", "globals-list", "provides-str"],
+    )
+    def test_a_wrong_return_value_fails_the_call_with_an_error_that_names_the_setting(self, returned, message, caplog):
+        c = _citry(extensions_defaults={"events": {"_render_inputs": lambda _request: returned}})
+        greeter = self._greeter(c)
+        with caplog.at_level(logging.ERROR, logger="citry"):
+            [result] = _dispatch(c, self._call(greeter, "bump"))["results"]
+        assert result["error"]["code"] == "handler_error"
+        [error] = [record.exc_info[1] for record in caplog.records if record.exc_info]
+        assert isinstance(error, TypeError)
+        assert "'_render_inputs'" in str(error)
+        assert message in str(error)
+
+    def test_an_empty_dict_renders_with_no_extra_inputs(self):
+        c = _citry(extensions_defaults={"events": {"_render_inputs": lambda _request: {}}})
+        greeter = self._greeter(c)
+        [result] = _dispatch(c, self._call(greeter, "bump"))["results"]
+        # The template still reads a global nobody supplied, so the render fails.
+        assert result["error"]["code"] == "handler_error"
+
+    @pytest.mark.parametrize("value", [{"template_globals": {}}, 1])
+    def test_the_setting_must_be_a_function(self, value):
+        with pytest.raises(ValueError, match="'_render_inputs'\\] must be a plain"):
+            _citry(extensions_defaults={"events": {"_render_inputs": value}})
+
+    def test_an_async_function_is_refused(self):
+        async def render_inputs(_request):
+            return {}
+
+        with pytest.raises(ValueError, match="plain \\(not async\\) function"):
+            _citry(extensions_defaults={"events": {"_render_inputs": render_inputs}})
+
+    def test_a_component_can_set_its_own_function(self):
+        seen = []
+        c = _citry()
+        greeter = self._greeter(c, own_inputs=self._inputs(seen))
+        [result] = _dispatch(c, self._call(greeter, "bump"))["results"]
+        assert _shows(result["actions"][0]["html"], "Ada", "en-GB")
+        [request] = seen
+        assert isinstance(request, EventRequest)
+
+    def test_the_component_function_wins_over_the_engine_default(self):
+        def engine_inputs(_request):
+            raise AssertionError("the engine default ran although the component set its own function")
+
+        c = _citry(extensions_defaults={"events": {"_render_inputs": engine_inputs}})
+        greeter = self._greeter(c, own_inputs=self._inputs([]))
+        [result] = _dispatch(c, self._call(greeter, "bump"))["results"]
+        assert _shows(result["actions"][0]["html"], "Ada", "en-GB")
+
+    def test_a_component_can_turn_the_engine_default_off_with_none(self):
+        seen = []
+        c = _citry(extensions_defaults={"events": {"_render_inputs": self._inputs(seen)}})
+        greeter = self._greeter(c, own_inputs=None)
+        [result] = _dispatch(c, self._call(greeter, "bump"))["results"]
+        # Without inputs the template's `user` global is missing, so the render fails.
+        assert result["error"]["code"] == "handler_error"
+        assert seen == []
+
+    def test_the_calling_component_function_applies_to_a_different_rendered_component(self):
+        c = _citry()
+        greeter = self._greeter(c, own_inputs=self._inputs([]))
+        [result] = _dispatch(c, self._call(greeter, "swap"))["results"]
+        # Other has no Vue parts, so its fragment is plain HTML.
+        assert "Other for Ada" in result["actions"][0]["html"]
+
+    @pytest.mark.parametrize("value", [{"template_globals": {}}, 1], ids=["dict", "int"])
+    def test_a_component_value_that_is_not_a_function_fails_at_class_definition(self, value):
+        with pytest.raises(ValueError, match=r"Events\._render_inputs must be a plain"):
+            self._greeter(_citry(), own_inputs=value)
+
+    def test_a_method_written_in_the_events_class_fails_at_class_definition(self):
+        c = _citry()
+        with pytest.raises(ValueError, match="Define the function outside the class and assign it"):
+
+            class Page(Component):
+                citry = c
+
+                class Events:
+                    def _render_inputs(self, request):
+                        return {}
+
+                    def go(self):
+                        return None
+
+    def test_a_lambda_or_staticmethod_in_the_events_class_works(self):
+        for own in (
+            lambda _request: {"template_globals": {"user": "Ada"}},
+            staticmethod(lambda _request: {"template_globals": {"user": "Ada"}}),
+        ):
+            c = _citry()
+            greeter = self._greeter(c, own_inputs=own)
+            [result] = _dispatch(c, self._call(greeter, "bump"))["results"]
+            assert _shows(result["actions"][0]["html"], "Ada")
+
+    def test_an_app_wide_function_with_the_wrong_parameters_fails_at_construction(self):
+        def render_inputs():
+            return {}
+
+        with pytest.raises(ValueError, match="must take the call's EventRequest as its only argument"):
+            _citry(extensions_defaults={"events": {"_render_inputs": render_inputs}})
+
+    def test_the_app_wide_value_may_be_none(self):
+        c = _citry(extensions_defaults={"events": {"_render_inputs": None}})
+        greeter = self._greeter(c)
+        [result] = _dispatch(c, self._call(greeter, "bump"))["results"]
+        assert result["error"]["code"] == "handler_error"
+
+    def test_a_component_async_function_fails_at_class_definition(self):
+        async def render_inputs(_request):
+            return {}
+
+        with pytest.raises(ValueError, match="plain \\(not async\\) function"):
+            self._greeter(_citry(), own_inputs=render_inputs)

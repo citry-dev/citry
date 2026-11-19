@@ -43,7 +43,10 @@ INJECTABLE_PARAMS = ("data", "state", "context", "request", "event")
 # settings-only and a component declaring one fails at class definition.
 # ``_csp_nonce`` (a function that returns the CSP nonce of the page that sent
 # a call) is engine-wide too, because a page's nonce is one fact for every
-# component on it.
+# component on it. ``_render_inputs`` (a function that returns the keyword
+# arguments Citry passes to ``render()`` for every Render a call performs) is
+# an ordinary per-component name: the calling component's value wins over
+# ``extensions_defaults["events"]``.
 CONFIG_NAMES = (
     "_guard",
     "_context",
@@ -55,6 +58,7 @@ CONFIG_NAMES = (
     "_max_form_fields",
     "_csrf_field_names",
     "_csp_nonce",
+    "_render_inputs",
 )
 
 # The engine-wide config names, which only ``extensions_defaults["events"]``
@@ -223,6 +227,45 @@ def validate_csrf_value(source: str, value: Any) -> str | bool | Callable[..., A
         return value
     msg = f'{source} must be "auto", False, or a callable; got {value!r}.'
     raise ValueError(msg)
+
+
+def validate_render_inputs_value(source: str, value: Any) -> Callable[..., Any] | None:
+    """Check a ``_render_inputs`` value: a plain (not async) function that takes one argument, or None."""
+    # The dispatcher calls the function without awaiting it, so an async
+    # function would hand back a coroutine instead of the inputs.
+    if value is not None and (not callable(value) or inspect.iscoroutinefunction(value)):
+        msg = (
+            f"{source} must be a plain (not async) function that takes the call's EventRequest"
+            " and returns a dict with the optional keys 'template_globals' and 'provides', or None;"
+            f" got {value!r}."
+        )
+        raise ValueError(msg)
+    if value is not None and not _takes_one_argument(value):
+        # Citry calls it with the request alone. A `def` written inside the
+        # Events class expects `self` first, so it would fail on every call;
+        # refusing it here names the fix instead.
+        msg = (
+            f"{source} must take the call's EventRequest as its only argument; a `def` written"
+            " in the Events class also expects `self`. Define the function outside the class"
+            " and assign it: `_render_inputs = render_inputs`."
+        )
+        raise ValueError(msg)
+    return value
+
+
+def _takes_one_argument(func: Callable[..., Any]) -> bool:
+    """Whether ``func`` can be called with exactly one positional argument."""
+    try:
+        signature = inspect.signature(func)
+    except (TypeError, ValueError):
+        # Some callables (builtins, C extensions) have no signature to read;
+        # the call itself is the only check left for them.
+        return True
+    try:
+        signature.bind(object())
+    except TypeError:
+        return False
+    return True
 
 
 def validate_callable_value(source: str, value: Any) -> Callable[..., Any] | None:

@@ -1388,7 +1388,20 @@ construction; an empty sequence turns the removal off. The page nonce function
 for every component on it: when a call's answer is an `html-fragment/1`
 Render, the dispatcher calls it with the call's `EventRequest` and
 serializes the fragment with the nonce it returns, so the page's runtime
-starts the fragment. Engine-wide registries
+starts the fragment. The render inputs function (`_render_inputs`,
+Experimental) is a per-component option: a component's `Events` class
+may assign one, which wins over `extensions_defaults["events"]`, and
+`None` turns the app-wide one off. When Citry renders a component for a
+call's `Render`, the dispatcher calls the calling component's function
+once with the call's `EventRequest`, after the handler, and passes the
+`RenderInputs` it returns (`template_globals` and `provides`) to
+`render()` for every such render in the call. A render the handler built
+itself keeps its own inputs. A value that is not a function or `None`,
+an `async def` function, or a function that cannot take exactly one
+argument (such as a method written in the `Events` class) fails at
+engine construction or class definition. A function that raises or
+returns another shape fails the call with `handler_error`.
+Engine-wide registries
 and secrets are `CitrySettings` fields: `secret` (7.1),
 `event_result_resolvers` (result resolvers, 6.2), and
 `event_payload_codecs` (payload codecs, 6.2).

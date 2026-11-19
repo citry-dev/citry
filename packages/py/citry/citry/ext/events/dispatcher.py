@@ -38,7 +38,7 @@ import logging
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypedDict
 
 from citry._input_types import _restore_json_tuples
 from citry._protocol.events import (
@@ -60,6 +60,7 @@ from citry._protocol.events import (
     validate_action,
     validate_result,
 )
+from citry.citry_element import CitryElement, RenderProvides, RenderTemplateGlobals
 from citry.ext.events._pydantic_bounded import TOO_SLOW_MESSAGE, ValidationTooCostly, current_work, request_work
 
 # The csrf_failed message is example-locked contract text; it lives next to
@@ -119,6 +120,7 @@ __all__ = [
     "OnEventContext",
     "OnEventErrorContext",
     "OnEventResultContext",
+    "RenderInputs",
     "TransportContext",
 ]
 
@@ -221,6 +223,48 @@ class EventRequest:
     form: Mapping[str, Any] = field(default_factory=dict)
     files: Mapping[str, Any] = field(default_factory=dict)
     native: Any = None
+
+
+class RenderInputs(TypedDict, total=False):
+    """
+    The keyword arguments Citry passes to `render()` for each component a `Render` renders.
+
+    A `_render_inputs` function returns this dict, from a component's
+    `Events` class or from `extensions_defaults["events"]`. Citry then calls
+    `.render(template_globals=..., provides=...)` with these values on each
+    component a `Render` renders, exactly as you would when you render the
+    component yourself. Both keys are optional, and each field has the type
+    of the [`render()`][citry.CitryElement.render] parameter of the same
+    name.
+
+    Experimental:
+        It may change in a 1.x minor release without a deprecation period.
+
+    Attributes:
+        template_globals: Template variables every template in the render
+            can read.
+        provides: Values the rendered components can read with `inject()`.
+
+    Example:
+        ```python
+        from citry.ext.events import EventRequest, RenderInputs
+
+        def render_inputs(request: EventRequest) -> RenderInputs:
+            return {
+                "template_globals": {"user": request.native.user},
+                "provides": {"locale": "en-GB"},
+            }
+        ```
+
+    """
+
+    template_globals: RenderTemplateGlobals | None
+    provides: RenderProvides | None
+
+
+# The type of a `_render_inputs` function, on a component's `Events` class or
+# in `extensions_defaults["events"]`.
+RenderInputsFunction: TypeAlias = "Callable[[EventRequest], RenderInputs]"
 
 
 @dataclass(frozen=True, slots=True)
@@ -360,6 +404,55 @@ def _page_csp_nonce(ctx: TransportContext, plan: _CallPlan) -> str | None:
         msg = f"The events '_csp_nonce' function must return a str or None; got {type(nonce).__name__}."
         raise TypeError(msg)
     return nonce
+
+
+# The keys a ``_render_inputs`` function may return, matching the keyword
+# arguments of ``CitryElement.render()`` they are passed to.
+_RENDER_INPUT_KEYS = frozenset({"template_globals", "provides"})
+
+
+def _call_render_inputs(plan: _CallPlan) -> tuple[RenderTemplateGlobals | None, RenderProvides | None]:
+    """
+    Return the template globals and provided values for this call's renders, from ``_render_inputs``.
+
+    A page render gets request values (the user, the locale) from the app's
+    own view, but a Render from a handler has no view around it, so the
+    app's function supplies them for each call instead. The calling
+    component's ``Events`` value was already resolved over the engine default
+    when the class was defined.
+    """
+    inputs_for = plan.info.render_inputs
+    if inputs_for is None:
+        return None, None
+    # Typed as Any: the function's annotation is a promise the app's code may
+    # not keep, and the checks below are what Citry relies on.
+    inputs: Any = inputs_for(plan.events.request)
+    # A wrong shape is reported against the setting here, rather than as a
+    # confusing error from inside the render; the call still answers
+    # handler_error either way.
+    if not isinstance(inputs, Mapping):
+        msg = (
+            "The events '_render_inputs' function must return a dict with the optional keys"
+            f" 'template_globals' and 'provides'; got {type(inputs).__name__}."
+        )
+        raise TypeError(msg)
+    unknown = sorted(str(key) for key in inputs if key not in _RENDER_INPUT_KEYS)
+    if unknown:
+        msg = (
+            f"The events '_render_inputs' function returned unknown keys {unknown};"
+            " the recognized keys are 'template_globals' and 'provides'."
+        )
+        raise TypeError(msg)
+    template_globals = inputs.get("template_globals")
+    provides = inputs.get("provides")
+    for key, value in (("template_globals", template_globals), ("provides", provides)):
+        if value is not None and not isinstance(value, Mapping):
+            msg = (
+                f"The events '_render_inputs' function must return a mapping or None for {key!r};"
+                f" got {type(value).__name__}."
+            )
+            raise TypeError(msg)
+    return template_globals, provides
 
 
 @dataclass(slots=True)
@@ -1249,6 +1342,15 @@ class EventsDispatcher:
                     f"Event handler {plan.handler.name!r} produced a render, but no configured renderer"
                     " was advertised by the client."
                 )
+            # Asked only when Citry itself renders a component for this call: a
+            # render the handler built already carries its own inputs, and a call
+            # without a render needs none. The function runs after the handler,
+            # so after the CSRF and State token checks too, and after the renderer
+            # check above, so a call that fails anyway never asks.
+            if any(isinstance(action, Render) and isinstance(action.element, CitryElement) for action in actions):
+                render_globals, render_provides = _call_render_inputs(plan)
+            else:
+                render_globals, render_provides = None, None
             encoder = self._render_encoders[renderer]
             encoded = encode_actions(
                 actions,
@@ -1269,6 +1371,8 @@ class EventsDispatcher:
                     csp_nonce=_page_csp_nonce(ctx, plan)
                     if renderer == HTML_RENDER_ENCODER.renderer and any(isinstance(a, Render) for a in actions)
                     else None,
+                    template_globals=render_globals,
+                    provides=render_provides,
                 ),
             )
         except ProtocolValueError:

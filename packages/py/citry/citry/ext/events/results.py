@@ -61,7 +61,7 @@ from citry.ext.events.actions import (
 from citry.util.logger import logger
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Sequence
+    from collections.abc import Iterator, Mapping, Sequence
 
     from citry.citry import Citry
     from citry.ext.events.extension import EventHandler
@@ -83,6 +83,13 @@ class RenderEncodingContext:
     # ``_csp_nonce`` setting. The page's runtime starts a fragment only when
     # its data block carries this nonce.
     csp_nonce: str | None = None
+    # The template globals and provided values from the engine-wide
+    # ``_render_inputs`` setting. Every encoder passes them to each component
+    # it renders for this call, so a re-render sees the same request values
+    # (the user, the locale) as the page did. A render the handler built
+    # itself already has its own and is left alone.
+    template_globals: Mapping[str, Any] | None = None
+    provides: Mapping[str, Any] | None = None
 
 
 class RenderEncoder(Protocol):
@@ -99,7 +106,11 @@ class HtmlFragmentRenderEncoder:
     renderer = "html-fragment/1"
 
     def encode(self, action: Render, target: str, context: RenderEncodingContext) -> dict[str, Any]:
-        rendered = action.element.render() if isinstance(action.element, CitryElement) else action.element
+        rendered = (
+            action.element.render(template_globals=context.template_globals, provides=context.provides)
+            if isinstance(action.element, CitryElement)
+            else action.element
+        )
         compat = context.response_mode == "compat"
         return build_render_action(
             _html_wire_target(

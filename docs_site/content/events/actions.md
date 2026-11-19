@@ -43,6 +43,9 @@ its options, such as `target` (below).
 
 The new render gets only the inputs you pass. See
 [Pass every input](/events/state/#pass-every-input-when-a-handler-renders-again).
+A value every render needs from the request, such as the current user,
+can come from one app-wide function (experimental). See
+[Pass request values](#give-every-render-the-request-values).
 
 ## `#c-key` for list items { #keep-list-items-matched-to-their-records }
 
@@ -123,6 +126,136 @@ The name is looked up in the template of the component whose handler ran. To
 update another component instead, use `target="render:<id>"`. The render ID
 is the value of that component's `id` in the browser; see
 [Browser APIs](/reference/browser-apis/).
+
+## Pass request values { #give-every-render-the-request-values }
+
+A page view often passes `render()` values from the request.
+`template_globals={"user": user}` lets every template read `user`, and
+`provides={"locale": locale}` lets any component read the locale with
+[`inject()`](/concepts/provide-and-inject/) (see
+[Add render-wide values](/concepts/rendering/#add-values-for-one-whole-render)).
+A component that a handler returns gets neither, because no view renders
+it. A template that reads `user` then fails the call with
+`handler_error`.
+
+A `_render_inputs` function fixes this. It returns the keyword
+arguments Citry passes to `.render()` for each component a `Render`
+renders: the same `template_globals=` and `provides=` you pass when you
+render a component yourself. When the function returns this:
+
+```python
+{
+    "template_globals": {"user": user},
+    "provides": {"locale": user.locale},
+}
+```
+
+Citry renders the returned component as if you had written:
+
+```python
+TaskList(tasks=tasks).render(
+    template_globals={"user": user},
+    provides={"locale": user.locale},
+)
+```
+
+Citry calls the function with the call's
+[`EventRequest`][citry.ext.events.EventRequest], the same object a
+handler gets as its `request` parameter. Type its return value as
+[`RenderInputs`][citry.ext.events.RenderInputs], so your type checker
+checks the keys and their types. Set it for every component in
+`extensions_defaults["events"]` (the leading `_` is part of the name,
+as in the other Events options):
+
+```python
+from citry.ext.events import EventRequest, RenderInputs
+
+
+def render_inputs(request: EventRequest) -> RenderInputs:
+    # On Django, request.native is the HttpRequest.
+    user = request.native.user
+    return {
+        "template_globals": {"user": user},
+        "provides": {"locale": user.locale},
+    }
+
+
+citry = Citry(
+    extensions_defaults={"events": {"_render_inputs": render_inputs}},
+)
+```
+
+Or set it for one component on its `Events` class. Define the function
+outside the class and assign it:
+
+```python
+class TaskList(Component):
+    class Events:
+        _render_inputs = render_inputs
+
+        def add(self, data: TaskIn):
+            ...
+```
+
+The component's own value wins over the one in `extensions_defaults`.
+Set `_render_inputs = None` on a component to turn the app-wide function
+off for it.
+
+!!! warning "Experimental"
+
+    `_render_inputs` and `RenderInputs` are experimental. They may change
+    in a minor release without a deprecation period.
+
+Return either key or both. When a name is set in several places, a
+component's `template_data()` wins over these globals, and these globals
+win over the Citry instance's `template_globals`.
+
+Citry calls the function once for each event call that returns a
+component, after the handler has run (or after the extension that
+answered the call). It uses the function of the component whose handler
+ran, and every `Render` in that call gets the same values. That includes
+a [`<c-mark>` update](#update-one-part-of-the-page) and a
+[different component](#swap-in-a-different-component) the handler
+returns. Citry does not call it:
+
+- for a component the handler renders itself, such as
+  `return Card(...).render(template_globals=...)`, which keeps the
+  values the handler passed;
+- for a call it rejects before the handler runs, such as one that fails
+  the CSRF check or carries a State token that does not verify.
+
+The function sees the event call, not the page request, so
+`request.path` is the URL of the event route. A value your page view
+builds from the page's path, such as the active link in a menu, comes
+out different here. Keep such a value in
+[State](/events/state/) instead.
+
+Only your app's code sets this function; do not let request data choose
+it. The values it returns may come from the request, as they can in a
+page render, and a template escapes them when it prints them, like any
+other value. A [cached component](/performance/caching/) that reads a
+per-user value must name it in `Cache.vary()`, or it shows one user's
+value to another.
+
+Under Citry's ASGI adapter, including the FastAPI mount, Citry calls the
+function on the event loop, where it also renders, even when the handler
+is a plain `def`. A slow function delays every other request on that
+server, so do not wait on slow I/O or query a database in it.
+
+`Citry(...)` raises `ValueError` when the app-wide value is neither a
+function nor `None`, is an `async def` function, or does not take
+exactly one argument. Defining a component raises `ValueError` for the
+same problems in its `Events` value, which includes a method written
+inside the class, because a method also expects `self`.
+
+The call fails with the error code `handler_error` when:
+
+- the function raises;
+- the function returns anything but a dict with the keys
+  `template_globals` and `provides`, each a dict or `None`.
+
+The handler has already run, so anything it saved stays saved. An
+`EventError` raised by the function answers with its own status instead.
 
 ## `Dispatch` browser events { #notify-browser-code-that-something-happened }
 

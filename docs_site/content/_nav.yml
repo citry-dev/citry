@@ -79,7 +79,7 @@ areas:
           - { title: Event state, path: /events/state/ }
           - { title: Handle and validate forms, path: /events/forms/ }
           - { title: Bind events in templates, path: /events/bindings/ }
-          - { title: Event actions, path: /events/actions/ }
+          - { title: Event actions, path: /events/actions/, needs_review: true }
           - { title: Event routes, path: /events/routes/ }
 
       - label: I18n
