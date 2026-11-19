@@ -4,8 +4,8 @@
 
 ### Added
 
-- Experimental: you can now get a render's asset tags apart from its
-  HTML with `serialize_result(deps_position="separate")`, so a page
+- Experimental, groundwork for the citry-django integration: you can
+  now get a render's asset tags apart from its HTML with `serialize_result(deps_position="separate")`, so a page
   that combines several renders writes shared tags, such as the browser
   runtime, once. `CitryRender.needs_browser_runtime()` returns whether
   a render needs the browser runtime. See
