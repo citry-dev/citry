@@ -1,6 +1,28 @@
 # Release notes
 
-## Unreleased
+## v1.1.0
+
+Citry 1.1.0 is a security release, and it adds the first Experimental
+APIs for the citry-django integration. It still requires citry-core
+2.1.2.
+
+### Fixes
+
+- Security: on an interactive page, a value in an HTML attribute that
+  contains `</head>` or `</body>` can no longer move Citry's CSS or JS
+  tags into that attribute. Before, the stylesheet link could end the
+  attribute and turn the rest of the value into markup that runs in
+  the browser, and a `</body>` made `serialize()` fail. Citry now puts
+  its tags only at the page's real `</head>` and `</body>`, in any
+  letter case, and at the start or end of the output when the page has
+  none or when Citry cannot tell which one is real. See
+  [GHSA-5mm2-p7xq-jchq](https://github.com/citry-dev/citry/security/advisories/GHSA-5mm2-p7xq-jchq).
+- You can now pass a `str` subclass, such as the `SafeString` URL
+  that django-compressor produces, as `Script(url=...)` or
+  `Style(url=...)`. Before, a page that Vue renders or an Events
+  response failed with "Prepared browser asset URL differs from its
+  structured dependency URL". Citry still checks such a URL like any
+  other.
 
 ### Added
 
@@ -32,18 +54,6 @@
   interactive component inside one of its elements. This prepares the
   citry-django integration. See
   [Put foreign output inside interactive components](https://citry.dev/advanced/extensions/#foreign-output-in-vue).
-
-### Fixes
-
-- You can now pass a `str` subclass, such as the `SafeString` URL
-  that django-compressor produces, as `Script(url=...)` or
-  `Style(url=...)`. Before, a page that Vue renders or an Events
-  response failed with "Prepared browser asset URL differs from its
-  structured dependency URL". Citry still checks such a URL like any
-  other.
-
-### Added
-
 - Experimental: a component that an event handler returns can now
   read request values such as the current user or the locale, as it
   does when a view renders the page. Set `_render_inputs` in
