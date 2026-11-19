@@ -6,8 +6,9 @@ keeps one copy of each shared tag, and writes the HTML and the tags into its
 own page. Here the page holds two such apps with a single runtime script.
 Both must hydrate the server HTML (keep the elements the server wrote), run
 their own click handlers, and log no error. A host may also keep one
-stylesheet link for apps that serve the same file, by listing every app id in
-the link's ``data-citry-vue-style-app`` attribute.
+stylesheet link for apps that serve the same file: ``combine_assets()``
+writes one link that names every app, in its ``data-citry-vue-style-app``
+attribute.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from citry import Citry, Component
+from citry import Citry, Component, combine_assets
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -51,7 +52,7 @@ def _page(results: list[SerializedRender]) -> str:
     )
 
 
-def _counter_engine() -> tuple[Citry, type[Component]]:
+def _counter_engine() -> tuple[Citry, Any]:
     engine = Citry(autodiscover=False)
     engine.set_mounted_prefix("/citry")
 
@@ -112,6 +113,8 @@ def test_two_separate_islands_hydrate_and_run_on_one_page(
     assert errors == []
 
 
+# The order to write the groups in, as the asset placement docs give it.
+_GROUP_ORDER = ("runtime_assets", "component_assets", "app_assets")
 _STYLE_APP = re.compile(r' data-citry-vue-style-app="([0-9a-f]{32})"')
 
 
@@ -183,6 +186,41 @@ def test_two_islands_share_one_stylesheet_link(
             ".some(c => c.textContent.includes(label) && c.querySelector('output').textContent === n)",
             arg=[label, expected],
         )
+    colors = page.locator(".counter").evaluate_all("els => els.map(el => getComputedStyle(el).color)")
+    assert colors == ["rgb(0, 0, 255)", "rgb(0, 0, 255)"]
+    assert errors == []
+
+
+def test_combine_assets_gives_two_islands_one_stylesheet_link(
+    serve_live: Callable[..., str],
+    open_citry_page: Callable[..., None],
+    page: Any,
+) -> None:
+    engine, Counter = _counter_engine()
+    results = [
+        Counter(label=label).render().serialize_result(deps_position="separate") for label in ("first", "second")
+    ]
+    groups = [combine_assets(getattr(result, name) for result in results) for name in _GROUP_ORDER]
+    head = "".join(tag for group in groups for tag in group.css)
+    scripts = "".join(tag for group in groups for tag in group.js)
+    body = "".join(f"<section>{result.html}</section>" for result in results)
+    html = (
+        f"<!DOCTYPE html><html><head><title>Islands</title>{head}</head><body>{body}{_CAPTURE}{scripts}</body></html>"
+    )
+    assert html.count('rel="stylesheet"') == 1
+    assert html.count('<script src="/citry/citry.') == 1
+
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    open_citry_page(serve_live(engine, html, ""), apps=2)
+
+    # Both apps adopted the one served link, so neither added its own.
+    assert page.locator('link[rel="stylesheet"]').count() == 1
+    assert page.evaluate("() => window.__served.every(button => button.isConnected)")
+    page.locator("button", has_text="second").click()
+    page.locator("button", has_text="first").click()
+    page.wait_for_function("() => [...document.querySelectorAll('output')].every(o => o.textContent === '1')")
     colors = page.locator(".counter").evaluate_all("els => els.map(el => getComputedStyle(el).color)")
     assert colors == ["rgb(0, 0, 255)", "rgb(0, 0, 255)"]
     assert errors == []

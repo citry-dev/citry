@@ -80,6 +80,7 @@ from citry.citry_render import (
     SerializedRender,
     SerializedScriptSecurity,
     SerializedSecurity,
+    combine_assets,
 )
 from citry.citry_template import CitryTemplate
 from citry.command import CommandArg, CommandArgGroup, CommandSubcommand
@@ -411,6 +412,7 @@ __all__ = [
     "VueCodeError",
     "citry",
     "collect_compiled_body_fills",
+    "combine_assets",
     "const_value",
     "discover_python_component_assets",
     "discover_python_templates",

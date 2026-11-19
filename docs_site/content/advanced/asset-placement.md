@@ -127,15 +127,24 @@ The result holds three groups of tags, each a
 holds the tags for `<head>`, and its `js` tuple the scripts for the end
 of `<body>`:
 
-| Field | What it holds | With several renders |
-|---|---|---|
-| `runtime_assets` | Citry's browser runtime and preload hints | keep one copy of identical tags |
-| `app_assets` | this render's Vue app: its stylesheets, its data and its start script | keep every tag |
-| `component_assets` | every other tag, such as component CSS and dependency files | keep one copy of identical tags |
+| Field | What it holds |
+|---|---|
+| `runtime_assets` | Citry's browser runtime and preload hints |
+| `app_assets` | this render's Vue app: its stylesheets, its data and its start script |
+| `component_assets` | every other tag, such as component CSS and dependency files |
+
+[`combine_assets()`][citry.combine_assets] (Experimental) takes the
+same group from several renders and returns it with each shared tag
+written once. Stylesheets that several apps load from the same file
+become one tag that every one of those apps uses. Each app keeps its
+own data and start script. Call it once per group, so no tag moves into
+another group.
 
 This example serializes two renders and writes their tags once each:
 
 ```python
+from citry import combine_assets
+
 results = [
     Widget().render().serialize_result(
         deps_position="separate",
@@ -144,35 +153,34 @@ results = [
         deps_position="separate",
     ),
 ]
-
-def tags(kind, field, keep_all=False):
-    found = [
-        tag
-        for result in results
-        for tag in getattr(getattr(result, field), kind)
-    ]
-    return found if keep_all else list(dict.fromkeys(found))
-
-def all_tags(kind):
-    return (
-        tags(kind, "runtime_assets")
-        + tags(kind, "component_assets")
-        + tags(kind, "app_assets", keep_all=True)
-    )
-
-head = "".join(all_tags("css"))
-end_of_body = "".join(all_tags("js"))
+groups = [
+    combine_assets(r.runtime_assets for r in results),
+    combine_assets(r.component_assets for r in results),
+    combine_assets(r.app_assets for r in results),
+]
+head = "".join(tag for g in groups for tag in g.css)
+end_of_body = "".join(tag for g in groups for tag in g.js)
 ```
 
 Write the groups in this order: `runtime_assets`, then
-`component_assets`, then `app_assets`, across all renders. Keep every
-`app_assets` tag even when two apps link the same stylesheet. The
-browser still downloads the file once.
+`component_assets`, then `app_assets`. `combine_assets()` keeps the
+tags in the order of the renders you pass, so the same renders, passed
+in the same order, give the same tags. A tag several renders share
+stays where it first appears, so a later render's stylesheets can end
+up in a different order than that render alone would write them.
+
+If you combine the tags yourself, keep every `app_assets` tag, even
+when two apps load the same stylesheet. Each app uses only a stylesheet
+tag that names it. An app whose tag is missing loads the file again on
+a page served with Citry's routes mounted, and does not start on a
+standalone page.
 
 Each tag is exactly the tag Citry would have written into the HTML. It
 carries the `nonce` you passed as `csp_nonce` and its `integrity`
 attribute, `security_csp` and `security_javascript` check it, and
-`result.security` covers it. Vue adopts the server HTML instead of
+`result.security` covers it. When you combine several renders, your
+page needs the `security` of every result, such as each result's
+`csp_script_hashes`. Vue adopts the server HTML instead of
 building it again, as it does with `"smart"`.
 
 `"separate"` works with the `"document"` and `"simple"` strategies.
