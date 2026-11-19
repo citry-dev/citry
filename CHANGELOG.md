@@ -8,8 +8,8 @@
   that django-compressor produces, as `Script(url=...)` or
   `Style(url=...)`. Before, a page that Vue renders or an Events
   response failed with "Prepared browser asset URL differs from its
-  structured dependency URL". The safe mark is not trusted: the URL
-  goes through the same checks as any other.
+  structured dependency URL". Citry still checks such a URL like any
+  other.
 
 ## v1.0.3
 
