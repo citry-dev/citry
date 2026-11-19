@@ -2,7 +2,7 @@
 	"name": "citry",
 	"displayName": "Citry",
 	"description": "Highlighting, diagnostics, editor intelligence, and formatting for Citry components",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"citry": {
 		"lspVersion": "1.0.0"
 	},
