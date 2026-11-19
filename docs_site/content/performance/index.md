@@ -102,7 +102,8 @@ speed-up, with the same output:
 Some pages still build each copy's HTML in Python, so they may gain
 nothing. These include static output (`deps_strategy="simple"`),
 fragments, a root template that is not a full `<html>` document, any
-CSP setting or nonce, and a `deps_position` other than `"smart"`.
+CSP setting or nonce, and a `deps_position` other than `"smart"` or
+`"separate"`.
 
 Citry also prepares, in compiled code, the browser data of components
 that are not `simple = "vue"`, when their template calls no other

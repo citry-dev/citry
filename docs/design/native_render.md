@@ -437,7 +437,7 @@ template, is rebuilt once. The serializer keeps the body for:
 - a root template that is not one `<html><head><body>` document;
 - any CSP mode other than `"off"`, or a nonce;
 - a JavaScript or script-integrity policy;
-- a `deps_position` other than `"smart"`;
+- a `deps_position` other than `"smart"` or `"separate"`;
 - an `on_serialize` hook other than the built-in one;
 - a placeholder or trusted HTML value written directly in the root body,
   or a child component whose root marker is not one of Citry's own

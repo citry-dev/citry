@@ -209,7 +209,8 @@ Vue replaces the whole page's server HTML when the page:
 - has a component with its own `on_dependencies()` method, or an extension
   that defines `on_dependencies()`, `on_serialize()`, `on_js_loaded()`, or
   a browser hook;
-- places assets with a `deps_position` other than the default;
+- places assets with a `deps_position` other than `"smart"` or
+  `"separate"`;
 - has a browser-only part with no element around it, such as a `v-if` at
   the top level of the page component's template;
 - contains HTML that the browser's parser would rearrange.

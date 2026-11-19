@@ -539,6 +539,18 @@ The conceptual public types are:
 class SerializedRender:
     html: str
     security: SerializedSecurity
+    # Experimental. Filled only for deps_position="separate", which hands
+    # the asset tags back here instead of writing them into `html`.
+    # `security` covers these tags too.
+    runtime_assets: SerializedAssets = SerializedAssets()
+    app_assets: SerializedAssets = SerializedAssets()
+    component_assets: SerializedAssets = SerializedAssets()
+
+
+@dataclass(frozen=True, slots=True)
+class SerializedAssets:
+    css: tuple[str, ...] = ()
+    js: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

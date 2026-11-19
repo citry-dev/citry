@@ -316,3 +316,7 @@ The release notes say when this list changes. Experimental now:
   server code instead of Citry's HTTP routes)
 - the `event_result_resolvers` and `event_payload_codecs` settings
 - `RenderFrame` and `CitryRender.frame`
+- returning asset tags apart from the HTML: the `"separate"` value of
+  `DepsPosition`, `SerializedAssets`, the `runtime_assets`,
+  `app_assets` and `component_assets` fields of `SerializedRender`, and
+  `CitryRender.needs_browser_runtime()`

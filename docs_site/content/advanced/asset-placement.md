@@ -88,17 +88,106 @@ html = page.render().serialize(
 )
 ```
 
-[`DepsPosition`][citry.DepsPosition] accepts three values:
+[`DepsPosition`][citry.DepsPosition] accepts four values:
 
 - `"smart"`, the default, uses `<c-css />` and `<c-js />`, or the locations
   described in [`<c-css />` and `<c-js />`](#mark-where-the-tags-go);
 - `"prepend"` puts all the tags before the HTML;
-- `"append"` puts all the tags after the HTML.
+- `"append"` puts all the tags after the HTML;
+- `"separate"` (Experimental) leaves the tags out of the HTML and returns
+  them grouped, for code that puts several renders on one page. See
+  [Combine several renders on one page](#combine-several-renders).
 
 !!! note "A page that repeats a placement tag"
 
     When the page has more than one CSS or JavaScript placement tag, only
     the first of each kind receives the tags. The others insert nothing.
+
+## Combine several renders on one page { #combine-several-renders }
+
+!!! warning "Experimental"
+
+    `deps_position="separate"`, [`SerializedAssets`][citry.SerializedAssets],
+    the asset fields of [`SerializedRender`][citry.SerializedRender] and
+    [`CitryRender.needs_browser_runtime()`][citry.CitryRender.needs_browser_runtime]
+    may change in a minor release.
+
+Some code builds one page from several Citry renders, for example a
+Django page with a Citry component in a few places. Each render that
+needs Citry's browser runtime becomes its own Vue app. Serialized one
+by one with the default position, each render would bring its own copy
+of the runtime script and of every shared file.
+
+With `deps_position="separate"`, Citry leaves the tags out of the HTML.
+[`serialize_result()`][citry.CitryRender.serialize_result] returns them
+on the result instead, so your code can write each shared tag once:
+
+```python
+result = Widget().render().serialize_result(
+    deps_position="separate",
+)
+html = result.html  # the HTML, with no asset tags
+```
+
+The tags come in three groups. Each group is a
+[`SerializedAssets`][citry.SerializedAssets] with a `css` tuple, for
+the tags that go where `<c-css />` would put them, and a `js` tuple, for
+the scripts that go where `<c-js />` would put them:
+
+| Field | What it holds | On a page with several renders |
+|---|---|---|
+| `runtime_assets` | Citry's browser runtime, the browser plugin scripts of extensions, and preload hints | write the first of identical tags once |
+| `app_assets` | this render's Vue app: its stylesheet links, its configuration data and its start script | write every tag |
+| `component_assets` | component CSS and JavaScript on a page without Vue, dependency files, and tags from `on_dependencies` hooks | write the first of identical tags once |
+
+Write every tag of `app_assets`, even when two apps link the same
+stylesheet. Each link names its own app, and the runtime loads the file
+again for an app whose link is missing. The browser fetches the file
+once either way.
+
+Write the `css` tuples in `<head>` and the `js` tuples at the end of
+`<body>`, in the order `runtime_assets`, `component_assets`,
+`app_assets`. The start script in `app_assets` waits until the browser
+has read the whole page, so it runs after the runtime even when your
+page puts it earlier.
+
+Each tag keeps what Citry would have written: the `nonce` you passed as
+`csp_nonce`, its `integrity` attribute, and the same checks under
+`security_csp` and `security_javascript`. Vue adopts the HTML the server
+wrote, as it does with `"smart"`.
+
+`"separate"` works with the `"document"` and `"simple"` strategies. With
+`"ignore"`, every group is empty. With `"fragment"`, it raises
+`ValueError`, because a fragment writes its own loader script. Tags that
+another extension's `on_serialize()` hook adds stay in the HTML.
+
+### Make some child components their own apps
+
+[`needs_browser_runtime()`][citry.CitryRender.needs_browser_runtime]
+tells whether a render would become a Vue app when serialized on its
+own. A host that mixes Citry renders with HTML from another template
+engine can use it to turn only the interactive children of a render
+into their own apps, and serialize the rest as plain HTML.
+
+A child component's render may be serialized on its own before its
+parent is serialized. Each child becomes a separate Vue app with its
+own assets, and the parent's render does not change:
+
+```python
+rendered = List().render()
+for part in rendered.parts:
+    if (
+        isinstance(part, CitryRender)
+        and part.is_component_root
+        and part.needs_browser_runtime()
+    ):
+        island = part.serialize_result(
+            deps_position="separate",
+        )
+```
+
+Each app is separate, so a server event handler in one app can update
+only components in that app.
 
 ## Next steps
 

@@ -241,7 +241,8 @@ according to how you declared it:
   `TypeError`. Declare a `Script`, `Style`, or URL instead.
 
 A fragment ignores [`deps_position`][citry.DepsPosition], which applies only
-to the `document` and `simple` strategies.
+to the `document` and `simple` strategies. The Experimental `"separate"`
+position raises `ValueError` with a fragment.
 
 ## See also
 
