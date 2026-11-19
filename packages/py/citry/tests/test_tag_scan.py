@@ -31,10 +31,7 @@ def _real(html: str) -> tuple[tuple[int, ...], tuple[int, ...]]:
 
 def test_plain_document() -> None:
     html = DOC.format(head="<title>t</title>", body="<p>x</p>")
-    tags = scan_document_tags(html)
-    assert (tags.head_ends, tags.body_ends) == _real(html)
-    assert tags.body_starts == ((html.index("<body>"), html.index("<body>") + len("<body>")),)
-    assert tags.is_document
+    assert _ends(html) == _real(html)
 
 
 @pytest.mark.parametrize(
@@ -79,7 +76,6 @@ def test_decoys_in_a_document_are_not_reported(body: str) -> None:
 )
 def test_a_fragment_with_only_decoys_reports_nothing(html: str) -> None:
     assert _ends(html) == ((), ())
-    assert not scan_document_tags(html).is_document
 
 
 def test_letter_case_and_whitespace_follow_the_browser() -> None:
@@ -116,6 +112,75 @@ def test_context_dependent_raw_text_reports_only_agreed_tags(body: str) -> None:
     assert _ends(html) == _real(html)
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        # Inside SVG or MathML, <script> is an ordinary element, so a
+        # "</script>" in a later attribute value does not end it.
+        '<svg><script href="/a.js"/></svg><div title="</script></body>"></div>',
+        '<math><script/></math><div title="</script></body>"></div>',
+        '<svg><script><![CDATA[<!--<script>]]></script></svg><div title="</script></body>"></div>',
+        # <p> makes the browser leave the SVG; the tracking stops trusting itself.
+        '<svg><script><p title="</script></body>"></p>',
+        # </div> may close an HTML element around the SVG.
+        '<div><svg><g></div><style><p title="</style></body>"></p></style>',
+        # Content that is not only text inside an SVG <title> is HTML.
+        '<svg><title><b>x</b><style><p title="</style></body>"></p></style></title></svg>',
+    ],
+)
+def test_foreign_content_decoys_are_not_reported(body: str) -> None:
+    html = DOC.format(head="", body=body)
+    # Only the real </body> may be reported; the scan may also be unsure of it.
+    assert set(_ends(html)[1]) <= set(_real(html)[1])
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "<svg><title/><path d='M0 0'/></svg>",
+        "<svg><style/><g></g></svg>",
+        "<svg><desc>An icon</desc><text>a &lt; b</text></svg>",
+        "<math><mi>x</mi><mo>+</mo><mn>1</mn></math>",
+        "<a href='/'><svg><title>Home</title><path/></svg></a><script>if (a<b) {}</script>",
+    ],
+)
+def test_ordinary_svg_and_math_keep_the_real_tags(body: str) -> None:
+    html = DOC.format(head="", body=body)
+    assert _ends(html) == _real(html)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        # An <svg> after <select> may be ignored, so what follows is read both ways.
+        '<select><svg><style><p title="</style></body>"></p></style></svg></select>',
+        # A frameset page ignores most raw-text elements.
+        '<frameset><style><p title="</style></body>"></p></style></frameset>',
+        # "a=b/>" ends in an unquoted value, so this <svg> is open and its
+        # <style> is an ordinary element.
+        '<svg a=b/><style><p title="</style></body>"></p></style></svg>',
+        # A self-closing <svg/> holds nothing, so this <style> is raw text.
+        "<svg/><style></body></style>",
+        # Many "</" before the script's end tag.
+        "<script>" + "'</x>';" * 40 + "</body></script>",
+    ],
+)
+def test_more_decoys_are_not_reported(body: str) -> None:
+    html = DOC.format(head="", body=body)
+    assert set(_ends(html)[1]) <= set(_real(html)[1])
+
+
+def test_svg_text_element_ending_in_an_unquoted_value() -> None:
+    # "a=b/>" is not self-closing, so the title holds the text after it.
+    html = DOC.format(head="", body="<svg><title a=b/>Close</title><path/></svg>")
+    assert _ends(html) == _real(html)
+
+
+def test_a_fragment_reads_cdata_both_ways() -> None:
+    # In SVG the CDATA section runs to "]]>"; in HTML it ends at ">".
+    assert _ends("<![CDATA[ > </body> ]]>") == ((), ())
+
+
 def test_readings_agree_again_after_ordinary_svg() -> None:
     # Both readings of "<title>Close</title>" end at the same place, so the
     # real "</body>" after it is still found.
@@ -148,4 +213,13 @@ def test_too_many_readings_report_nothing(monkeypatch: pytest.MonkeyPatch) -> No
     # rather than guess. Two readings of one <style> already pass a limit of 1.
     monkeypatch.setattr(_tag_scan, "_MAX_READINGS", 1)
     html = DOC.format(head="", body="<svg><style><p></p><style></style></style></svg>")
+    assert _ends(html) == ((), ())
+
+
+def test_too_much_work_reports_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Readings out of step can search the rest of the page again for each
+    # raw-text tag in it; past the work limit the scan reports nothing.
+    monkeypatch.setattr(_tag_scan, "_WORK_PER_CHAR", 0)
+    body = "".join("<style>x</style>" for _ in range(20_000))
+    html = DOC.format(head="", body=body)
     assert _ends(html) == ((), ())

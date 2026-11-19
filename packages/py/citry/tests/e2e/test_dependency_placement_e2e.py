@@ -28,15 +28,14 @@ def _serialize(value: str, *, route: str, shell: str) -> str:
     class Widget(Component):
         citry = engine
         # c-title writes the value on the server; :title binds it in Vue.
-        template = (
+        if route == "server":
+            template = """
+                <div id="target" c-title="value">x</div>
             """
-            <div id="target" c-title="value">x</div>
+        else:
+            template = """
+                <div id="target" :title="value">x</div>
             """
-            if route == "server"
-            else """
-            <div id="target" :title="value">x</div>
-            """
-        )
         css = """
             .a { color: red; }
         """

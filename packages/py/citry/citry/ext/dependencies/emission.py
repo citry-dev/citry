@@ -1505,11 +1505,12 @@ def _insert_default(html: str, content: str, kind: str) -> str:
     dropped (django-components dropped them here; flagged divergence,
     docs/design/dependencies.md section 7.3).
 
-    Only a tag the browser reads as a tag counts, in any letter case. An
-    interactive page writes ``<`` and ``>`` raw in attribute values, so the
-    text ``</head>`` inside a value, a comment or a script is not a target:
-    a tag inserted there would end the attribute and turn the rest of the
-    value into markup.
+    Only a tag the browser reads as a tag counts, in any letter case. Text
+    such as ``</head>`` inside an attribute value, a comment or a script is
+    not a target. An interactive page writes ``<`` and ``>`` raw in
+    attribute values, and a tag inserted inside a value would end the
+    attribute and turn the rest of the value into markup. When Citry cannot
+    tell which tag is real, it uses the start or end of the output.
     """
     target = None
     # Most fragments hold no end-tag text at all, and the text search is far

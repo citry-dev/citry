@@ -564,19 +564,22 @@ fragility.
 
 When a placeholder is absent (per type), default placement puts CSS before
 the first `</head>` and JS before the last `</body>`, as DJC's
-`_insert_js_css_to_default_locations` does. Only a tag the browser reads as a
-tag counts, in any letter case: `citry/util/_tag_scan.py` reads the final
+`_insert_js_css_to_default_locations` does. Only a tag the browser reads as
+a tag counts, in any letter case: `citry/util/_tag_scan.py` reads the final
 HTML with the browser's tokenizer rules, so end-tag text inside an attribute
 value, a comment or raw text is skipped (an interactive page writes `<` and
-`>` raw in attribute values, so a text search is not enough). Where the browser's
-reading depends on the surrounding element (SVG, MathML, `<select>`,
-`<template>`, or a fragment inserted into an unknown element), the scan
-follows each reading and uses only tags every reading agrees on. This is the hybrid answer to the (i)-vs-(ii) fork
-deferred in [`component_rendering.md`](component_rendering.md) section 5.2: structured placement
-where the user gave us structure (the placeholder tags), one scan of the
-page's tags as the fallback. If neither a placeholder nor the target tag exists
-(content with no `<head>`), the tags are appended/prepended like DJC does
-via `deps_position`.
+`>` raw in attribute values, so a text search is not enough). The scan keeps
+track of the SVG and MathML elements it is inside, where `<script>` and
+`<style>` are ordinary elements. Where the browser could read a raw-text
+element in more than one way (inside `<select>` or `<template>`, after HTML
+inside SVG, or in a fragment inserted into an unknown element), the scan
+tries each way and uses only the tags every way agrees on. This is the
+hybrid answer to the (i)-vs-(ii) fork deferred in
+[`component_rendering.md`](component_rendering.md) section 5.2: structured
+placement where the user gave us structure (the placeholder tags), one scan
+of the page's tags as the fallback. If neither a placeholder nor a target
+tag exists (content with no `<head>`), or the scan cannot tell which tag is
+real, CSS is prepended and JS appended to the output.
 
 Divergence from DJC, flagged: DJC duplicates all tags into *every*
 placeholder occurrence (and documents that as a footgun). Citry fills the

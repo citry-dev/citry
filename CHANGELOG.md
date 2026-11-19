@@ -42,7 +42,7 @@
   the browser, and a `</body>` made `serialize()` fail. Citry now puts
   its tags only at the page's real `</head>` and `</body>`, in any
   letter case, and at the start or end of the output when the page has
-  none. See
+  none or when Citry cannot tell which one is real. See
   [GHSA-5mm2-p7xq-jchq](https://github.com/citry-dev/citry/security/advisories/GHSA-5mm2-p7xq-jchq).
 - You can now pass a `str` subclass, such as the `SafeString` URL
   that django-compressor produces, as `Script(url=...)` or

@@ -28,6 +28,7 @@ from citry.ext.dependencies.scripts import has_component_asset
 from citry.ext.dependencies.types import DependencyRecord, Script, Style
 from citry.util import deep_json
 from citry.util._markup_tree import MarkupTreeParser, Namespace, OpenElement
+from citry.util._tag_scan import scan_document_tags
 from citry.util.html import LongReferenceSafeParser, script_json
 from citry.util.id import validate_render_id
 from citry_core import _rust
@@ -258,6 +259,13 @@ def _insert_script_preloads(html: str, content: str) -> str:
         return html
     start, end = locator.head_starts[0], locator.head_ends[0]
     if end < start:
+        return html
+    # HTMLParser reads some markup differently from a browser (it reads
+    # <script> as script text even inside SVG), so the hints go in only at
+    # the </head> the browser-rule scan also finds; elsewhere they could
+    # land inside an attribute value.
+    head_ends = scan_document_tags(html, first_head_end_only=True).head_ends
+    if not head_ends or head_ends[0] != end:
         return html
     return html[:end] + content + html[end:]
 

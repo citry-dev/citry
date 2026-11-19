@@ -44,15 +44,14 @@ def _page(value: str, *, route: str, shell: str, cache: bool = False) -> type[Co
 
         # c-title writes the value on the server; :title binds it in Vue.
         # Both reach the hydrated page with < and > raw.
-        template = (
+        if route == "server":
+            template = """
+                <div c-title="value">x</div>
             """
-            <div c-title="value">x</div>
+        else:
+            template = """
+                <div :title="value">x</div>
             """
-            if route == "server"
-            else """
-            <div :title="value">x</div>
-            """
-        )
         js = """
             console.log(1)
         """
