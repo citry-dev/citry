@@ -1627,6 +1627,30 @@ def test_extension_assets_use_app_lifetime_owner_and_exact_sources() -> None:
     assert len(style["source"]["sha256"]) == 64
 
 
+def test_safestring_dependency_urls_reach_the_events_payload_as_plain_text() -> None:
+    # django-compressor hands Citry its output URLs as Django SafeStrings.
+    safestring = pytest.importorskip("django.utils.safestring")
+    registry = Citry(autodiscover=False)
+    registry.set_mounted_prefix("/citry")
+
+    class Root(Component):
+        citry = registry
+        template = '<main :data-ready="true">root</main>'
+
+        class Dependencies:
+            js = [Script(url=safestring.SafeString("/static/CACHE/js/out.js"))]
+            css = [Style(url=safestring.SafeString("/static/CACHE/css/out.css"))]
+
+    payload = default_events_producer(registry).prepare_from_render(
+        render_prepared_direct(Root()), citry=registry, app_id="app", revision=0
+    )
+    script_urls = [item["source"].get("url") for item in payload["scripts"]]
+    style_urls = [item["source"].get("url") for item in payload["styles"]]
+    assert "/static/CACHE/js/out.js" in script_urls
+    assert "/static/CACHE/css/out.css" in style_urls
+    assert all(type(url) is str for url in [*script_urls, *style_urls] if url is not None)
+
+
 def test_default_events_producer_groups_shared_stylesheet_occurrence_references() -> None:
     registry = Citry(secret="vue-css-shared-test-secret", autodiscover=False)  # noqa: S106
     registry.set_mounted_prefix("/citry")

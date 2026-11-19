@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, TypeAlias
 
 from citry.attrs import format_attrs
-from citry.util.html import Markup
+from citry.util.html import Markup, decode_attribute_entities, exact_str
 from citry_core.html_transform import _JAVASCRIPT_MIME_TYPES
 
 if TYPE_CHECKING:
@@ -93,6 +93,20 @@ def _script_type_should_wrap(attrs: dict[str, str | bool]) -> bool:
     return type_str == "" or type_str in _JAVASCRIPT_MIME_TYPES
 
 
+def _plain_url_text(value: str) -> str:
+    """Return the exact ``str`` URL a browser reads once Citry writes ``value`` as an attribute."""
+    html = getattr(value, "__html__", None)
+    if html is None:
+        # exact_str copies the characters without calling any method the
+        # subclass defines, unlike str(value).
+        return exact_str(value)
+    # The attribute writer (escape_attribute_value) decodes the character
+    # references of a value with __html__, so Markup("?a=1&amp;b=2") still
+    # loads ?a=1&b=2. Decode it the same way once here, so the stored text is
+    # the text every later check and every writer reads.
+    return decode_attribute_entities(exact_str(str(html())))
+
+
 @dataclass(eq=False)
 class Dependency:
     """
@@ -107,7 +121,13 @@ class Dependency:
     url-based dependencies."""
     url: str | None = None
     """If set, renders as ``<script src="...">`` /
-    ``<link rel="stylesheet" href="...">`` instead of an inline tag."""
+    ``<link rel="stylesheet" href="...">`` instead of an inline tag.
+
+    A ``str`` subclass, such as Django's ``SafeString``, is stored as a
+    plain ``str``: the URL the browser would read from it, with the
+    character references of a value that has ``__html__`` decoded, as
+    for any other attribute. Citry checks and escapes that text like any
+    other string, so marking the URL safe does not skip a check."""
     attrs: dict[str, str | bool] = field(default_factory=dict)
     """Extra HTML attributes (``True`` renders a bare boolean attribute)."""
     kind: DependencyKind = "extra"
@@ -126,6 +146,18 @@ class Dependency:
     # adds their hash to the tag, so the browser refuses another file at that URL.
     # An init field, because `dataclasses.replace` drops a field that is not one,
     # and an extension that rebuilt a tag that way would lose the hash unnoticed.
+
+    def __setattr__(self, name: str, value: object) -> None:
+        # Every later check of the URL (the javascript: URL check, the
+        # serialization comparison with the rendered src, the integrity
+        # pinning) needs the text the browser gets. A str subclass can
+        # override __eq__, startswith, lower or __html__ and answer each
+        # check differently, so keep only the plain text it is written as.
+        # Doing it here, not only in __post_init__, also covers a hook that
+        # assigns a new url later.
+        if name == "url" and isinstance(value, str) and type(value) is not str:
+            value = _plain_url_text(value)
+        super().__setattr__(name, value)
 
     def _render(self) -> tuple[str, dict[str, str | bool], str]:
         """Return ``(tag_name, all_attrs, content)``. Implemented by subclasses."""

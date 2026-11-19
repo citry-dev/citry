@@ -1,5 +1,16 @@
 # Release notes
 
+## Unreleased
+
+### Fixes
+
+- You can now pass a `str` subclass, such as the `SafeString` URL
+  that django-compressor produces, as `Script(url=...)` or
+  `Style(url=...)`. Before, a page that Vue renders or an Events
+  response failed with "Prepared browser asset URL differs from its
+  structured dependency URL". Citry still checks such a URL like any
+  other.
+
 ## v1.0.3
 
 Citry 1.0.3 is a security release. It requires citry-core 2.1.2, which
