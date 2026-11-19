@@ -4,11 +4,12 @@
 
 ### Fixes
 
-- You can now pass a `str` subclass, such as Django's `SafeString`
-  from django-compressor, as `Script(url=...)` or `Style(url=...)`.
-  It no longer fails with "Prepared browser asset URL differs from
-  its structured dependency URL". Citry keeps a plain copy of the
-  text and checks it like any other URL.
+- You can now pass a `str` subclass, such as the `SafeString` URL
+  that django-compressor produces, as `Script(url=...)` or
+  `Style(url=...)`. Before, a page that Vue renders or an Events
+  response failed with "Prepared browser asset URL differs from its
+  structured dependency URL". The safe mark is not trusted: the URL
+  goes through the same checks as any other.
 
 ## v1.0.3
 

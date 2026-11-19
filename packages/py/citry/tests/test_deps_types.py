@@ -8,6 +8,7 @@ from citry import Citry, Component
 from citry._javascript_policy import _JavascriptPolicy
 from citry._serialization_security import _browser_loader_descriptor
 from citry.ext.dependencies import Script, Style
+from citry.util.html import Markup
 
 
 class TestScript:
@@ -158,9 +159,6 @@ class _HidingUrl(str):
     def __str__(self) -> str:
         return "/safe.css"
 
-    def __html__(self) -> str:
-        return "/safe.css"
-
     def startswith(self, *_args: object, **_kwargs: object) -> bool:
         return False
 
@@ -193,10 +191,30 @@ class TestUrlStrSubclass:
         assert script.url == "/c.js"
 
     def test_subclass_cannot_hide_a_javascript_url_from_the_policy(self):
-        # Without the plain copy, __html__ would show the policy "/safe.css".
+        # Without the plain copy, the escaping would read "/safe.css" through
+        # __str__ and the policy would see no javascript: URL.
         policy = _JavascriptPolicy("forbid")
         style = Style(url=_HidingUrl("javascript:alert(1)"))
 
+        assert policy.process_dependencies([style], position="test") == []
+        with pytest.raises(ValueError, match="a javascript: URL"):
+            policy.report()
+
+    @pytest.mark.parametrize("dependency_cls", [Script, Style])
+    def test_markup_url_is_stored_as_the_url_the_browser_reads(self, dependency_cls):
+        # Markup's character references decode, as in any other attribute.
+        dependency = dependency_cls(url=Markup("/a.js?x=1&amp;y=2"))
+
+        assert type(dependency.url) is str
+        assert dependency.url == "/a.js?x=1&y=2"
+        assert '="/a.js?x=1&amp;y=2"' in str(dependency.render())
+        assert _browser_loader_descriptor(dependency)["url"] == "/a.js?x=1&y=2"
+
+    def test_markup_cannot_hide_a_javascript_url_from_the_policy(self):
+        policy = _JavascriptPolicy("forbid")
+        style = Style(url=Markup("java&#115;cript:alert(1)"))
+
+        assert style.url == "javascript:alert(1)"
         assert policy.process_dependencies([style], position="test") == []
         with pytest.raises(ValueError, match="a javascript: URL"):
             policy.report()
