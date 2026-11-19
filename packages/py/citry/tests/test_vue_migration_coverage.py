@@ -667,7 +667,7 @@ def test_direct_capture_json_and_document_helpers_validate_boundaries() -> None:
     detached.component = Replay()
     assert not _matches_cache_replay_identity(detached, app, Replay)
     assert _stable_owner(None, {}) is None
-    with pytest.raises(UnsupportedPreparedView, match="unprepared"):
+    with pytest.raises(UnsupportedPreparedView, match="slot content that a component outside it wrote"):
         _stable_owner("missing", {})
 
     nested_body = [

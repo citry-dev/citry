@@ -604,18 +604,14 @@ class VueSerializationPlan:
     # The host carries Citry's ordinary server HTML for Vue to replace.
     _server_html: bool = False
     # For deps_position="separate": the ids of the scripts in `scripts` that
-    # every app on the page shares (the runtime and plugin scripts) and of
-    # those that belong to this app alone (its data block and start script).
-    # Any other script is an ordinary component tag.
-    _runtime_script_ids: frozenset[int] = frozenset()
+    # belong to this app alone (its data block and start script). Every other
+    # script here is Citry's own code that each app on the page shares: the
+    # runtime, plugin scripts, the development check, and, without mounted
+    # routes, the inline component code the runtime loads.
     _app_script_ids: frozenset[int] = frozenset()
 
-    def _script_asset_group(self, script: object) -> Literal["runtime", "app", "component"]:
-        if id(script) in self._app_script_ids:
-            return "app"
-        if id(script) in self._runtime_script_ids:
-            return "runtime"
-        return "component"
+    def _script_asset_group(self, script: object) -> Literal["runtime", "app"]:
+        return "app" if id(script) in self._app_script_ids else "runtime"
 
     def _has_exact_owned_host(self, hooked_html: str) -> bool:
         hooks = self._hydration_hooks
@@ -1403,9 +1399,6 @@ def prepare_vue_serialization(
         raise RuntimeError("the Vue configuration lost its manifest position")
     serialized = serialized.replace(manifest_slot, manifest_json, 1)
     scripts: list[Script] = []
-    # The scripts every app on a page shares, grouped apart from the others
-    # when deps_position="separate" hands the tags back.
-    shared_scripts: list[Script] = []
     # The runtime is the Dependencies extension's file at its hashed URL, so
     # the browser stores one copy whichever extension links it.
     runtime_resource = _runtime_resource(ctx.citry)
@@ -1417,10 +1410,8 @@ def prepare_vue_serialization(
         # The runtime adds the manifest's scripts only once the app starts, so plugin scripts
         # written here run before every component script.
         scripts.extend(plugin_scripts)
-        shared_scripts.append(runtime)
     else:
         scripts.append(Script(kind="core", content=_runtime_js()))
-        shared_scripts.append(scripts[-1])
         for digest in dict.fromkeys(item["sha256"] for item in manifest["definitions"]):
             bundle = definition_bundle(ctx.citry, digest)
             if bundle is None:
@@ -1456,7 +1447,6 @@ def prepare_vue_serialization(
         # Only a page whose shells carry served contents has anything to
         # compare, so other pages, and every production page, go without it.
         scripts.append(Script(kind="core", content=_dev_checks_source()))
-        shared_scripts.append(scripts[-1])
     initial_styles: list[Style] = []
     # A mounted document links its stylesheets in <head> so the served HTML
     # paints with them; the runtime adopts those links instead of adding its
@@ -1606,6 +1596,5 @@ def prepare_vue_serialization(
             ((configuration_block, serialized), (start_script, cast("str", start_script.content))) if hydrate else None
         ),
         _allow_structural_host_validation=allow_structural_host_validation,
-        _runtime_script_ids=frozenset(id(script) for script in (*shared_scripts, *plugin_scripts)),
         _app_script_ids=frozenset((id(configuration_block), id(start_script))),
     )

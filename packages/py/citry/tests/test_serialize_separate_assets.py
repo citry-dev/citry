@@ -381,3 +381,87 @@ def test_a_child_can_become_its_own_app_before_its_parent_is_serialized() -> Non
     assert parent.count('<div id="citry-vue-') == 1
     assert not any(ids[0] in parent for ids in app_ids)
     assert parent.count('class="badge"') == 3
+
+
+def test_hook_scripts_on_a_page_without_vue_are_component_tags() -> None:
+    class Analytics(Extension):
+        name = "analytics"
+
+        def on_dependencies(self, ctx):  # type: ignore[no-untyped-def]
+            ctx.early_scripts.append(Script(url="/static/early.js", kind="extra"))
+            ctx.scripts.append(Script(url="/static/analytics.js", kind="extra"))
+
+    engine = _engine(extensions=[Analytics])
+    _, badge = _widgets(engine)
+    result = badge().render().serialize_result(deps_position="separate")
+    assert result.component_assets.js == (
+        '<script src="/static/early.js"></script>',
+        '<script src="/static/analytics.js"></script>',
+    )
+    assert result.runtime_assets == SerializedAssets()
+    assert "<script" not in result.html
+
+
+def test_without_mounted_routes_citry_code_is_runtime_and_styles_are_app_tags() -> None:
+    engine = Citry(autodiscover=False)
+
+    class Widget(Component):
+        citry = engine
+        template = """
+<div class="w"><button @click="n++">hi</button></div>
+"""
+        js = """
+$component({data() { return {n: 0}; }});
+"""
+        css = """
+.w { color: blue; }
+"""
+
+    result = Widget().render().serialize_result(deps_position="separate")
+    # The inline runtime comes first, then the compiled component code that
+    # every app using this component shares.
+    assert len(result.runtime_assets.js) >= 2
+    assert "Citry interactive runtime" in result.runtime_assets.js[0]
+    assert not result.runtime_assets.css
+    assert [tag.split(" ", 1)[0] for tag in result.app_assets.css] == ["<style"]
+    assert ".w { color: blue; }" in result.app_assets.css[0]
+    assert len(result.app_assets.js) == 2
+    assert result.component_assets == SerializedAssets()
+    assert "<script" not in result.html
+
+
+def test_javascript_forbid_refuses_the_same_output_with_separate() -> None:
+    widget, _ = _widgets(_engine())
+    with pytest.raises(ValueError, match="forbid"):
+        widget().render().serialize_result(security_javascript="forbid")
+    with pytest.raises(ValueError, match="forbid"):
+        widget().render().serialize_result(deps_position="separate", security_javascript="forbid")
+
+
+def test_a_child_with_slot_content_from_outside_cannot_be_its_own_app() -> None:
+    engine = _engine()
+
+    class Button(Component):
+        citry = engine
+        template = """
+<button @click="n++">hi<c-slot /></button>
+"""
+        js = """
+$component({data() { return {n: 0}; }});
+"""
+
+    class Page(Component):
+        citry = engine
+        template = """
+<main><c-Button>text from the page</c-Button></main>
+"""
+
+    rendered = Page().render()
+    (child,) = [part for part in rendered.parts if isinstance(part, CitryRender)]
+    assert child.needs_browser_runtime()
+    # The page wrote the slot content, so a Vue app made from the child
+    # alone has no owner for it.
+    with pytest.raises(TypeError, match="slot content that a component outside it wrote"):
+        child.serialize_result(deps_position="separate")
+    # The parent still serializes whole.
+    assert "text from the page" in rendered.serialize()

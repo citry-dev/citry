@@ -4,13 +4,12 @@
 
 ### Added
 
-- Experimental: code that puts several Citry renders on one page can
-  now get each render's asset tags apart from its HTML, with
-  `serialize_result(deps_position="separate")`, and write each shared
-  tag, such as the browser runtime, once. Vue still adopts the server
-  HTML. `CitryRender.needs_browser_runtime()` tells which renders
-  become Vue apps. See
-  [Combine several renders on one page](https://citry.dev/advanced/asset-placement/#combine-several-renders).
+- Experimental: you can now get a render's asset tags apart from its
+  HTML with `serialize_result(deps_position="separate")`, so a page
+  that combines several renders writes shared tags, such as the browser
+  runtime, once. `CitryRender.needs_browser_runtime()` returns whether
+  a render needs the browser runtime. See
+  [Combine several renders](https://citry.dev/advanced/asset-placement/#combine-several-renders).
 
 ### Fixes
 

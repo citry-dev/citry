@@ -96,98 +96,124 @@ html = page.render().serialize(
 - `"append"` puts all the tags after the HTML;
 - `"separate"` (Experimental) leaves the tags out of the HTML and returns
   them grouped, for code that puts several renders on one page. See
-  [Combine several renders on one page](#combine-several-renders).
+  [Combine several renders](#combine-several-renders).
 
 !!! note "A page that repeats a placement tag"
 
     When the page has more than one CSS or JavaScript placement tag, only
     the first of each kind receives the tags. The others insert nothing.
 
-## Combine several renders on one page { #combine-several-renders }
+## Combine several renders { #combine-several-renders }
 
 !!! warning "Experimental"
 
-    `deps_position="separate"`, [`SerializedAssets`][citry.SerializedAssets],
-    the asset fields of [`SerializedRender`][citry.SerializedRender] and
-    [`CitryRender.needs_browser_runtime()`][citry.CitryRender.needs_browser_runtime]
-    may change in a minor release.
+    This section's API may change in a minor release.
 
-Some code builds one page from several Citry renders, for example a
-Django page with a Citry component in a few places. Each render that
-needs Citry's browser runtime becomes its own Vue app. Serialized one
-by one with the default position, each render would bring its own copy
-of the runtime script and of every shared file.
+An app sometimes builds one page from several Citry renders, for
+example a Django page with a Citry component in a few places. Each
+render that needs Citry's browser runtime becomes its own Vue app.
+Serialized one by one in the usual way, each render brings its own copy
+of the runtime script and of the CSS and JavaScript files it shares with
+the others.
 
-With `deps_position="separate"`, Citry leaves the tags out of the HTML.
-[`serialize_result()`][citry.CitryRender.serialize_result] returns them
-on the result instead, so your code can write each shared tag once:
+With `deps_position="separate"`, Citry leaves the tags out of the HTML
+and [`serialize_result()`][citry.CitryRender.serialize_result] returns
+them on the result. Your code then writes each shared tag once. Use
+`serialize_result()`: `serialize()` returns only the HTML and drops the
+tags.
+
+The result holds three groups of tags, each a
+[`SerializedAssets`][citry.SerializedAssets]. A group's `css` tuple
+holds the tags for `<head>`, and its `js` tuple the scripts for the end
+of `<body>`:
+
+| Field | What it holds | With several renders |
+|---|---|---|
+| `runtime_assets` | Citry's browser runtime and preload hints | keep one copy of identical tags |
+| `app_assets` | this render's Vue app: its stylesheets, its data and its start script | keep every tag |
+| `component_assets` | every other tag, such as component CSS and dependency files | keep one copy of identical tags |
+
+This example serializes two renders and writes their tags once each:
 
 ```python
-result = Widget().render().serialize_result(
-    deps_position="separate",
-)
-html = result.html  # the HTML, with no asset tags
+results = [
+    Widget().render().serialize_result(
+        deps_position="separate",
+    ),
+    Chart().render().serialize_result(
+        deps_position="separate",
+    ),
+]
+
+def tags(kind, field, keep_all=False):
+    found = [
+        tag
+        for result in results
+        for tag in getattr(getattr(result, field), kind)
+    ]
+    return found if keep_all else list(dict.fromkeys(found))
+
+def all_tags(kind):
+    return (
+        tags(kind, "runtime_assets")
+        + tags(kind, "component_assets")
+        + tags(kind, "app_assets", keep_all=True)
+    )
+
+head = "".join(all_tags("css"))
+end_of_body = "".join(all_tags("js"))
 ```
 
-The tags come in three groups. Each group is a
-[`SerializedAssets`][citry.SerializedAssets] with a `css` tuple, for
-the tags that go where `<c-css />` would put them, and a `js` tuple, for
-the scripts that go where `<c-js />` would put them:
+Write the groups in this order: `runtime_assets`, then
+`component_assets`, then `app_assets`, across all renders. Keep every
+`app_assets` tag even when two apps link the same stylesheet. The
+browser still downloads the file once.
 
-| Field | What it holds | On a page with several renders |
-|---|---|---|
-| `runtime_assets` | Citry's browser runtime, the browser plugin scripts of extensions, and preload hints | write the first of identical tags once |
-| `app_assets` | this render's Vue app: its stylesheet links, its configuration data and its start script | write every tag |
-| `component_assets` | component CSS and JavaScript on a page without Vue, dependency files, and tags from `on_dependencies` hooks | write the first of identical tags once |
+Each tag is exactly the tag Citry would have written into the HTML. It
+carries the `nonce` you passed as `csp_nonce` and its `integrity`
+attribute, `security_csp` and `security_javascript` check it, and
+`result.security` covers it. Vue adopts the server HTML instead of
+building it again, as it does with `"smart"`.
 
-Write every tag of `app_assets`, even when two apps link the same
-stylesheet. Each link names its own app, and the runtime loads the file
-again for an app whose link is missing. The browser fetches the file
-once either way.
+`"separate"` works with the `"document"` and `"simple"` strategies.
+With `"ignore"`, every group is empty, and with `"fragment"` it raises
+`ValueError`. Tags that another extension's `on_serialize()` hook adds
+stay in the HTML, and a hook that changes one of the returned tags
+makes serialize raise `RuntimeError`.
 
-Write the `css` tuples in `<head>` and the `js` tuples at the end of
-`<body>`, in the order `runtime_assets`, `component_assets`,
-`app_assets`. The start script in `app_assets` waits until the browser
-has read the whole page, so it runs after the runtime even when your
-page puts it earlier.
-
-Each tag keeps what Citry would have written: the `nonce` you passed as
-`csp_nonce`, its `integrity` attribute, and the same checks under
-`security_csp` and `security_javascript`. Vue adopts the HTML the server
-wrote, as it does with `"smart"`.
-
-`"separate"` works with the `"document"` and `"simple"` strategies. With
-`"ignore"`, every group is empty. With `"fragment"`, it raises
-`ValueError`, because a fragment writes its own loader script. Tags that
-another extension's `on_serialize()` hook adds stay in the HTML.
-
-### Make some child components their own apps
+### Split into several apps
 
 [`needs_browser_runtime()`][citry.CitryRender.needs_browser_runtime]
-tells whether a render would become a Vue app when serialized on its
-own. A host that mixes Citry renders with HTML from another template
-engine can use it to turn only the interactive children of a render
-into their own apps, and serialize the rest as plain HTML.
+returns whether a render needs Citry's browser runtime, so whether it
+becomes a Vue app when serialized. Code that mixes Citry renders with
+HTML from another template engine can use it to make only the
+interactive children of a render into their own apps.
 
 A child component's render may be serialized on its own before its
-parent is serialized. Each child becomes a separate Vue app with its
-own assets, and the parent's render does not change:
+parent is serialized. The child becomes a separate Vue app with its own
+assets, and the parent's render does not change. Components in
+different apps do not share state, so keep components that work
+together inside one child.
+
+This works only when the child holds no slot content that a component
+outside it wrote, such as text the parent passed between the child's
+tags. Serializing such a child on its own raises `TypeError`.
+
+This example serializes each interactive direct child of a render on
+its own:
 
 ```python
-rendered = List().render()
-for part in rendered.parts:
-    if (
-        isinstance(part, CitryRender)
-        and part.is_component_root
-        and part.needs_browser_runtime()
-    ):
-        island = part.serialize_result(
-            deps_position="separate",
-        )
-```
+from citry import CitryRender
 
-Each app is separate, so a server event handler in one app can update
-only components in that app.
+rendered = List().render()
+child_results = [
+    part.serialize_result(deps_position="separate")
+    for part in rendered.parts
+    if isinstance(part, CitryRender)
+    and part.is_component_root
+    and part.needs_browser_runtime()
+]
+```
 
 ## Next steps
 
