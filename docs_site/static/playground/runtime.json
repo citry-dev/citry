@@ -9,17 +9,17 @@
     "module_url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/pyodide.mjs"
   },
   "citry": {
-    "version": "1.0.2",
-    "core_version": "2.1.1",
+    "version": "1.0.3",
+    "core_version": "2.1.2",
     "ui_version": "0.7.0"
   },
   "packages": [
     {
       "name": "citry-core",
-      "version": "2.1.1",
+      "version": "2.1.2",
       "source": "pypi",
-      "filename": "citry_core-2.1.1-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
-      "sha256": "6677120d660829728c4c69810f1600385ef766bbe3fe8e7043792ebd7e478973"
+      "filename": "citry_core-2.1.2-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "sha256": "762301d44e2044882b353b6a32de0788f91ab413cd822ca60cbd812e65da9bea"
     },
     {
       "name": "MarkupSafe",
@@ -48,10 +48,10 @@
     },
     {
       "name": "citry",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "source": "pypi",
-      "filename": "citry-1.0.2-py3-none-any.whl",
-      "sha256": "bfc302294d3891b6202cddd6c8d1eb8679cfad4cf33a62b42d41fb051427191d"
+      "filename": "citry-1.0.3-py3-none-any.whl",
+      "sha256": "2fadde248d8e58c9fb594f5f2ec6dbb3864bf6931610daa53059ba4bd09e76d1"
     },
     {
       "name": "citry-ui",

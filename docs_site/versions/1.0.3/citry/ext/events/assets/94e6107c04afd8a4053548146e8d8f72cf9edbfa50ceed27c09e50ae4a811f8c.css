@@ -1,0 +1,15 @@
+
+:where(.avatar-image-grid) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.avatar-image-grid > div) {
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
+  color: light-dark(#315546, #b7ddc8);
+  font-size: 0.75rem;
+}

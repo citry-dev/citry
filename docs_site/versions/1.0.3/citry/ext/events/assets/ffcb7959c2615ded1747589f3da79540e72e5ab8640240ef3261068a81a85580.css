@@ -1,0 +1,9 @@
+
+:where(.spinner-intents) {
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.spinner-intents span) {
+  font-size: 0.72rem;
+}

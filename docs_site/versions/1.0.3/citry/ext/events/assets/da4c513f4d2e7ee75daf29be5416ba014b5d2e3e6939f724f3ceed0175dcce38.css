@@ -1,0 +1,3 @@
+
+:where(.sheet-example) { display:grid; place-items:center; min-block-size:10rem; }
+:where(.sheet-example .cui-drawer__body) { display:grid; gap:.5rem; }

@@ -1,0 +1,24 @@
+try {
+(function() {
+
+__citryRuntime.registerTypeOptions.bind(null, "ResponsiveImageSources_adab0a", "fca8f2f1f6970d6657e18366ba1aa7a3687558bea68d28c7c018d8323e2da6a4")({
+  data() {
+    return {
+      selected:'Waiting for native selection'
+    };
+  },
+  methods: {
+    // The browser picks the candidate, so show the filename it
+    // settled on, which changes across the 48rem and 64rem widths.
+    showSelectedSource(detail) {
+      const value = detail.current_src || detail.src;
+      this.selected = value.split('/').pop().split('?')[0];
+    },
+  },
+});
+
+})();
+__citryRuntime.finishScript("da83914ba8df38abc4c1e8b27fa47306e501a2fc674c3bdefddc3cfe63b41565");
+} catch (error) {
+__citryRuntime.finishScript("da83914ba8df38abc4c1e8b27fa47306e501a2fc674c3bdefddc3cfe63b41565", error);
+}
