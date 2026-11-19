@@ -10,6 +10,7 @@ comparison, so it gets its own test of the same response headers.
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import re
@@ -34,6 +35,7 @@ if not settings.configured:
     settings.configure(ALLOWED_HOSTS=["*"])
     django.setup()
 
+from django.http import HttpRequest  # noqa: E402
 from django.test import Client  # noqa: E402
 from django.test.utils import override_settings  # noqa: E402
 from django.urls import clear_url_caches, include, path  # noqa: E402
@@ -41,6 +43,7 @@ from django.utils.decorators import decorator_from_middleware  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from citry import Citry, Component  # noqa: E402
+from citry.contrib.asgi import asgi_app  # noqa: E402
 from citry.contrib.django import urlpatterns as django_urlpatterns  # noqa: E402
 from citry.contrib.fastapi import mount as mount_fastapi  # noqa: E402
 from citry.contrib.wsgi import wsgi_app  # noqa: E402
@@ -746,3 +749,161 @@ def test_django_can_attach_host_middleware_to_one_exact_event_url() -> None:
     assert sibling.status_code == 200
     assert "X-WP18-Policy" not in sibling.headers
     assert _ExactSaveMiddleware.paths == [save_url]
+
+
+def _render_inputs_component(c: Citry) -> type[Component]:
+    """A component whose template reads one global and one provided value that only `_render_inputs` supplies."""
+
+    class GreetState:
+        count: int = 0
+
+    class Greet(Component):
+        citry = c
+
+        class Kwargs:
+            count: int = 0
+
+        State = GreetState
+
+        class Events:
+            def bump(self, state: GreetState) -> Any:
+                state.count += 1
+                return Greet(count=state.count)
+
+        def template_data(self, kwargs: Kwargs, slots: Any) -> dict[str, Any]:
+            return {"count": kwargs.count, "locale": self.inject("locale")}
+
+        template = """
+            <p>{{ who }} {{ locale }} {{ count }}</p>
+        """
+
+    return Greet
+
+
+def _render_inputs_citry(seen: list[Any]) -> Citry:
+    def render_inputs(request: Any) -> dict[str, Any]:
+        seen.append(request)
+        return {"template_globals": {"who": request.headers.get("x-user")}, "provides": {"locale": "en-GB"}}
+
+    citry = Citry(secret=SIGNING_KEY, extensions_defaults={"events": {"_render_inputs": render_inputs}})
+    citry.set_mounted_prefix("/citry")
+    return citry
+
+
+def _render_inputs_envelope(component: type[Component]) -> bytes:
+    call = {
+        "componentClassId": component.class_id,
+        "handlerName": "bump",
+        "callerRenderId": "inputs_i1",
+        "args": {},
+        "stateToken": mint_state_token(
+            component.State(), class_id=component.class_id, secret=SIGNING_KEY, max_age=None, max_bytes=8192
+        ),
+    }
+    return json.dumps({"protocol": "citry-events/1", "requestId": "inputs", "calls": [call]}).encode()
+
+
+def _wsgi_render_inputs_call(citry: Citry, path: str, body: bytes, headers: dict[str, str]) -> tuple[int, bytes]:
+    environ: dict[str, Any] = {
+        "REQUEST_METHOD": "POST",
+        "PATH_INFO": path,
+        "SCRIPT_NAME": "",
+        "QUERY_STRING": "",
+        "CONTENT_TYPE": ENVELOPE_CONTENT_TYPE,
+        "CONTENT_LENGTH": str(len(body)),
+        "wsgi.input": io.BytesIO(body),
+        **{f"HTTP_{name.upper().replace('-', '_')}": value for name, value in headers.items()},
+    }
+    sent: dict[str, Any] = {}
+
+    def start_response(status: str, _headers: list[tuple[str, str]]) -> None:
+        sent["status"] = int(status.split(maxsplit=1)[0])
+
+    payload = b"".join(wsgi_app(citry)(environ, start_response))
+    return sent["status"], payload
+
+
+def _asgi_render_inputs_call(citry: Citry, path: str, body: bytes, headers: dict[str, str]) -> tuple[int, bytes]:
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": path,
+        "root_path": "",
+        "query_string": b"",
+        "headers": [
+            (b"content-type", ENVELOPE_CONTENT_TYPE.encode()),
+            *((name.lower().encode(), value.encode()) for name, value in headers.items()),
+        ],
+    }
+    messages = [{"type": "http.request", "body": body, "more_body": False}]
+    sent: dict[str, Any] = {"body": b""}
+
+    async def receive() -> dict[str, Any]:
+        return messages.pop(0)
+
+    async def send(message: dict[str, Any]) -> None:
+        if message["type"] == "http.response.start":
+            sent["status"] = message["status"]
+        elif message["type"] == "http.response.body":
+            sent["body"] += message.get("body", b"")
+
+    asyncio.run(asgi_app(citry)(scope, receive, send))
+    return sent["status"], sent["body"]
+
+
+def _django_render_inputs_call(citry: Citry, path: str, body: bytes, headers: dict[str, str]) -> tuple[int, bytes]:
+    module_name, override = _install_django_urlconf(citry)
+    try:
+        response = Client().post(f"/citry{path}", data=body, content_type=ENVELOPE_CONTENT_TYPE, headers=headers)
+    finally:
+        override.disable()
+        sys.modules.pop(module_name, None)
+        clear_url_caches()
+    return response.status_code, response.content
+
+
+_RENDER_INPUTS_HOSTS = {
+    "wsgi": _wsgi_render_inputs_call,
+    "asgi": _asgi_render_inputs_call,
+    "django": _django_render_inputs_call,
+}
+
+
+@pytest.mark.parametrize("host", sorted(_RENDER_INPUTS_HOSTS))
+def test_every_host_applies_render_inputs_to_a_render(host: str) -> None:
+    seen: list[Any] = []
+    citry = _render_inputs_citry(seen)
+    component = _render_inputs_component(citry)
+    path = f"/ext/events/e/{component.class_id}/bump"
+
+    status, payload = _RENDER_INPUTS_HOSTS[host](
+        citry, path, _render_inputs_envelope(component), {"X-Citry-Events": "1", "X-User": "Ada"}
+    )
+
+    assert status == 200
+    [action] = json.loads(payload)["results"][0]["actions"]
+    assert action["action"] == "render"
+    assert '"Ada"' in action["html"]
+    assert '"en-GB"' in action["html"]
+    # The function gets the call's request, with the host's own request object.
+    [request] = seen
+    assert request.headers.get("x-user") == "Ada"
+    if host == "django":
+        assert isinstance(request.native, HttpRequest)
+    else:
+        assert request.native is not None
+
+
+@pytest.mark.parametrize("host", sorted(_RENDER_INPUTS_HOSTS))
+def test_no_host_asks_for_render_inputs_before_the_csrf_check_passes(host: str) -> None:
+    seen: list[Any] = []
+    citry = _render_inputs_citry(seen)
+    component = _render_inputs_component(citry)
+    path = f"/ext/events/e/{component.class_id}/bump"
+
+    # A JSON call without the X-Citry-Events header fails Citry's CSRF check.
+    status, payload = _RENDER_INPUTS_HOSTS[host](citry, path, _render_inputs_envelope(component), {"X-User": "Ada"})
+
+    assert status == 403
+    assert json.loads(payload)["results"][0]["error"]["code"] == "csrf_failed"
+    assert seen == []

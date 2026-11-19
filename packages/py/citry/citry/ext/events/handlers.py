@@ -43,7 +43,10 @@ INJECTABLE_PARAMS = ("data", "state", "context", "request", "event")
 # settings-only and a component declaring one fails at class definition.
 # ``_csp_nonce`` (a function that returns the CSP nonce of the page that sent
 # a call) is engine-wide too, because a page's nonce is one fact for every
-# component on it.
+# component on it. So is ``_render_inputs`` (a function that returns the
+# template globals and provided values for every Render a call performs),
+# because the request values it reads, such as the user and the locale, are
+# the same for every component an app renders.
 CONFIG_NAMES = (
     "_guard",
     "_context",
@@ -55,11 +58,14 @@ CONFIG_NAMES = (
     "_max_form_fields",
     "_csrf_field_names",
     "_csp_nonce",
+    "_render_inputs",
 )
 
 # The engine-wide config names, which only ``extensions_defaults["events"]``
 # may set.
-ENGINE_CONFIG_NAMES = frozenset({"_max_body_bytes", "_max_form_fields", "_csrf_field_names", "_csp_nonce"})
+ENGINE_CONFIG_NAMES = frozenset(
+    {"_max_body_bytes", "_max_form_fields", "_csrf_field_names", "_csp_nonce", "_render_inputs"}
+)
 
 # The hidden field Django's ``{% csrf_token %}`` and its own forms write. A
 # page that keeps it inside a form sending a server event would otherwise

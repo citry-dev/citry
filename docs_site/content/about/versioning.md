@@ -315,4 +315,5 @@ The release notes say when this list changes. Experimental now:
 - `EventsDispatcher` and `TransportContext` (running event calls from
   server code instead of Citry's HTTP routes)
 - the `event_result_resolvers` and `event_payload_codecs` settings
+- the `_render_inputs` option in `extensions_defaults["events"]`
 - `RenderFrame` and `CitryRender.frame`

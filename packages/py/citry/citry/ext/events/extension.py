@@ -124,6 +124,17 @@ def _validate_engine_config_value(name: str, value: Any) -> None:
                 f" nonce); got {value!r}."
             )
             raise ValueError(msg)
+    elif name == "_render_inputs":
+        # The values depend on the request (its user, its locale), so Citry
+        # asks for them on each call and only a function fits. Like
+        # `_csp_nonce`, the dispatcher calls it without awaiting.
+        if not callable(value) or inspect.iscoroutinefunction(value):
+            msg = (
+                "'_render_inputs' must be a plain (not async) function that takes the call's EventRequest"
+                " and returns a dict with the optional keys 'template_globals' and 'provides';"
+                f" got {value!r}."
+            )
+            raise ValueError(msg)
     else:
         # Each engine-wide name needs its own rule here.
         msg = f"No value check is defined for the engine-wide Events setting {name!r}."
@@ -315,8 +326,8 @@ class EventsExtension(Extension):
         Underscore names are configuration and must be one of the recognized
         config attributes (``_guard``, ``_context``, ``_csrf``, ``_methods``,
         ``_debounce``, ``_throttle``, plus the engine-wide
-        ``_max_body_bytes``, ``_max_form_fields``, and ``_csrf_field_names``, which only
-        ``extensions_defaults`` may set);
+        ``_max_body_bytes``, ``_max_form_fields``, ``_csrf_field_names``, ``_csp_nonce``,
+        and ``_render_inputs``, which only ``extensions_defaults`` may set);
         on a component's ``Events`` class an underscore ``def`` is a private
         helper and is exempt.
         Unprefixed names are event handlers: they belong on a component's

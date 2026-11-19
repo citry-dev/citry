@@ -327,12 +327,20 @@ def render_prepared_marker_replacement(
     *,
     citry: Any,
     name: str,
+    template_globals: Mapping[str, Any] | None = None,
+    provides: Mapping[str, Any] | None = None,
 ) -> CitryRender:
     """Render one payload once and wrap it in the engine-owned private Mark."""
     if prepared_render_active() and not vue_render_active():
         raise RuntimeError("cannot enter direct prepared rendering inside another prepared-render mode")
     with typed_render_scope(direct=True, vue=True):
-        payload = renderable.render() if not isinstance(renderable, CitryRender) else renderable
+        # The globals and provided values reach only the payload: the Mark
+        # wrapper below is Citry's own component and reads neither.
+        payload = (
+            renderable.render(template_globals=template_globals, provides=provides)
+            if not isinstance(renderable, CitryRender)
+            else renderable
+        )
         if payload.render_target != "prepared":
             raise TypeError("marker replacement requires a typed prepared CitryRender")
         metadata = payload.frame.prepared_occurrence

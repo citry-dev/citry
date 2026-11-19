@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- Experimental: a component that a server event renders again can now
+  get values from the request, such as the current user or the locale,
+  as a page render does. Set `extensions_defaults["events"]["_render_inputs"]` to a
+  function that takes the call's `EventRequest` and returns the
+  `template_globals` and `provides` for every `Render` Citry performs.
+
 ### Fixes
 
 - You can now pass a `str` subclass, such as the `SafeString` URL

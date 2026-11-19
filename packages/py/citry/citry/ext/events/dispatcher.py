@@ -60,6 +60,7 @@ from citry._protocol.events import (
     validate_action,
     validate_result,
 )
+from citry.citry_element import CitryElement
 from citry.ext.events._pydantic_bounded import TOO_SLOW_MESSAGE, ValidationTooCostly, current_work, request_work
 
 # The csrf_failed message is example-locked contract text; it lives next to
@@ -360,6 +361,53 @@ def _page_csp_nonce(ctx: TransportContext, plan: _CallPlan) -> str | None:
         msg = f"The events '_csp_nonce' function must return a str or None; got {type(nonce).__name__}."
         raise TypeError(msg)
     return nonce
+
+
+# The keys a ``_render_inputs`` function may return, matching the keyword
+# arguments of ``CitryElement.render()`` they are passed to.
+_RENDER_INPUT_KEYS = frozenset({"template_globals", "provides"})
+
+
+def _call_render_inputs(
+    ctx: TransportContext, plan: _CallPlan
+) -> tuple[Mapping[str, Any] | None, Mapping[str, Any] | None]:
+    """
+    Return the template globals and provided values for this call's renders, from ``_render_inputs``.
+
+    A page render gets request values (the user, the locale) from the app's
+    own view, but a Render from a handler has no view around it, so the
+    app's function supplies them for each call instead.
+    """
+    inputs_for = ctx.citry.settings.extensions_defaults.get("events", {}).get("_render_inputs")
+    if inputs_for is None:
+        return None, None
+    inputs = inputs_for(plan.events.request)
+    # A wrong shape is reported against the setting here, rather than as a
+    # confusing error from inside the render; the call still answers
+    # handler_error either way.
+    if not isinstance(inputs, Mapping):
+        msg = (
+            "The events '_render_inputs' function must return a dict with the optional keys"
+            f" 'template_globals' and 'provides'; got {type(inputs).__name__}."
+        )
+        raise TypeError(msg)
+    unknown = sorted(str(key) for key in inputs if key not in _RENDER_INPUT_KEYS)
+    if unknown:
+        msg = (
+            f"The events '_render_inputs' function returned unknown keys {unknown};"
+            " the recognized keys are 'template_globals' and 'provides'."
+        )
+        raise TypeError(msg)
+    template_globals = inputs.get("template_globals")
+    provides = inputs.get("provides")
+    for key, value in (("template_globals", template_globals), ("provides", provides)):
+        if value is not None and not isinstance(value, Mapping):
+            msg = (
+                f"The events '_render_inputs' function must return a mapping or None for {key!r};"
+                f" got {type(value).__name__}."
+            )
+            raise TypeError(msg)
+    return template_globals, provides
 
 
 @dataclass(slots=True)
@@ -1233,6 +1281,14 @@ class EventsDispatcher:
                     f" with a value Citry cannot sign: {detail}.{advice}"
                 )
                 raise ValueError(msg)
+        # Asked only when Citry itself renders a component for this call: a
+        # render the handler built already carries its own inputs, and a call
+        # without a render needs none. The function runs after the handler,
+        # so after the CSRF and State token checks too.
+        if any(isinstance(action, Render) and isinstance(action.element, CitryElement) for action in actions):
+            render_globals, render_provides = _call_render_inputs(ctx, plan)
+        else:
+            render_globals, render_provides = None, None
         try:
             advertised_renderers = capabilities["renderers"]
             if ctx.response_mode == "compat":
@@ -1269,6 +1325,8 @@ class EventsDispatcher:
                     csp_nonce=_page_csp_nonce(ctx, plan)
                     if renderer == HTML_RENDER_ENCODER.renderer and any(isinstance(a, Render) for a in actions)
                     else None,
+                    template_globals=render_globals,
+                    provides=render_provides,
                 ),
             )
         except ProtocolValueError:

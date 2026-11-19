@@ -90,7 +90,9 @@ class Events:
 ```
 
 The rule: if the new render needs a value, the handler must get it and pass
-it in.
+it in. Values that every render takes from the request, such as the current
+user or the locale, can come from one app-wide function instead. See
+[Request values](/events/actions/#give-every-render-the-request-values).
 
 ## `:c-<field>` on inputs
 

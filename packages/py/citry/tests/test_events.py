@@ -1007,7 +1007,7 @@ class TestHandlerEnumeration:
             " 'events' extension). '_guardd' is not a recognized Events config attribute;"
             " the recognized names are:"
             " _guard, _context, _csrf, _methods, _debounce, _throttle, _max_body_bytes, _max_form_fields,"
-            " _csrf_field_names, _csp_nonce."
+            " _csrf_field_names, _csp_nonce, _render_inputs."
             " Did you mean '_guard'?" in str(err.value)
         )
 
@@ -1735,7 +1735,7 @@ class TestConfigFieldValidation:
             " setting. '_guardd' is not a recognized Events config attribute; the"
             " recognized names are:"
             " _guard, _context, _csrf, _methods, _debounce, _throttle, _max_body_bytes, _max_form_fields,"
-            " _csrf_field_names, _csp_nonce."
+            " _csrf_field_names, _csp_nonce, _render_inputs."
             " Did you mean '_guard'?" in str(err.value)
         )
 
@@ -1768,7 +1768,7 @@ class TestConfigFieldValidation:
             " are event handlers, and event handlers are defined on each component's"
             " nested Events class. Only the underscore config can be defaulted globally:"
             " _guard, _context, _csrf, _methods, _debounce, _throttle, _max_body_bytes, _max_form_fields,"
-            " _csrf_field_names, _csp_nonce." in str(err.value)
+            " _csrf_field_names, _csp_nonce, _render_inputs." in str(err.value)
         )
 
     def test_defaults_config_name_without_underscore_gets_hint(self):
@@ -1799,7 +1799,7 @@ class TestConfigFieldValidation:
             " on Events are handlers, and a handler is a plain method defined with"
             " 'def'); got 'hi'. Configuration uses the underscore names:"
             " _guard, _context, _csrf, _methods, _debounce, _throttle, _max_body_bytes, _max_form_fields,"
-            " _csrf_field_names, _csp_nonce." in str(err.value)
+            " _csrf_field_names, _csp_nonce, _render_inputs." in str(err.value)
         )
 
     def test_property_handler_rejected(self):
@@ -1844,7 +1844,7 @@ class TestConfigFieldValidation:
             " 'def'); got functools.partial(<built-in function print>, 'hi')."
             " Configuration uses the underscore names:"
             " _guard, _context, _csrf, _methods, _debounce, _throttle, _max_body_bytes, _max_form_fields,"
-            " _csrf_field_names, _csp_nonce." in str(err.value)
+            " _csrf_field_names, _csp_nonce, _render_inputs." in str(err.value)
         )
 
     def test_valid_two_tier_config_passes(self):
