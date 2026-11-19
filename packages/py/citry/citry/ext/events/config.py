@@ -82,7 +82,10 @@ class Events(ExtensionConfig, Generic[StateT]):
         # `_render_inputs` function is checked against the expected signature.
         # It is config, not an ambient member, so it stays out of the runtime
         # annotations. A ClassVar keeps the function unbound: Citry calls it
-        # with the request alone.
+        # with the request alone. Pyright checks the whole signature; mypy
+        # treats a Callable class attribute as a method, so it checks the
+        # return type and the number of parameters but not the parameter
+        # type. Citry checks the number of parameters at class definition.
         _render_inputs: ClassVar[RenderInputsFunction | None]
 
     def url(

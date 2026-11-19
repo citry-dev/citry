@@ -186,7 +186,7 @@ citry = Citry(
 ```
 
 Or set it for one component on its `Events` class. Define the function
-outside the class and assign it, as you would assign `_csrf`:
+outside the class and assign it:
 
 ```python
 class TaskList(Component):
@@ -242,11 +242,11 @@ function on the event loop, where it also renders, even when the handler
 is a plain `def`. A slow function delays every other request on that
 server, so do not wait on slow I/O or query a database in it.
 
-`Citry(...)` raises `ValueError` when the app-wide value is not callable
-or is an `async def` function. A component's `Events` class raises
-`ValueError` when it is defined if its value is neither a function nor
-`None`, is an `async def` function, or is a method written inside the
-class.
+`Citry(...)` raises `ValueError` when the app-wide value is neither a
+function nor `None`, is an `async def` function, or does not take
+exactly one argument. Defining a component raises `ValueError` for the
+same problems in its `Events` value, which includes a method written
+inside the class, because a method also expects `self`.
 
 The call fails with the error code `handler_error` when:
 

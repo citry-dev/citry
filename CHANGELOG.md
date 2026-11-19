@@ -18,7 +18,7 @@
   does when a view renders the page. Set `_render_inputs` in
   `extensions_defaults["events"]`, or on one component's `Events`
   class, to a function that takes the event call's `EventRequest` and
-  returns a `RenderInputs` dict: the `template_globals` and `provides`
+  returns a `RenderInputs` dict (from `citry.ext.events`): the `template_globals` and `provides`
   Citry passes to `.render()` for that call's renders. See
   [Pass request values](https://citry.dev/events/actions/#give-every-render-the-request-values).
 

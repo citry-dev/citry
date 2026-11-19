@@ -230,17 +230,42 @@ def validate_csrf_value(source: str, value: Any) -> str | bool | Callable[..., A
 
 
 def validate_render_inputs_value(source: str, value: Any) -> Callable[..., Any] | None:
-    """Check a ``_render_inputs`` value: a plain (not async) function, or None."""
+    """Check a ``_render_inputs`` value: a plain (not async) function that takes one argument, or None."""
     # The dispatcher calls the function without awaiting it, so an async
     # function would hand back a coroutine instead of the inputs.
-    if value is None or (callable(value) and not inspect.iscoroutinefunction(value)):
-        return value
-    msg = (
-        f"{source} must be a plain (not async) function that takes the call's EventRequest"
-        " and returns a dict with the optional keys 'template_globals' and 'provides', or None;"
-        f" got {value!r}."
-    )
-    raise ValueError(msg)
+    if value is not None and (not callable(value) or inspect.iscoroutinefunction(value)):
+        msg = (
+            f"{source} must be a plain (not async) function that takes the call's EventRequest"
+            " and returns a dict with the optional keys 'template_globals' and 'provides', or None;"
+            f" got {value!r}."
+        )
+        raise ValueError(msg)
+    if value is not None and not _takes_one_argument(value):
+        # Citry calls it with the request alone. A `def` written inside the
+        # Events class expects `self` first, so it would fail on every call;
+        # refusing it here names the fix instead.
+        msg = (
+            f"{source} must take the call's EventRequest as its only argument; a `def` written"
+            " in the Events class also expects `self`. Define the function outside the class"
+            " and assign it: `_render_inputs = render_inputs`."
+        )
+        raise ValueError(msg)
+    return value
+
+
+def _takes_one_argument(func: Callable[..., Any]) -> bool:
+    """Whether ``func`` can be called with exactly one positional argument."""
+    try:
+        signature = inspect.signature(func)
+    except (TypeError, ValueError):
+        # Some callables (builtins, C extensions) have no signature to read;
+        # the call itself is the only check left for them.
+        return True
+    try:
+        signature.bind(object())
+    except TypeError:
+        return False
+    return True
 
 
 def validate_callable_value(source: str, value: Any) -> Callable[..., Any] | None:

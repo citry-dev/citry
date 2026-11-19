@@ -3863,7 +3863,7 @@ class TestRenderInputs:
 
     def test_a_method_written_in_the_events_class_fails_at_class_definition(self):
         c = _citry()
-        with pytest.raises(ValueError, match="define the function outside the class and assign it"):
+        with pytest.raises(ValueError, match="Define the function outside the class and assign it"):
 
             class Page(Component):
                 citry = c
@@ -3874,6 +3874,29 @@ class TestRenderInputs:
 
                     def go(self):
                         return None
+
+    def test_a_lambda_or_staticmethod_in_the_events_class_works(self):
+        for own in (
+            lambda _request: {"template_globals": {"user": "Ada"}},
+            staticmethod(lambda _request: {"template_globals": {"user": "Ada"}}),
+        ):
+            c = _citry()
+            greeter = self._greeter(c, own_inputs=own)
+            [result] = _dispatch(c, self._call(greeter, "bump"))["results"]
+            assert _shows(result["actions"][0]["html"], "Ada")
+
+    def test_an_app_wide_function_with_the_wrong_parameters_fails_at_construction(self):
+        def render_inputs():
+            return {}
+
+        with pytest.raises(ValueError, match="must take the call's EventRequest as its only argument"):
+            _citry(extensions_defaults={"events": {"_render_inputs": render_inputs}})
+
+    def test_the_app_wide_value_may_be_none(self):
+        c = _citry(extensions_defaults={"events": {"_render_inputs": None}})
+        greeter = self._greeter(c)
+        [result] = _dispatch(c, self._call(greeter, "bump"))["results"]
+        assert result["error"]["code"] == "handler_error"
 
     def test_a_component_async_function_fails_at_class_definition(self):
         async def render_inputs(_request):

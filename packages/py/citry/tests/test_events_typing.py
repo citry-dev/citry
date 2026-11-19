@@ -89,8 +89,9 @@ class Profile(Component):
     citry = app
 
     class Events(EventsBase):
-        # Checked against `Callable[[EventRequest], RenderInputs] | None`, so
-        # a function with another signature is a checker error.
+        # Checked against `Callable[[EventRequest], RenderInputs] | None`:
+        # pyright checks the whole signature, mypy the return type and the
+        # number of parameters.
         _render_inputs = _profile_inputs
 
         def ping(self) -> None:

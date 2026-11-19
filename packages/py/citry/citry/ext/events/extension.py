@@ -745,18 +745,6 @@ class EventsExtension(Extension):
             f"Component {comp_name}: Events._render_inputs",
             self._resolve_config_value(raw_events, "_render_inputs", defaults),
         )
-        # Citry calls the function with the request alone. A `def` written in
-        # the Events class body would expect `self` first and fail on every
-        # call, so it is refused here with the fix.
-        if render_inputs is not None and raw_events is not None:
-            qualname = getattr(render_inputs, "__qualname__", "")
-            if any(qualname.startswith(f"{klass.__qualname__}.") for klass in user_level_classes(raw_events)):
-                msg = (
-                    f"Component {comp_name}: Events._render_inputs is a method written in the Events class."
-                    " Citry calls it with the call's EventRequest only, so define the function outside"
-                    " the class and assign it: `_render_inputs = render_inputs`."
-                )
-                raise ValueError(msg)
 
         handlers: dict[str, EventHandler] = {}
         if raw_events is not None:

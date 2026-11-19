@@ -354,6 +354,7 @@ categories:
       - citry.ext.events.EventRequest
       - citry.ext.events.EventsDispatcher
       - citry.ext.events.EventsExtension
+      - citry.ext.events.RenderInputs
       - citry.ext.events.TransportContext
       - citry.ext.events.UploadedFile
       - citry.ext.events.ViewEvents
