@@ -22,17 +22,47 @@ keywords = [
     "web development",
     "templating",
     "template engine",
+    "django",
+    "fastapi",
+    "flask",
+    "vue",
+    "python frontend",
+    "server events",
+    "typed",
 ]
 authors = [{ name = "Juro Oravec", email = "juraj.oravec.josefson@gmail.com" }]
+# The license is only the SPDX expression in `license` below (PEP 639). A
+# `License ::` classifier beside it makes setuptools fail the build.
+# The `Framework :: Django :: X.Y` lines name the Django versions CI tests:
+# the oldest supported one (the `framework-floors` job in py--tests.yml) and
+# the locked newest major. Django Packages reads them to score Django support.
 classifiers = [
     "Development Status :: 5 - Production/Stable",
+    "Environment :: Web Environment",
+    "Framework :: AsyncIO",
+    "Framework :: Django",
+    "Framework :: Django :: 5.2",
+    "Framework :: Django :: 6.0",
+    "Framework :: FastAPI",
+    "Framework :: Flask",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: 3.15",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: User Interfaces",
+    "Topic :: Text Processing :: Markup :: HTML",
+    "Typing :: Typed",
 ]
 license = "MIT"
 license-files = ["LICENSE"]
