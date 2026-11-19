@@ -5,11 +5,14 @@ A host such as citry-django serializes each interactive region on its own,
 keeps one copy of each shared tag, and writes the HTML and the tags into its
 own page. Here the page holds two such apps with a single runtime script.
 Both must hydrate the server HTML (keep the elements the server wrote), run
-their own click handlers, and log no error.
+their own click handlers, and log no error. A host may also keep one
+stylesheet link for apps that serve the same file, by listing every app id in
+the link's ``data-citry-vue-style-app`` attribute.
 """
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -48,11 +51,7 @@ def _page(results: list[SerializedRender]) -> str:
     )
 
 
-def test_two_separate_islands_hydrate_and_run_on_one_page(
-    serve_live: Callable[..., str],
-    open_citry_page: Callable[..., None],
-    page: Any,
-) -> None:
+def _counter_engine() -> tuple[Citry, type[Component]]:
     engine = Citry(autodiscover=False)
     engine.set_mounted_prefix("/citry")
 
@@ -75,6 +74,15 @@ $component({data() { return {n: 0}; }});
         def template_data(self, kwargs: Kwargs, slots: object) -> dict[str, object]:
             return {"label": kwargs.label}
 
+    return engine, Counter
+
+
+def test_two_separate_islands_hydrate_and_run_on_one_page(
+    serve_live: Callable[..., str],
+    open_citry_page: Callable[..., None],
+    page: Any,
+) -> None:
+    engine, Counter = _counter_engine()
     results = [
         Counter(label=label).render().serialize_result(deps_position="separate") for label in ("first", "second")
     ]
@@ -101,4 +109,80 @@ $component({data() { return {n: 0}; }});
     page.wait_for_function("() => document.querySelectorAll('output')[1].textContent === '2'")
     assert page.locator("output").all_text_contents() == ["1", "2"]
     assert page.locator(".counter").first.evaluate("element => getComputedStyle(element).color") == "rgb(0, 0, 255)"
+    assert errors == []
+
+
+_STYLE_APP = re.compile(r' data-citry-vue-style-app="([0-9a-f]{32})"')
+
+
+@pytest.mark.parametrize(
+    ("named", "links_after"),
+    [
+        # The shared link names both apps, so each adopts it and adds none.
+        ("both", 1),
+        # A link that names only the first app: the second requests the file itself.
+        ("first", 2),
+        # A malformed list (an id repeated) names no app, so each app requests the file.
+        ("malformed", 3),
+    ],
+)
+def test_two_islands_share_one_stylesheet_link(
+    serve_live: Callable[..., str],
+    open_citry_page: Callable[..., None],
+    page: Any,
+    named: str,
+    links_after: int,
+) -> None:
+    engine, Counter = _counter_engine()
+    results = [
+        Counter(label=label).render().serialize_result(deps_position="separate") for label in ("first", "second")
+    ]
+    # Both apps serve the same stylesheet file, in links that differ only by the app id.
+    first, second = (result.app_assets.css for result in results)
+    assert len(first) == len(second) == 1
+    app_ids = [_STYLE_APP.search(tags[0]).group(1) for tags in (first, second)]  # type: ignore[union-attr]
+    assert _STYLE_APP.sub("", first[0]) == _STYLE_APP.sub("", second[0])
+    listed = {
+        "both": " ".join(app_ids),
+        "first": app_ids[0],
+        "malformed": " ".join([app_ids[0], *app_ids]),
+    }[named]
+    shared = _STYLE_APP.sub(f' data-citry-vue-style-app="{listed}"', first[0])
+
+    head = _first_of_each([tag for result in results for tag in result.runtime_assets.css])
+    head += _first_of_each([tag for result in results for tag in result.component_assets.css])
+    head.append(shared)
+    scripts = _first_of_each([tag for result in results for tag in result.runtime_assets.js])
+    scripts += _first_of_each([tag for result in results for tag in result.component_assets.js])
+    scripts += [tag for result in results for tag in result.app_assets.js]
+    body = "".join(f"<section>{result.html}</section>" for result in results)
+    html = (
+        f"<!DOCTYPE html><html><head><title>Islands</title>{''.join(head)}</head>"
+        f"<body>{body}{_CAPTURE}{''.join(scripts)}</body></html>"
+    )
+    assert html.count('rel="stylesheet"') == 1
+
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    open_citry_page(serve_live(engine, html, ""), apps=2)
+
+    links = page.evaluate(
+        """() => [...document.querySelectorAll('link[rel="stylesheet"]')]
+            .map(link => link.getAttribute("data-citry-vue-style-app"))"""
+    )
+    assert len(links) == links_after
+    # The served link is still the first one, unchanged.
+    assert links[0] == listed
+    # Each app the link does not name added its own link, as it would with no shared link.
+    assert links[1:] == (app_ids[1:] if named == "first" else app_ids if named == "malformed" else [])
+    for label, expected in (("first", "1"), ("second", "1")):
+        page.locator("button", has_text=label).click()
+        page.wait_for_function(
+            "([label, n]) => [...document.querySelectorAll('.counter')]"
+            ".some(c => c.textContent.includes(label) && c.querySelector('output').textContent === n)",
+            arg=[label, expected],
+        )
+    colors = page.locator(".counter").evaluate_all("els => els.map(el => getComputedStyle(el).color)")
+    assert colors == ["rgb(0, 0, 255)", "rgb(0, 0, 255)"]
     assert errors == []

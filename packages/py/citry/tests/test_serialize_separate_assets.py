@@ -133,6 +133,35 @@ def test_each_tag_lands_in_its_group() -> None:
     assert result.component_assets == SerializedAssets()
 
 
+@pytest.mark.parametrize("mounted", [True, False])
+def test_each_stylesheet_tag_names_its_one_app(mounted: bool) -> None:
+    # The runtime lets a host list several app ids in one tag's
+    # data-citry-vue-style-app, but Citry itself writes one render's tags, so
+    # each names exactly the one app, as every 1.x release has written it.
+    engine = _engine() if mounted else Citry(autodiscover=False)
+    widget, _ = _widgets(engine)
+    outputs = [widget().render().serialize()]
+    if mounted:
+        separate = widget().render().serialize_result(deps_position="separate")
+        outputs.append(separate.html + "".join(separate.app_assets.css))
+    for html in outputs:
+        app_id = re.search(r'<div id="citry-vue-([0-9a-f]{32})"', html)
+        assert app_id is not None
+        tags = re.findall(r"<(?:link|style)\b[^>]*data-citry-vue-style-app=[^>]*>", html)
+        assert len(tags) == 2
+        for tag in tags:
+            names = re.findall(r' data-citry-vue-style-app="([^"]*)"', tag)
+            assert names == [app_id[1]], tag
+            if mounted:
+                assert re.fullmatch(
+                    r'<link data-citry-css-url="(/citry/[^"]+\.css)" data-citry-vue-style-app="[0-9a-f]{32}"'
+                    r' rel="stylesheet" integrity="sha256-[^"]+" crossorigin="anonymous" href="\1"/>',
+                    tag,
+                ), tag
+            else:
+                assert tag.startswith('<style rel="stylesheet" data-citry-css-url="/assets/'), tag
+
+
 def test_a_separate_island_hydrates_like_smart() -> None:
     widget, _ = _widgets(_engine())
     rendered = widget().render()
