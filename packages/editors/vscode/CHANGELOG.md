@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.0.1 - 2026-11-20
 
+- Searches on the VS Code Marketplace and Open VSX for Django, FastAPI,
+  Flask, Vue, language server, and Jinja now find the extension.
 - The built-in JavaScript and CSS formatter now uses Prettier 3.10.1,
   which formats some comments and parenthesized `yield` and `throw`
   expressions differently.
