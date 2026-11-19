@@ -268,7 +268,9 @@ upgrade.
   browser code calls carry, such as event definition scripts and
   translated messages. Their paths and methods are covered.
 - **Other `_` names:** any module, function, attribute or option that
-  starts with `_`, except the options above.
+  starts with `_`, except the options above and the experimental
+  `_render_inputs` option, which follows the
+  [experimental](#experimental) rules.
 - **Deeper modules:** import from `citry`, `citry.reload`,
   `citry.ext.<name>` or `citry.contrib.<name>`, not from modules such as
   `citry.ext.events.handlers` or `citry.nodes`.
@@ -316,4 +318,5 @@ The release notes say when this list changes. Experimental now:
   server code instead of Citry's HTTP routes)
 - the `event_result_resolvers` and `event_payload_codecs` settings
 - the `_render_inputs` option in `extensions_defaults["events"]`
+  (request values for `Render` actions)
 - `RenderFrame` and `CitryRender.frame`

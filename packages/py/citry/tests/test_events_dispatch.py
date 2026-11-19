@@ -3671,8 +3671,36 @@ class TestRenderInputs:
             [result] = dispatcher.dispatch(envelope, ctx)["results"]
             [render] = [action for action in result["actions"] if action["action"] == "render"]
             assert render["renderer"] == "vue-prepared/1"
+            assert render["target"].startswith("mark:" if handler == "bump_marker" else "render:")
             assert _shows(json.dumps(render["prepared"]), "Ada", "en-GB")
         assert len(seen) == 2
+
+    def test_a_no_javascript_answer_gets_them_too(self):
+        seen = []
+        c = _citry(extensions_defaults={"events": {"_render_inputs": self._inputs(seen)}})
+        greeter = self._greeter(c)
+        ctx = TransportContext(transport="http", citry=c, response_mode="compat")
+        [result] = EventsDispatcher().dispatch(_envelope(self._call(greeter, "bump")), ctx)["results"]
+        [action] = result["actions"]
+        # The no-JavaScript answer is plain HTML, with no Vue data.
+        assert "Hi Ada (en-GB) #1" in action["html"]
+        assert len(seen) == 1
+
+    def test_a_component_an_extension_answers_with_gets_them_too(self):
+        seen = []
+        greeters = []
+
+        class Answer(Extension):
+            name = "answer"
+
+            def on_event(self, ctx):
+                return greeters[0](count=7)
+
+        c = _citry(extensions=[Answer], extensions_defaults={"events": {"_render_inputs": self._inputs(seen)}})
+        greeters.append(self._greeter(c))
+        [result] = _dispatch(c, self._call(greeters[0], "quiet"))["results"]
+        assert _shows(result["actions"][0]["html"], "Ada", "en-GB", "7")
+        assert len(seen) == 1
 
     def test_the_function_runs_once_for_a_call_with_several_renders(self):
         seen = []

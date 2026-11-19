@@ -1281,14 +1281,6 @@ class EventsDispatcher:
                     f" with a value Citry cannot sign: {detail}.{advice}"
                 )
                 raise ValueError(msg)
-        # Asked only when Citry itself renders a component for this call: a
-        # render the handler built already carries its own inputs, and a call
-        # without a render needs none. The function runs after the handler,
-        # so after the CSRF and State token checks too.
-        if any(isinstance(action, Render) and isinstance(action.element, CitryElement) for action in actions):
-            render_globals, render_provides = _call_render_inputs(ctx, plan)
-        else:
-            render_globals, render_provides = None, None
         try:
             advertised_renderers = capabilities["renderers"]
             if ctx.response_mode == "compat":
@@ -1305,6 +1297,15 @@ class EventsDispatcher:
                     f"Event handler {plan.handler.name!r} produced a render, but no configured renderer"
                     " was advertised by the client."
                 )
+            # Asked only when Citry itself renders a component for this call: a
+            # render the handler built already carries its own inputs, and a call
+            # without a render needs none. The function runs after the handler,
+            # so after the CSRF and State token checks too, and after the renderer
+            # check above, so a call that fails anyway never asks.
+            if any(isinstance(action, Render) and isinstance(action.element, CitryElement) for action in actions):
+                render_globals, render_provides = _call_render_inputs(ctx, plan)
+            else:
+                render_globals, render_provides = None, None
             encoder = self._render_encoders[renderer]
             encoded = encode_actions(
                 actions,
