@@ -153,9 +153,12 @@ class VueSyntaxInStaticHtmlError(StaticHtmlError, UnsupportedPreparedView):
     Raised when a template with foreign spans has Vue syntax, such as `@click`, and its output reaches a Vue app.
 
     Citry writes such a template as static HTML that Vue does not compile,
-    so the Vue syntax would silently do nothing. Citry checks every template
-    whose output Vue inserts this way: a component's template, a template
-    passed to `Citry.render_template()`, and the fills written in them.
+    so the attribute would stay a plain attribute that does nothing in Vue.
+    Attributes in the same form for another library, such as Alpine.js's
+    `@click`, are refused too; its long form, such as `x-on:click`, is not
+    Vue syntax. Citry checks every template whose output Vue inserts this
+    way: a component's template, a template passed to
+    `Citry.render_template()`, and the fills written in them.
 
     It subclasses `TypeError`, so `except TypeError` also catches it.
 
@@ -1641,7 +1644,7 @@ def _validate_prepared_render(render: CitryRender) -> None:
                 # spans) or a custom node, which the Vue writer turns into a
                 # static block, as it does a `Markup` part from such a
                 # template's `{{ }}`. Asset insertion points are filled by the
-                # static serializer; an event publishes its assets apart.
+                # static serializer; an event publishes its assets separately.
                 continue
             elif type(part) is SimpleVueRecord:
                 # A row Rust read has no leaf until an output asks for one;

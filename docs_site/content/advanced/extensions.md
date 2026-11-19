@@ -693,10 +693,12 @@ Citry raises an error that says what to change when the HTML:
 - is not a complete fragment: each tag it opens must close inside it
   (`IncompleteStaticHtmlError`);
 - uses Vue syntax, such as `@click` or `:title`, in the template
-  with foreign spans itself. Vue would not compile it, so compute the
-  foreign values in `template_data()` instead. Citry checks a
-  component's template and the template you pass to
-  `Citry.render_template()` (`VueSyntaxInStaticHtmlError`);
+  with foreign spans itself (`VueSyntaxInStaticHtmlError`). Vue would
+  not compile it, so compute the foreign values in `template_data()`
+  instead. Citry checks a component's template and the template you
+  pass to `Citry.render_template()`. This also refuses the short form
+  of another library's attributes, such as Alpine.js's `@click`; write
+  the long form, `x-on:click`, instead;
 - has an interactive component inside one of its elements, even when a
   block tag of the other engine, such as `{% if %}`, wraps the
   component. Between two pieces of the HTML, the component itself is

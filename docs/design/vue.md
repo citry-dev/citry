@@ -2927,7 +2927,9 @@ a name:
 - A template with foreign spans whose author wrote a Vue attribute
   (`@click`, `:title`, `v-if`) on an HTML element, when its output
   reaches a Vue app (`VueSyntaxInStaticHtmlError`, a `TypeError`). The
-  attribute would reach the browser as plain text, so
+  attribute would reach the browser as a plain attribute that Vue never
+  compiles. The same shape for another library, such as Alpine.js's
+  `@click`, is refused too; its long form (`x-on:click`) passes. So
   `_refuse_vue_in_static_templates` walks the whole tree before
   assembly and reads, for each render, the template it ran
   (`CitryContext.template_record`). That covers a component's template,

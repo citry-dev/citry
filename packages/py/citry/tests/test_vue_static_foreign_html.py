@@ -654,11 +654,15 @@ class TestEventsRerender:
 
         rendered = render_prepared_direct(components["StaticLink"]())
         # A `str` subclass is not HTML a template compiled for static output
-        # wrote, so neither the page writer nor an event accepts it.
+        # wrote, so neither the page writer nor an event accepts it, even
+        # right after a plain string, where the writer joins a static block.
+        extended = CitryRender(
+            [*rendered.parts, Text("<b>x</b>")], rendered.context, frame=rendered.frame, render_target="prepared"
+        )
         with pytest.raises(TypeError, match=r"unsupported raw output: Text"):
-            _validate_prepared_render(
-                CitryRender([*rendered.parts, Text("x")], rendered.context, render_target="prepared")
-            )
+            _validate_prepared_render(extended)
+        with pytest.raises(TypeError, match=r"unsupported typed render part: Text"):
+            assemble_typed_render(extended, revision=0, tag_for_type=_tag_for_type)
 
     def test_vue_syntax_in_a_template_with_foreign_spans_is_refused_in_an_event(self) -> None:
         engine = _engine()

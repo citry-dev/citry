@@ -23,6 +23,10 @@ APIs for the citry-django integration. It still requires citry-core
   response failed with "Prepared browser asset URL differs from its
   structured dependency URL". Citry still checks such a URL like any
   other.
+- An Events `Render` no longer fails with "unsupported raw output:
+  Markup" when a `Markup` value reaches the rendered component, such as
+  slot content passed from Python. It now renders as on the first page
+  load, with the same checks.
 
 ### Added
 

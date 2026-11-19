@@ -524,9 +524,10 @@ def is_prepared_leaf_part(part: object) -> bool:
     """
     Return whether the Vue writer accepts `part` as an output piece that is not a render.
 
-    The page render and an Events `Render` both decide with this one function
-    which pieces may reach a Vue view, so an event can never refuse output
-    that the page accepts, or accept output that the page refuses.
+    The page writer, `_static_part_html` for the pieces it joins into a
+    static block, and the check an Events `Render` runs first all accept the
+    same pieces, so an event refuses no output that the page accepts, and
+    accepts none that the page refuses.
     """
     # A plain string is HTML that a template compiled for static output
     # wrote; only the exact type is that, never a subclass from elsewhere.
@@ -3124,13 +3125,13 @@ def assemble_typed_render(
                     parent_tag = element_stack[-1] if element_stack else None
                     # The same tags as the `<c-element>` body check (`FOREIGN_CONTENT_TAGS`).
                     if any(tag in FOREIGN_CONTENT_TAGS for tag in element_stack):
-                        raise UnsupportedPreparedView(
+                        raise StaticHtmlPlacementError(
                             "<c-raw> cannot sit inside <svg> or <math> in an interactive component, because Vue"
                             " inserts its HTML with the HTML parser. Move the <c-raw> block outside, or write the"
                             " SVG or MathML markup directly in the template."
                         )
                     if parent_tag in {"script", "style", "textarea", "title"}:
-                        raise UnsupportedPreparedView(
+                        raise StaticHtmlPlacementError(
                             f"<c-raw> cannot sit inside <{parent_tag}> in an interactive component, because"
                             f" <{parent_tag}> holds text, not HTML. Write the text directly inside <{parent_tag}>."
                         )
@@ -3238,13 +3239,13 @@ def assemble_typed_render(
                     parent_tag = element_stack[-1] if element_stack else None
                     # The same tags as the `<c-element>` body check (`FOREIGN_CONTENT_TAGS`).
                     if any(tag in FOREIGN_CONTENT_TAGS for tag in element_stack):
-                        raise UnsupportedPreparedView(
+                        raise StaticHtmlPlacementError(
                             "A Markup value (trusted HTML from Python) cannot sit inside <svg> or <math> in an"
                             " interactive component, because Vue inserts it with the HTML parser. Write the SVG or"
                             " MathML markup in the template, or render the whole <svg> element from the value."
                         )
                     if parent_tag in {"script", "style", "textarea", "title"}:
-                        raise UnsupportedPreparedView(
+                        raise StaticHtmlPlacementError(
                             f"A Markup value (trusted HTML from Python) cannot sit inside <{parent_tag}> in an"
                             f" interactive component, because <{parent_tag}> holds text, not HTML. Pass a plain"
                             " string instead."
@@ -5331,10 +5332,9 @@ def _ignored_contents_html(
     return "".join(out)
 
 
-@lru_cache(maxsize=256)
 # A template's source and spans do not change once it is compiled, so each
 # template is read once, not once per render that reaches a Vue app.
-@lru_cache(maxsize=1024)
+@lru_cache(maxsize=256)
 def _vue_attribute_in_template_source(source: str, spans: tuple[tuple[int, int], ...]) -> str | None:
     """
     Return the first Vue attribute an author wrote on an HTML element of a template, or ``None``.
@@ -5379,8 +5379,10 @@ def _refuse_vue_in_static_templates(render: CitryRender) -> None:
         template = current.context.template_record
         component = current.context.component
         if template is None and current.frame.is_component_root and component is not None:
-            # A render replayed from the cache keeps its component but not
-            # the compiled record, so read the class's template instead.
+            # The root frame of a render replayed from the cache keeps its
+            # component but not the compiled record, so read the class's
+            # template. (Output of a template with foreign spans is never
+            # stored in the cache, so this only checks a cached component.)
             template = load_template(type(component))
         if template is not None and id(template) not in seen_templates:
             seen_templates.add(id(template))
@@ -5410,9 +5412,10 @@ def _refuse_vue_in_static_template(template: CitryTemplate, component: object | 
     msg = (
         f"{who} has Vue syntax ({found}) in a template with foreign spans (tags that"
         " another template engine, such as Django, renders), inside an interactive component. Citry writes"
-        " such a template as static HTML that Vue does not compile, so the Vue syntax would do nothing."
-        " Compute the foreign values in template_data() so the template has no foreign spans, or move the"
-        " Vue syntax into a component whose template has none."
+        " such a template as static HTML that Vue does not compile, so the attribute would stay a plain"
+        " attribute that does nothing in Vue. Compute the foreign values in template_data() so the template"
+        " has no foreign spans, or move the Vue syntax into a component whose template has none. For a"
+        " library such as Alpine.js, write the long form (x-on:click, x-bind:class), which Vue does not read."
     )
     raise VueSyntaxInStaticHtmlError(msg, component_name=component_name, syntax=found)
 
@@ -5467,9 +5470,11 @@ def _static_part_html(part: RenderPart, flattened_render_ids: list[str]) -> str:
         if item is _END_OF_PARTS:
             pending.pop()
             continue
-        if isinstance(item, str):
+        if type(item) is str or isinstance(item, Markup):
             # A plain string is HTML that a template compiled for static
-            # output wrote, and `Markup` is trusted HTML: both are written as is.
+            # output wrote, and `Markup` is trusted HTML: both are written as
+            # is. Only these two, the same as `is_prepared_leaf_part`, so a
+            # `str` subclass from elsewhere is refused here as on its own.
             out.append(item)
         elif isinstance(item, PreparedSourceText):
             out.append(item.text)
