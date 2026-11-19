@@ -43,6 +43,7 @@ from citry._serialization_security import _ScriptSecurityMaterializer
 from citry.attrs import format_attrs
 from citry.citry_render import (
     _AFTER_RENDER_HOOKS_RENDER_ID,
+    _HYDRATING_DEPS_POSITIONS,
     _PRINT_IN_MANY_PLACES_ADVICE,
     CitryRender,
     DepsPosition,
@@ -50,11 +51,17 @@ from citry.citry_render import (
     Placeholder,
     RenderDecoration,
     RenderFrame,
+    SerializedAssets,
     SerializedRender,
     SerializedSecurity,
     SimpleVueRecord,
 )
-from citry.ext.dependencies.emission import SERIALIZATION_NOTE_KEYS
+from citry.ext.dependencies.emission import (
+    SEPARATE_ASSET_GROUPS,
+    SEPARATE_ASSETS_KEY,
+    SERIALIZATION_NOTE_KEYS,
+    separate_asset_pattern,
+)
 from citry.settings import (
     SecurityCspMode,
     SecurityJavascriptMode,
@@ -244,7 +251,7 @@ def _can_skip_vue_document_body(
     """Whether serialize may leave out the root's body content because the Vue host replaces it."""
     if (
         deps_strategy != "document"
-        or deps_position != "smart"
+        or deps_position not in _HYDRATING_DEPS_POSITIONS
         or security_csp != "off"
         or security_javascript != "allow"
         or security_script_integrity != "off"
@@ -708,8 +715,21 @@ def _serialize_render_result(
     if deps_position not in _DEPS_POSITIONS:
         msg = f"Invalid deps_position {deps_position!r}; must be one of {_DEPS_POSITIONS}"
         raise ValueError(msg)
+    if deps_position == "separate" and deps_strategy == "fragment":
+        # A fragment already writes its own loader instead of the page's
+        # tags and ignores the other positions, so returning its tags apart
+        # from the HTML would mean nothing a page could place.
+        msg = "deps_position='separate' works with deps_strategy 'document', 'simple' or 'ignore', not 'fragment'"
+        raise ValueError(msg)
     if ssr is not None and type(ssr) is not bool:
         raise TypeError("ssr must be a bool or None")
+    # With "separate", every tag the extensions write below is wrapped in
+    # comments that carry this per-call random value, so the tags can be cut
+    # out after the security checks have read the whole page. Data in the
+    # page cannot guess the value, so it cannot forge a wrapper.
+    separate_token = token_hex(16) if deps_position == "separate" else None
+    if separate_token is not None:
+        root.context.extra[SEPARATE_ASSETS_KEY] = separate_token
     owner = (
         root.owner_citry
         if root.owner_citry is not None
@@ -766,7 +786,7 @@ def _serialize_render_result(
         effective_ssr
         and vue_required
         and deps_strategy == "document"
-        and deps_position == "smart"
+        and deps_position in _HYDRATING_DEPS_POSITIONS
         and session.security_csp == "off"
         and session.security_javascript == "allow"
         and session._script_security is None
@@ -782,7 +802,7 @@ def _serialize_render_result(
             page_reason = "ssr-disabled"
         elif deps_strategy != "document" or owner is None:
             page_reason = "not-a-document"
-        elif deps_position != "smart":
+        elif deps_position not in _HYDRATING_DEPS_POSITIONS:
             page_reason = "deps-position"
         elif early_selected_tree is None or early_selected_tree.error is not None:
             page_reason = "compile-error"
@@ -1145,7 +1165,48 @@ def _serialize_render_result(
     if session._script_security is not None:
         html = session._script_security.finalize(html)
 
-    return SerializedRender(html=html, security=session.freeze())
+    if separate_token is None:
+        return SerializedRender(html=html, security=session.freeze())
+    html, groups = _cut_separate_assets(html, separate_token)
+    return SerializedRender(
+        html=html,
+        security=session.freeze(),
+        runtime_assets=groups["runtime"],
+        app_assets=groups["app"],
+        component_assets=groups["component"],
+    )
+
+
+def _cut_separate_assets(html: str, token: str) -> tuple[str, dict[str, SerializedAssets]]:
+    """
+    Remove the wrapped asset tags from the finished page and group them.
+
+    The tags stayed in the page until now, so the nonce, the integrity
+    attributes and the CSP and JavaScript checks treated them exactly as
+    the tags ``"smart"`` leaves in place. Cutting them out last keeps that.
+    """
+    found: dict[tuple[str, str], list[str]] = {}
+
+    def take(match: re.Match[str]) -> str:
+        found.setdefault((match[1], match[2]), []).append(match[3])
+        return ""
+
+    html = separate_asset_pattern(token).sub(take, html)
+    # A wrapper left behind means an extension hook moved, split or edited
+    # a tag, so the groups would not match what the checks approved.
+    if token in html:
+        raise RuntimeError(
+            "An extension's on_serialize hook changed an asset tag that deps_position='separate' returns. "
+            "Change dependency tags through on_dependencies instead."
+        )
+    groups: dict[str, SerializedAssets] = {
+        group: SerializedAssets(
+            css=tuple(found.get((group, "css"), ())),
+            js=tuple(found.get((group, "js"), ())),
+        )
+        for group in SEPARATE_ASSET_GROUPS
+    }
+    return html, groups
 
 
 def _validate_csp_nonce(value: str | None) -> str | None:

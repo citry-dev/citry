@@ -64,6 +64,14 @@ VUE_RUNTIME_REQUIRED_KEY = "vue_runtime_required"
 _VUE_RUNTIME_SCRIPT_KEY = "_citry_vue_managed_runtime_script"
 VUE_FRAGMENT_MOUNT_KEY = "vue_fragment_mount"
 VUE_DEPENDENCIES_PREPARED_KEY = "vue_dependencies_prepared"
+# Set by serialize for deps_position="separate": the per-call random value in
+# the comments that wrap each tag, so the serializer can cut the tags out of
+# the finished page and return them grouped (see mark_separate_asset).
+SEPARATE_ASSETS_KEY = "_citry_separate_assets"
+# The groups deps_position="separate" returns, as SerializedRender fields
+# named "<group>_assets": tags every Vue app on a page shares, tags of one
+# Vue app, and every other tag.
+SEPARATE_ASSET_GROUPS: tuple[Literal["runtime", "app", "component"], ...] = ("runtime", "app", "component")
 
 # The context.extra keys that one serialize() call writes for its own later
 # steps: the Vue serialization step and this emitter record them, and the
@@ -79,7 +87,43 @@ SERIALIZATION_NOTE_KEYS: tuple[str, ...] = (
     _VUE_RUNTIME_SCRIPT_KEY,
     VUE_FRAGMENT_MOUNT_KEY,
     "_vue_style_app_id",
+    SEPARATE_ASSETS_KEY,
 )
+
+
+def separate_assets_token(context: CitryContext) -> str | None:
+    """Return this serialize call's wrapper value when it uses deps_position='separate'."""
+    token = context.extra.get(SEPARATE_ASSETS_KEY)
+    return token if type(token) is str else None
+
+
+def mark_separate_asset(
+    token: str, group: Literal["runtime", "app", "component"], kind: Literal["css", "js"], tag: str
+) -> str:
+    """
+    Wrap one finished tag so the serializer can cut it out later.
+
+    The tag stays in the page through every later step (the Vue host
+    checks, the nonce and integrity pass, the CSP and JavaScript checks),
+    exactly where ``"smart"`` would put it, and only then is removed.
+    """
+    return f"<!--citry-asset:{token}:{group}:{kind}-->{tag}<!--/citry-asset:{token}-->"
+
+
+def separate_asset_pattern(token: str) -> re.Pattern[str]:
+    """Match one tag wrapped by mark_separate_asset with this call's value."""
+    # The value is hex, so it needs no escaping inside the pattern.
+    return re.compile(
+        rf"<!--citry-asset:{token}:(runtime|app|component):(css|js)-->(.*?)<!--/citry-asset:{token}-->",
+        re.DOTALL,
+    )
+
+
+def _style_asset_group(style: Dependency) -> Literal["app", "component"]:
+    # A stylesheet that names its Vue app belongs to that app alone: the
+    # browser runtime adopts a served link only for the app it names.
+    return "app" if "data-citry-vue-style-app" in style.attrs else "component"
+
 
 # The Placeholder keys the <c-js> / <c-css> built-ins render. The serializer
 # makes each occurrence unique by appending a counter and private
@@ -315,13 +359,36 @@ def emit_dependencies(
     else:
         ctx.context.extra.pop(_VUE_RUNTIME_SCRIPT_KEY, None)
 
-    js_html = "".join(
-        str(script.render()) if script_security is None else script_security.render(script)
-        for script in [*core_scripts, *scripts]
-    )
-    css_html = "".join(
-        str(style.render()) if script_security is None else script_security.render_style(style) for style in styles
-    )
+    token = separate_assets_token(ctx.context)
+    if token is None:
+        js_html = "".join(
+            str(script.render()) if script_security is None else script_security.render(script)
+            for script in [*core_scripts, *scripts]
+        )
+        css_html = "".join(
+            str(style.render()) if script_security is None else script_security.render_style(style) for style in styles
+        )
+    else:
+        # Only Citry's own runtime is shared by every app on the page; the
+        # hook's early scripts and the component scripts are ordinary tags.
+        js_html = "".join(
+            mark_separate_asset(
+                token,
+                "runtime" if script is managed_runtime else "component",
+                "js",
+                str(script.render()) if script_security is None else script_security.render(script),
+            )
+            for script in [*core_scripts, *scripts]
+        )
+        css_html = "".join(
+            mark_separate_asset(
+                token,
+                _style_asset_group(style),
+                "css",
+                str(style.render()) if script_security is None else script_security.render_style(style),
+            )
+            for style in styles
+        )
 
     return _place_dependency_html(
         ctx,
@@ -424,8 +491,19 @@ def _emit_without_javascript(
     styles = javascript_policy.process_dependencies(hook_ctx.styles, position="stylesheet")
 
     retained = [*early_scripts, *scripts]
-    js_html = "".join(_render_dependency(dep, script_security) for dep in retained)
-    css_html = "".join(_render_dependency(dep, script_security) for dep in styles)
+    token = separate_assets_token(ctx.context)
+    if token is None:
+        js_html = "".join(_render_dependency(dep, script_security) for dep in retained)
+        css_html = "".join(_render_dependency(dep, script_security) for dep in styles)
+    else:
+        # Without JavaScript there is no runtime and no Vue app, so every
+        # tag is an ordinary component tag.
+        js_html = "".join(
+            mark_separate_asset(token, "component", "js", _render_dependency(dep, script_security)) for dep in retained
+        )
+        css_html = "".join(
+            mark_separate_asset(token, "component", "css", _render_dependency(dep, script_security)) for dep in styles
+        )
     return _place_dependency_html(
         ctx,
         js_placeholders,
@@ -464,6 +542,8 @@ def _place_dependency_html(
     # rules.  Otherwise ``deps_position='append'`` would put the runtime
     # after ``</html>`` before VueSerializationPlan.finalize adds its own
     # definitions and bootstrap.
+    # "separate" places every tag as "smart" does; each tag is already
+    # wrapped, and serialize cuts them out once the checks have run.
     position = ctx.deps_position
     if position in ("prepend", "append") and ctx.context.extra.get(VUE_RUNTIME_REQUIRED_KEY) is True:
         position = "smart"

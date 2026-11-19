@@ -478,7 +478,7 @@ are really insertion positions. Citry implements the TODO:
 ```python
 render.serialize(
     deps_strategy="document",   # "document" | "simple" | "fragment" | "ignore"
-    deps_position="smart",      # "smart" | "prepend" | "append"   (document/simple only)
+    deps_position="smart",      # "smart" | "prepend" | "append" | "separate"   (document/simple only)
 )
 ```
 
@@ -493,6 +493,14 @@ render.serialize(
 - **`ignore`**: content unchanged.
 - **`deps_position`**: `smart` uses placeholders/default locations (7.3);
   `prepend`/`append` put the tags before/after the whole output.
+  `separate` (Experimental) places every tag as `smart` does, wrapped in
+  comments that carry a random value chosen for that one call, and cuts the
+  tags out after the nonce, integrity, CSP and JavaScript checks have read
+  the page. `SerializedRender` returns them in three groups: tags every Vue
+  app on a page shares (`runtime_assets`), tags of one Vue app
+  (`app_assets`), and the rest (`component_assets`). A wrapper an
+  `on_serialize` hook breaks raises `RuntimeError`; `fragment` refuses the
+  position with `ValueError`, and `ignore` returns empty groups.
 
 The call-local `security_javascript` policy is a ceiling over these strategies.
 `warn` keeps their exact output, `omit` removes executable dependencies and

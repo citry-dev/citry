@@ -3974,7 +3974,14 @@ def _stable_owner(render_id: str | None, owners: Mapping[str, str]) -> str | Non
         return None
     owner = owners.get(render_id)
     if owner is None:
-        raise UnsupportedPreparedView("ownership record refers to an unprepared occurrence")
+        # Every component the serialized render holds is prepared, so a
+        # missing owner wrote slot content from outside that render: the
+        # render is a child serialized on its own, and Vue cannot give the
+        # slot content an owner inside the new app.
+        raise UnsupportedPreparedView(
+            "This render holds slot content that a component outside it wrote, so it cannot be "
+            "serialized on its own as a Vue app. Serialize the component that wrote the slot content instead."
+        )
     return owner
 
 

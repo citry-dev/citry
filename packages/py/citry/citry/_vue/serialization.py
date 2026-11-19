@@ -11,7 +11,7 @@ from functools import cache
 from html import escape
 from pathlib import Path
 from secrets import token_hex
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 from urllib.parse import urlsplit
 
 from citry import _output_policy
@@ -22,7 +22,7 @@ from citry._vue import native_render as _native_render
 from citry._vue.capture import PreparedElementOpen
 from citry._vue.document import typed_document_shell
 from citry.attrs import format_attrs
-from citry.citry_render import CitryRender, SimpleVueRecord, simple_vue_called_components
+from citry.citry_render import _HYDRATING_DEPS_POSITIONS, CitryRender, SimpleVueRecord, simple_vue_called_components
 from citry.ext.dependencies.extension import DependenciesExtension
 from citry.ext.dependencies.scripts import has_component_asset
 from citry.ext.dependencies.types import DependencyRecord, Script, Style
@@ -214,6 +214,10 @@ def _manifest_script_preloads(manifest: dict[str, object]) -> tuple[_ScriptPrelo
 
 
 def _render_script_preloads(preloads: tuple[_ScriptPreload, ...], nonce: str | None) -> str:
+    return "".join(_render_script_preload_tags(preloads, nonce))
+
+
+def _render_script_preload_tags(preloads: tuple[_ScriptPreload, ...], nonce: str | None) -> list[str]:
     rendered: list[str] = []
     seen: set[tuple[object, ...]] = set()
     for preload in preloads:
@@ -231,7 +235,7 @@ def _render_script_preloads(preloads: tuple[_ScriptPreload, ...], nonce: str | N
             attrs["nonce"] = nonce
         attrs_text = str(format_attrs(attrs))
         rendered.append(f"<link {attrs_text}/>")
-    return "".join(rendered)
+    return rendered
 
 
 def _insert_script_preloads(html: str, content: str) -> str:
@@ -599,6 +603,15 @@ class VueSerializationPlan:
     _allow_structural_host_validation: bool = False
     # The host carries Citry's ordinary server HTML for Vue to replace.
     _server_html: bool = False
+    # For deps_position="separate": the ids of the scripts in `scripts` that
+    # belong to this app alone (its data block and start script). Every other
+    # script here is Citry's own code that each app on the page shares: the
+    # runtime, plugin scripts, the development check, and, without mounted
+    # routes, the inline component code the runtime loads.
+    _app_script_ids: frozenset[int] = frozenset()
+
+    def _script_asset_group(self, script: object) -> Literal["runtime", "app"]:
+        return "app" if id(script) in self._app_script_ids else "runtime"
 
     def _has_exact_owned_host(self, hooked_html: str) -> bool:
         hooks = self._hydration_hooks
@@ -703,20 +716,49 @@ class VueSerializationPlan:
         if self.javascript_policy is not None:
             scripts = self.javascript_policy.process_dependencies(scripts, position="Vue bootstrap")
             styles = self.javascript_policy.process_dependencies(styles, position="Vue extension stylesheet")
-        rendered_styles = "".join(
-            str(item.render()) if self.script_security is None else self.script_security.render_style(item)
-            for item in styles
-        )
-        rendered = "".join(
-            str(item.render()) if self.script_security is None else self.script_security.render(item)
-            for item in scripts
-        )
         # Keep the same default placement contract as the ordinary dependency
         # emitter.  Appending the assets after a complete document produces
         # technically invalid HTML and can make the browser execute the
         # bootstrap only after it has closed ``</html>``.  The helper also
         # preserves the established prepend/append fallback for fragments.
-        from citry.ext.dependencies.emission import _insert_default  # noqa: PLC0415
+        from citry.ext.dependencies.emission import (  # noqa: PLC0415
+            _insert_default,
+            _style_asset_group,
+            mark_separate_asset,
+            separate_assets_token,
+        )
+
+        token = separate_assets_token(self.render_context)
+        if token is None:
+            rendered_styles = "".join(
+                str(item.render()) if self.script_security is None else self.script_security.render_style(item)
+                for item in styles
+            )
+            rendered = "".join(
+                str(item.render()) if self.script_security is None else self.script_security.render(item)
+                for item in scripts
+            )
+        else:
+            # Each tag is wrapped with its group so serialize can hand it
+            # back apart from the HTML once the security checks have run.
+            rendered_styles = "".join(
+                mark_separate_asset(
+                    token,
+                    _style_asset_group(item),
+                    "css",
+                    str(item.render()) if self.script_security is None else self.script_security.render_style(item),
+                )
+                for item in styles
+            )
+            rendered = "".join(
+                mark_separate_asset(
+                    token,
+                    self._script_asset_group(item),
+                    "js",
+                    str(item.render()) if self.script_security is None else self.script_security.render(item),
+                )
+                for item in scripts
+            )
 
         if rendered_styles:
             hooked_html = _insert_default(hooked_html, rendered_styles, kind="css")
@@ -769,11 +811,19 @@ class VueSerializationPlan:
             ):
                 runtime_preloads = (_ScriptPreload(hint_url, integrity, tuple(runtime_attrs.items())),)
             candidates = (*runtime_preloads, *self.initial_script_preloads)
-            preload_html = _render_script_preloads(
-                candidates,
-                None if self.script_security is None else self.script_security.csp_nonce,
-            )
-            hooked_html = _insert_script_preloads(hooked_html, preload_html)
+            preload_nonce = None if self.script_security is None else self.script_security.csp_nonce
+            if token is None:
+                hooked_html = _insert_script_preloads(hooked_html, _render_script_preloads(candidates, preload_nonce))
+            else:
+                # The page that receives the separate tags writes its own
+                # <head>, so the hints go with the runtime even when this
+                # render has no head to put them in.
+                preload_html = "".join(
+                    mark_separate_asset(token, "runtime", "css", tag)
+                    for tag in _render_script_preload_tags(candidates, preload_nonce)
+                )
+                if preload_html:
+                    hooked_html = _insert_default(hooked_html, preload_html, kind="css")
         return hooked_html
 
 
@@ -1281,7 +1331,7 @@ def prepare_vue_serialization(
     if (
         hydration_candidate
         and ctx.deps_strategy == "document"
-        and ctx.deps_position == "smart"
+        and ctx.deps_position in _HYDRATING_DEPS_POSITIONS
         and _security_csp == "off"
         and security_javascript == "allow"
         and script_security is None
@@ -1352,13 +1402,14 @@ def prepare_vue_serialization(
     # The runtime is the Dependencies extension's file at its hashed URL, so
     # the browser stores one copy whichever extension links it.
     runtime_resource = _runtime_resource(ctx.citry)
+    plugin_scripts = [cast("Any", plugin).script for plugin in browser_plugins.values()]
     if mounted:
         runtime = Script(kind="core", url=runtime_resource.url)
         runtime._owned_resource = runtime_resource
         scripts.append(runtime)
         # The runtime adds the manifest's scripts only once the app starts, so plugin scripts
         # written here run before every component script.
-        scripts.extend(cast("Any", plugin).script for plugin in browser_plugins.values())
+        scripts.extend(plugin_scripts)
     else:
         scripts.append(Script(kind="core", content=_runtime_js()))
         for digest in dict.fromkeys(item["sha256"] for item in manifest["definitions"]):
@@ -1368,7 +1419,7 @@ def prepare_vue_serialization(
             scripts.append(Script(kind="core", content=bundle.decode()))
         # Browser plugin scripts run after Citry's runtime and the definition bundles and before
         # the manifest's scripts, which is where they fall on a mounted page too.
-        scripts.extend(cast("Any", plugin).script for plugin in browser_plugins.values())
+        scripts.extend(plugin_scripts)
         from citry._vue.events import style_asset  # noqa: PLC0415
 
         # Standalone HTML has no asset routes. Materialize every prepared
@@ -1519,7 +1570,7 @@ def prepare_vue_serialization(
     allow_structural_host_validation = (
         hydration_html is not None
         and ctx.deps_strategy == "document"
-        and ctx.deps_position == "smart"
+        and ctx.deps_position in _HYDRATING_DEPS_POSITIONS
         and _security_csp == "off"
         and script_security is None
         and javascript_policy is None
@@ -1545,4 +1596,5 @@ def prepare_vue_serialization(
             ((configuration_block, serialized), (start_script, cast("str", start_script.content))) if hydrate else None
         ),
         _allow_structural_host_validation=allow_structural_host_validation,
+        _app_script_ids=frozenset((id(configuration_block), id(start_script))),
     )

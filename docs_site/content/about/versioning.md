@@ -321,3 +321,7 @@ The release notes say when this list changes. Experimental now:
   `extensions_defaults["events"]`, and its `RenderInputs` type
   (request values for `Render` actions)
 - `RenderFrame` and `CitryRender.frame`
+- returning asset tags apart from the HTML: the `"separate"` value of
+  `DepsPosition`, `SerializedAssets`, the `runtime_assets`,
+  `app_assets` and `component_assets` fields of `SerializedRender`, and
+  `CitryRender.needs_browser_runtime()`
