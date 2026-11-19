@@ -49,7 +49,15 @@
 		"fluent",
 		"i18n",
 		"templates",
-		"components"
+		"components",
+		"django",
+		"fastapi",
+		"flask",
+		"vue",
+		"language server",
+		"lsp",
+		"jinja",
+		"python templates"
 	],
 	"icon": "images/icon.png",
 	"repository": {
