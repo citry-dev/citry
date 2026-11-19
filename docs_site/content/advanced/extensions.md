@@ -690,20 +690,30 @@ read a `Markup` value.
 
 Citry raises an error that says what to change when the HTML:
 
-- is not a complete fragment: each tag it opens must close inside it;
+- is not a complete fragment: each tag it opens must close inside it
+  (`IncompleteStaticHtmlError`);
 - uses Vue syntax, such as `@click` or `:title`, in the template
   with foreign spans itself. Vue would not compile it, so compute the
-  foreign values in `template_data()` instead;
-- has an interactive component inside one of its elements. Between two
-  pieces of the HTML, the component itself is fine, but Vue cannot place
-  it inside an element that it does not compile. Write those elements in
-  the Citry template, using `<c-if>` and `<c-for>` for conditions and
-  loops;
+  foreign values in `template_data()` instead. Citry checks a
+  component's template and the template you pass to
+  `Citry.render_template()` (`VueSyntaxInStaticHtmlError`);
+- has an interactive component inside one of its elements, even when a
+  block tag of the other engine, such as `{% if %}`, wraps the
+  component. Between two pieces of the HTML, the component itself is
+  fine, but Vue cannot place it inside an element that it does not
+  compile. Write those elements in the Citry template, using `<c-if>`
+  and `<c-for>` for conditions and loops (`VueInsideStaticHtmlError`);
 - holds a `<script>`, which would run only when a page that Vue
   hydrates first loads, never after Vue inserts the block again, or a
-  `<noscript>`;
+  `<noscript>` (`ScriptInStaticHtmlError`);
 - sits inside `<svg>`, `<math>`, or an element that holds only text,
-  such as `<textarea>`.
+  such as `<textarea>` (`StaticHtmlPlacementError`).
+
+To handle these errors in code, catch them by type rather than by
+their message, which may change. They all subclass
+[`StaticHtmlError`][citry.StaticHtmlError], and each one also subclasses
+the `ValueError` or `TypeError` that Citry raised before they had
+names. These classes are experimental.
 
 ## Walk deep node lists
 

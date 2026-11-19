@@ -308,6 +308,11 @@ The release notes say when this list changes. Experimental now:
     - classes starting with `Foreign` or `OnTemplateForeign`;
     - `CompiledBody`, `render_compiled_body()`,
       `collect_compiled_body_fills()`
+    - the errors Citry raises when it cannot put such an engine's
+      output inside an interactive component: `StaticHtmlError` and
+      its subclasses `IncompleteStaticHtmlError`,
+      `VueInsideStaticHtmlError`, `ScriptInStaticHtmlError`,
+      `VueSyntaxInStaticHtmlError` and `StaticHtmlPlacementError`
 - component previews (`citry.ext.preview`)
 - the `"payload"` render cache mode, with
   `Extension.export_render_cache()` and `Extension.stage_render_cache()`

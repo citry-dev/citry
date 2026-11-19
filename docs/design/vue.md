@@ -2896,26 +2896,44 @@ because an Events `Render` finds a mark by its occurrence.
 
 On an Events `Render`, the component renders under `vue_render_active()`.
 The renderer compiles a template with foreign spans for static output
-there too, and keeps plain string parts, so the same writer handles them.
+there too, and keeps plain string parts and the `Markup` part each `{{ }}`
+of such a template writes, so the same writer handles them. Before
+assembly, `_validate_prepared_render` checks the event's tree with the
+writer's own `is_prepared_leaf_part`, the function the writer also uses
+to decide which parts it accepts, so an event accepts exactly the parts
+the page accepts.
 A caller's fill is not part of such a render, as for any caller fill (see
 "A Render that replaces components a caller filled in").
 
 Error modes. Each refusal raises while the page or the `Render` is
-serialized:
+serialized, as a subclass of the public, experimental `StaticHtmlError`
+that also subclasses the built-in type each refusal raised before it had
+a name:
 
 - A run that is not a complete fragment: `reject_cross_boundary_html`
-  reads it as the browser's parser does. When the run stops at a part
-  that needs Vue, the message says that a component sits inside an
-  element of the HTML, because Vue cannot place a component inside a
-  static block.
+  reads it as the browser's parser does (`IncompleteStaticHtmlError`, a
+  `ValueError`). When the run stops at a part that needs Vue, the
+  message says that a component sits inside an element of the HTML,
+  because Vue cannot place a component inside a static block
+  (`VueInsideStaticHtmlError`, a `ValueError`). When a render that is not
+  a component holds that component, such as a Django `{% if %}` block or
+  a `<c-for>` loop, `_component_needing_vue` finds the component inside
+  with the test `_static_part_html` applies, so the message names it.
 - A run holding `<script>` (the browser never runs a script inserted this
-  way) or `<noscript>` (Chromium and WebKit build its contents as markup).
-- A run inside `<svg>`, `<math>`, or a text-only element.
+  way) or `<noscript>` (Chromium and WebKit build its contents as markup)
+  (`ScriptInStaticHtmlError`, a `ValueError`).
+- A run inside `<svg>`, `<math>`, or a text-only element
+  (`StaticHtmlPlacementError`, a `TypeError`).
 - A template with foreign spans whose author wrote a Vue attribute
   (`@click`, `:title`, `v-if`) on an HTML element, when its output
-  reaches a Vue app, either as the body of a run or as a static component
-  inside one. The attribute would reach the browser as plain text, so the
-  writer reads the template source with the foreign spans blanked
+  reaches a Vue app (`VueSyntaxInStaticHtmlError`, a `TypeError`). The
+  attribute would reach the browser as plain text, so
+  `_refuse_vue_in_static_templates` walks the whole tree before
+  assembly and reads, for each render, the template it ran
+  (`CitryContext.template_record`). That covers a component's template,
+  a transparent component's template, and a template passed to
+  `Citry.render_template()`, which its private root component does not
+  own. It reads the source with the foreign spans blanked
   (`_vue_attribute_in_template_source`), which tells the author's
   attributes apart from what the other engine wrote. Events bindings in
   such a template are already refused when it compiles.
