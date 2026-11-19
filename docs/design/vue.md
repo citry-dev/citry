@@ -2862,6 +2862,81 @@ unsupported by the first adapter until it distinguishes such source from
 rendered text or HTML values. Changing compilation time does not establish
 that distinction.
 
+### HTML that Citry did not compile
+
+A template with foreign spans (tags that another engine, such as Django,
+renders) compiles for static output, so its render parts are plain
+strings of finished HTML. citry-django passes such HTML into interactive
+components, most often as a fill:
+
+```citry-html
+<c-modal title="Help">{% translate "Close" %}</c-modal>
+```
+
+The HTML may hold request values that Django escaped for HTML, which is
+not enough to make it safe as Vue template source (previous section). So
+the Vue writer never puts it in a template. When the part loop in
+`transform_parts` (`citry/_vue/direct_capture.py`) meets a plain string,
+`write_static_html_run` joins it with every following part that needs no
+Vue: more strings, `Markup`, static element parts, and static component
+renders, which `_static_part_html` writes as the static serializer does,
+root markers included. A part that needs Vue (a component for which
+`CitryRender.needs_browser_runtime()` is true, a binding, a `simple='vue'`
+record) ends the run and is walked as usual. The run then takes the
+`Markup` path: one opaque HTML record that the browser inserts with
+`createStaticVNode` and adopts when it hydrates. Text without tags becomes
+a text binding, and HTML whitespace alone is written into the template,
+where Vue drops or condenses it as it does an author's whitespace; text
+nodes at the app's root would otherwise keep the page from hydrating.
+
+A static component inside a run has no Vue occurrence. Its render id is
+mapped to the occurrence whose template holds the block, so its
+stylesheets load with that occurrence.
+
+On an Events `Render`, the component renders under `vue_render_active()`.
+The renderer compiles a template with foreign spans for static output
+there too, and keeps plain string parts, so the same writer handles them.
+A caller's fill is not part of such a render, as for any caller fill (see
+"A Render that replaces components a caller filled in").
+
+Error modes. Each refusal raises while the page or the `Render` is
+serialized:
+
+- A run that is not a complete fragment: `reject_cross_boundary_html`
+  reads it as the browser's parser does. When the run stops at a part
+  that needs Vue, the message says that a component sits inside an
+  element of the HTML, because Vue cannot place a component inside a
+  static block.
+- A run holding `<script>` (the browser never runs a script inserted this
+  way) or `<noscript>` (Chromium and WebKit build its contents as markup).
+- A run inside `<svg>`, `<math>`, or a text-only element.
+
+The record's site has origin `markup`, so the browser checks it for
+`<noscript>` again, and the settled `security_javascript` and
+`security_csp` checks read it with the other opaque records.
+
+Alternatives considered:
+
+- Treat each maximal run of plain strings as its own block, and keep
+  static components as Vue occurrences. A static component inside a
+  Django element (`<li>{% trans %}<c-icon /></li>`) would then split the
+  element across blocks and be refused.
+- Treat the whole part list as one block. A template with foreign spans
+  usually has line breaks between its tags, so a region such as
+  `<c-modal>{% trans %}</c-modal>` followed by a line break would hold an
+  interactive component in the same list, and every such region would be
+  refused.
+- Parse the strings and rebuild their elements as Vue element parts. That
+  would make Django's attribute values part of Vue definitions, which
+  assume fixed elements, and it is the rejected "wrap the Django
+  elements" design in citry-django's redesign notes.
+
+What would show this design is wrong: a common Django template that puts
+an interactive component inside an element written in Django, inside an
+interactive component. Each such case raises the refusal above, and
+counting them while migrating the citry-django test project shows how
+common it is.
+
 ## Proposed authoring model
 
 All syntax in this section is a design sketch. No new class setting is selected

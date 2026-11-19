@@ -7,7 +7,7 @@ import hashlib
 import json
 import re
 from collections import defaultdict
-from collections.abc import Callable, Generator, Mapping, Sequence
+from collections.abc import Callable, Generator, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from html import escape
 from itertools import pairwise
@@ -110,6 +110,7 @@ from .leaf_program import (
     LeafCallChildren,
     LeafProgramFragment,
     PreparedLeafProgram,
+    static_leaf_parts_with_children,
     typed_leaf_parts,
 )
 from .opaque_html import (
@@ -117,6 +118,7 @@ from .opaque_html import (
     opaque_html_record,
     reject_cross_boundary_html,
     reject_noscript_in_opaque_html,
+    reject_script_in_opaque_html,
 )
 from .prepared import (
     PreparedMarker,
@@ -1973,8 +1975,109 @@ def assemble_typed_render(
                 _append_opaque_html(output, key, "raw")
                 return close_index
 
-            # Parts before this index are a `#c-ignore` or `v-pre` element's
-            # contents, already written as one block of HTML.
+            def write_static_html_run(
+                output: _DefinitionFragment,
+                parts: Sequence[RenderPart],
+                start: int,
+                data_values: dict[str, object],
+                *,
+                at_root: bool,
+            ) -> int:
+                """
+                Write HTML that Citry did not compile as one static block; return the index after it.
+
+                A plain string part is HTML from a template compiled for
+                static output, such as one whose `{% %}` tags Django renders.
+                Vue must never read it as template source, so the string and
+                every following part that needs no Vue (more such strings,
+                `Markup`, static components) are joined and sent as data,
+                which the browser inserts as one static node. A part that
+                needs Vue ends the block and is walked as usual, so the block
+                must be a complete fragment on its own.
+                """
+                flattened_render_ids: list[str] = []
+                pieces = [cast("str", parts[start])]
+                end = start + 1
+                while end < len(parts):
+                    # Ids are kept only once the whole part joins the block.
+                    part_ids: list[str] = []
+                    try:
+                        pieces.append(_static_part_html(parts[end], part_ids))
+                    except _NeedsVue:
+                        break
+                    flattened_render_ids.extend(part_ids)
+                    end += 1
+                html = "".join(pieces)
+                if any(tag in FOREIGN_CONTENT_TAGS for tag in element_stack):
+                    raise UnsupportedPreparedView(
+                        f"{_STATIC_HTML_ORIGIN} cannot sit inside <svg> or <math> in an interactive component,"
+                        " because Vue inserts it with the HTML parser. Render the whole <svg> element in that"
+                        " HTML, or write the SVG or MathML markup in a Citry template."
+                    )
+                parent_tag = element_stack[-1] if element_stack else None
+                if parent_tag in _TEXT_ONLY_TAGS:
+                    raise UnsupportedPreparedView(
+                        f"{_STATIC_HTML_ORIGIN} cannot sit inside <{parent_tag}> in an interactive component,"
+                        f" because <{parent_tag}> holds text, not HTML. Pass the text as a value instead."
+                    )
+                if not flattened_render_ids and not html.strip(_HTML_WHITESPACE):
+                    # Whitespace alone cannot carry Vue syntax, so it is
+                    # written as template text, where Vue's compiler drops
+                    # or condenses it exactly as it does the whitespace an
+                    # author writes between two tags. A text value there
+                    # would add a text node that keeps the page from
+                    # hydrating when it sits at the app's root.
+                    output.append(html)
+                    return end
+                if "<" not in html and not flattened_render_ids:
+                    # Plain text, such as a translated word or the line
+                    # breaks between two components, becomes a text value,
+                    # as a `Markup` value without tags does.
+                    key = data_key("Text", html, (0, len(html.encode())), data_owner_id)
+                    data_values[key] = decode_character_references(html)
+                    _append_text_binding(output, key)
+                    return end
+                try:
+                    reject_cross_boundary_html(html, origin=_STATIC_HTML_ORIGIN)
+                except ValueError as error:
+                    if start == 0 and end == len(parts):
+                        raise
+                    # The block stops at a part that needs Vue, so a complete
+                    # fragment around it means that part sits inside an
+                    # element of the HTML.
+                    preview = html if len(html) <= 80 else f"{html[:77]}..."
+                    msg = (
+                        f"A component that needs Vue sits inside an element of {_STATIC_HTML_ORIGIN}, next to"
+                        f" {preview!r}. Inside an interactive component, Vue inserts that HTML as static blocks"
+                        " that it does not compile, so it cannot place a component inside one of their elements."
+                        " Write the elements around the component in a Citry template (use <c-if> and <c-for>"
+                        " for conditions and loops), or make the component its own Vue app."
+                    )
+                    raise ValueError(msg) from error
+                reject_noscript_in_opaque_html(html, origin=_STATIC_HTML_ORIGIN)
+                reject_script_in_opaque_html(html, origin=_STATIC_HTML_ORIGIN)
+                html = mark_opaque_html(html, root_markers if at_root else ())
+                # A static component inside the block has no Vue occurrence,
+                # so its stylesheets load with the component whose template
+                # holds the block.
+                for render_id in flattened_render_ids:
+                    render_to_occurrence.setdefault(render_id, definition_owner_id)
+                key = data_key("Opaque", html, (0, len(html.encode())), data_owner_id)
+                projected_data_container("opaqueHtml")
+                opaque_values = data_values.setdefault("opaqueHtml", {})
+                if type(opaque_values) is not dict:
+                    raise AssertionError("prepared opaqueHtml container changed type")
+                record = opaque_html_record(html)
+                if opaque_values.setdefault(key, record) != record:
+                    raise UnsupportedPreparedView("one prepared opaque HTML site produced conflicting bytes")
+                # "markup" makes the browser check the block again, as it
+                # checks a `Markup` value, since data can reach this HTML.
+                _append_opaque_html(output, key, "markup")
+                return end
+
+            # Parts before this index are already written as one block of
+            # HTML: a `#c-ignore` or `v-pre` element's contents, or a run of
+            # HTML that Citry did not compile.
             ignored_contents_end = 0
             # The indexes of the closes that end the `v-pre` elements this walk
             # opened and left to Vue, innermost last.
@@ -3585,7 +3688,12 @@ def assemble_typed_render(
                     continue
                 if isinstance(part, Placeholder) and part.key in {"deps:css", "deps:js"}:
                     continue
-                if part == "" and type(part) is str:
+                if type(part) is str:
+                    if part == "":
+                        continue
+                    ignored_contents_end = write_static_html_run(
+                        output, parts, part_index, data_values, at_root=project_root_markers and dom_depth == 0
+                    )
                     continue
                 raise UnsupportedPreparedView(f"unsupported typed render part: {type(part).__name__}")
             if dynamic_stack:
@@ -4554,6 +4662,14 @@ def _directive_element_label(part: PreparedElementOpen, directive: str) -> str:
 # Elements whose contents are text, where a block of HTML cannot sit.
 _TEXT_ONLY_TAGS = frozenset({"script", "style", "textarea", "title"})
 
+# The characters the HTML parser treats as whitespace between tags.
+_HTML_WHITESPACE = " \t\n\r\f"
+
+# How error messages name a block of HTML that Citry did not compile.
+_STATIC_HTML_ORIGIN = (
+    "HTML that Citry did not compile (such as the output of a template whose {% %} tags Django renders)"
+)
+
 # Elements after whose start tag the HTML parser drops one newline.
 _LEADING_NEWLINE_TAGS = frozenset({"pre", "listing"})
 
@@ -5076,6 +5192,128 @@ def _ignored_contents_html(
                 raise reject(f"content that needs Vue to render it ({type(part).__name__})")
 
     visit(parts)
+    return "".join(out)
+
+
+class _NeedsVue(Exception):
+    """Raised inside `_static_part_html` when a part needs Vue, so it cannot join a block of static HTML."""
+
+
+def _static_part_html(part: RenderPart, flattened_render_ids: list[str]) -> str:
+    """
+    Return the HTML the static serializer writes for one part that needs no Vue.
+
+    A component render inside the part keeps its root markers, as it does on a
+    static page, and its render id is appended to `flattened_render_ids`, so
+    the caller can make its stylesheets load with the block that holds it.
+
+    Raises `_NeedsVue` for anything that needs Vue to render or run: a
+    component that `CitryRender.needs_browser_runtime()` reports, a Vue or
+    Events binding, or a part this writer does not know.
+    """
+    from citry._simple_runtime import SimpleRender  # noqa: PLC0415
+
+    # The check walks the whole subtree once, so it runs only for the part
+    # the run collector asks about, not again for each nested render.
+    if isinstance(part, CitryRender) and part.needs_browser_runtime():
+        raise _NeedsVue
+    out: list[str] = []
+    # Each open component render keeps where its HTML starts in `out` and
+    # the markers its root elements get once its HTML is complete.
+    open_components: list[tuple[int, tuple[tuple[str, object], ...]]] = []
+    # Nested bodies use a stack of part iterators, so a deep template uses no
+    # more Python frames than a shallow one.
+    pending: list[Iterator[RenderPart] | None] = [iter((part,))]
+    while pending:
+        current = pending[-1]
+        if current is None:
+            # The end of a component render: mark its root elements now that
+            # its whole HTML is known.
+            pending.pop()
+            start, markers = open_components.pop()
+            html = "".join(out[start:])
+            del out[start:]
+            if markers and html:
+                try:
+                    out.append(mark_opaque_html(html, markers))
+                except ValueError as error:
+                    raise UnsupportedPreparedView(str(error)) from error
+            else:
+                out.append(html)
+            continue
+        item = next(current, _END_OF_PARTS)
+        if item is _END_OF_PARTS:
+            pending.pop()
+            continue
+        if isinstance(item, str):
+            # A plain string is HTML that a template compiled for static
+            # output wrote, and `Markup` is trusted HTML: both are written as is.
+            out.append(item)
+        elif isinstance(item, PreparedSourceText):
+            out.append(item.text)
+        elif isinstance(item, PreparedStaticRun):
+            out.append(item.html)
+        elif isinstance(item, PreparedTextValue):
+            if item.browser_binding is not None:
+                raise _NeedsVue
+            out.append(escape_to_str(item.value))
+        elif isinstance(item, (PreparedTrustedHtmlValue, PreparedVerbatimHtml)):
+            out.append(item.html)
+        elif isinstance(item, PreparedElementOpen):
+            if (
+                any(attr.origin == "source" and is_vue_directive_name(attr.name) for attr in item.attrs)
+                or item.event_bindings
+                or item.poll_bindings
+                or item.control_bindings
+                or item.browser_bindings
+                or item.runtime_event_bindings
+                or item.runtime_poll_bindings
+                or item.runtime_events_candidate
+                or is_ignored_element_open(item)
+            ):
+                raise _NeedsVue
+            rendered = format_prepared_element_attrs(item)
+            suffix = "" if not rendered else " " + " ".join(rendered)
+            ending = "/>" if item.is_void and item.is_self_closing else ">"
+            out.append(f"<{item.tag}{suffix}{ending}")
+        elif isinstance(item, (PreparedElementClose, PreparedDynamicElementClose)):
+            out.append(f"</{item.tag}>")
+        elif isinstance(item, PreparedDynamicElementOpen):
+            if (
+                item.event_bindings
+                or item.poll_bindings
+                or item.control_bindings
+                or item.runtime_event_bindings
+                or item.runtime_poll_bindings
+            ):
+                raise _NeedsVue
+            formatted = str(format_attrs(item.attrs))
+            # Match the page serializer: a selected void tag stays compact.
+            out.append(f"<{item.tag}{' ' + formatted if formatted else ''}{'/>' if item.is_void else '>'}")
+        elif isinstance(item, PreparedLeafProgram):
+            if item.fragment.browser_requirements or item.call_children is not None:
+                raise _NeedsVue
+            # With no called children a leaf writes only strings.
+            pending.append(iter(cast("list[RenderPart]", static_leaf_parts_with_children(item))))
+        elif isinstance(item, Placeholder) and item.key in {"deps:css", "deps:js"}:
+            # `<c-js />` and `<c-css />` write nothing inside a component.
+            continue
+        elif type(item) in {CitryRender, SimpleRender, DirectProjectionRender, DirectNestedTemplateRender}:
+            render = cast("CitryRender", item)
+            frame = render.frame
+            if frame.is_component_root and frame.render_id is not None:
+                # A component inside the block has no Vue occurrence of its
+                # own, so its markers are written here, as the static
+                # serializer writes them.
+                flattened_render_ids.append(frame.render_id)
+                markers = _prepared_root_markers((*frame.root_markers, *render.context._get_root_markers()))
+                open_components.append((len(out), markers))
+                pending.append(None)
+            pending.append(iter(render.parts))
+        else:
+            # A `simple='vue'` record, a call run, a decoration, or anything
+            # new: the ordinary walk knows how to write it.
+            raise _NeedsVue
     return "".join(out)
 
 

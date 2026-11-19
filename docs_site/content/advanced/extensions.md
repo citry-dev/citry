@@ -663,6 +663,42 @@ run a hook at once, Citry keeps the result of the run that finishes first,
 so a hook that returns different text on different runs makes the page
 depend on which thread finished first.
 
+## Put foreign output inside interactive components { #foreign-output-in-vue }
+
+A template with foreign spans writes finished HTML: the other engine
+renders its tags, and Citry joins the result as it is. Such HTML can sit
+inside an interactive component, a component that runs in the browser
+with Vue. A fill with Django tags, passed to a modal, is one example:
+
+```citry-html
+<c-modal title="Help">{% translate "Close" %}</c-modal>
+```
+
+Citry sends this HTML to the browser as data, and Vue inserts it as a
+block of static HTML that it never compiles. Text such as `{{ x }}` or
+an attribute such as `@click` in the HTML stays plain text or a plain
+attribute. This works when the page first renders and when an event
+handler renders the component again. Components inside the HTML that do
+not need the browser become part of the block and keep their styles.
+
+Citry trusts this HTML as it trusts a `Markup` value, so the other
+engine must escape the request values it writes, as Django does. The
+`security_csp` and `security_javascript` checks read the block as they
+read a `Markup` value.
+
+Citry raises an error that says what to change when the HTML:
+
+- is not a complete fragment: each tag it opens must close inside it;
+- has an interactive component inside one of its elements. Between two
+  pieces of the HTML, the component itself is fine, but Vue cannot place
+  it inside an element that it does not compile. Write those elements in
+  the Citry template, using `<c-if>` and `<c-for>` for conditions and
+  loops;
+- holds a `<script>`, which the browser would never run, or a
+  `<noscript>`;
+- sits inside `<svg>`, `<math>`, or an element that holds only text,
+  such as `<textarea>`.
+
 ## Walk deep node lists
 
 The `on_template_compiled` and `on_template_foreign_compiled` hooks receive
