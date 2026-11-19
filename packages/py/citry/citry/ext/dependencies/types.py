@@ -107,7 +107,11 @@ class Dependency:
     url-based dependencies."""
     url: str | None = None
     """If set, renders as ``<script src="...">`` /
-    ``<link rel="stylesheet" href="...">`` instead of an inline tag."""
+    ``<link rel="stylesheet" href="...">`` instead of an inline tag.
+
+    A ``str`` subclass, such as Django's ``SafeString``, is stored as a
+    plain ``str`` copy of its text. Citry checks the URL and escapes it
+    like any other string, so marking it safe does not skip a check."""
     attrs: dict[str, str | bool] = field(default_factory=dict)
     """Extra HTML attributes (``True`` renders a bare boolean attribute)."""
     kind: DependencyKind = "extra"
@@ -126,6 +130,20 @@ class Dependency:
     # adds their hash to the tag, so the browser refuses another file at that URL.
     # An init field, because `dataclasses.replace` drops a field that is not one,
     # and an extension that rebuilt a tag that way would lose the hash unnoticed.
+
+    def __setattr__(self, name: str, value: object) -> None:
+        # Every later check of the URL (the javascript: URL check, the
+        # serialization comparison with the rendered src, the integrity
+        # pinning) needs the text the browser gets. A str subclass can
+        # override __eq__, startswith, lower or __html__ and answer each
+        # check differently, so keep only a plain copy of its text. Doing it
+        # here rather than in __post_init__ also covers dataclasses.replace()
+        # and a hook that assigns a new url later.
+        if name == "url" and isinstance(value, str) and type(value) is not str:
+            # str.__str__ copies the characters without calling any method
+            # the subclass defines, unlike str(value).
+            value = str.__str__(value)
+        super().__setattr__(name, value)
 
     def _render(self) -> tuple[str, dict[str, str | bool], str]:
         """Return ``(tag_name, all_attrs, content)``. Implemented by subclasses."""

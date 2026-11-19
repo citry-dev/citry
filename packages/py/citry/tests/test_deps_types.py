@@ -1,8 +1,12 @@
 """Tests for the ``Script``/``Style`` dependency objects (``citry/ext/dependencies/types.py``)."""
 
+from dataclasses import replace
+
 import pytest
 
 from citry import Citry, Component
+from citry._javascript_policy import _JavascriptPolicy
+from citry._serialization_security import _browser_loader_descriptor
 from citry.ext.dependencies import Script, Style
 
 
@@ -138,3 +142,81 @@ class TestScriptStyleAsDependenciesEntries:
         assert deps.js[0] is cdn_script
         assert deps.css["print"] == (print_style,)
         assert deps.css["print"][0] is print_style
+
+
+class _HidingUrl(str):
+    """A str subclass that answers every check as if it held a harmless URL."""
+
+    __slots__ = ()
+
+    def __eq__(self, other: object) -> bool:
+        return True
+
+    def __hash__(self) -> int:
+        return hash("/safe.css")
+
+    def __str__(self) -> str:
+        return "/safe.css"
+
+    def __html__(self) -> str:
+        return "/safe.css"
+
+    def startswith(self, *_args: object, **_kwargs: object) -> bool:
+        return False
+
+    def lower(self) -> str:
+        return "/safe.css"
+
+
+class TestUrlStrSubclass:
+    """A ``str`` subclass URL is stored as its plain text, so every check reads that text."""
+
+    @pytest.mark.parametrize("dependency_cls", [Script, Style])
+    def test_django_safestring_url_serializes(self, dependency_cls):
+        # django-compressor passes its output URL as a SafeString.
+        safestring = pytest.importorskip("django.utils.safestring")
+        dependency = dependency_cls(url=safestring.SafeString("/static/CACHE/out.js"))
+
+        assert type(dependency.url) is str
+        descriptor = _browser_loader_descriptor(dependency)
+        assert descriptor["kind"] == "external"
+        assert descriptor["url"] == "/static/CACHE/out.js"
+        assert type(descriptor["url"]) is str
+
+    def test_subclass_url_is_plain_after_replace_and_assignment(self):
+        script = replace(Script(url="/a.js"), url=_HidingUrl("/b.js"))
+        assert type(script.url) is str
+        assert script.url == "/b.js"
+
+        script.url = _HidingUrl("/c.js")
+        assert type(script.url) is str
+        assert script.url == "/c.js"
+
+    def test_subclass_cannot_hide_a_javascript_url_from_the_policy(self):
+        # Without the plain copy, __html__ would show the policy "/safe.css".
+        policy = _JavascriptPolicy("forbid")
+        style = Style(url=_HidingUrl("javascript:alert(1)"))
+
+        assert policy.process_dependencies([style], position="test") == []
+        with pytest.raises(ValueError, match="a javascript: URL"):
+            policy.report()
+
+    def test_subclass_url_renders_its_own_text(self):
+        script = Script(url=_HidingUrl("/real.js"))
+        assert script.render() == '<script src="/real.js"></script>'
+
+    def test_url_mismatch_is_still_refused(self, monkeypatch):
+        script = Script(url="/static/a.js")
+        monkeypatch.setattr(Script, "_render", lambda _self: ("script", {"src": "/static/other.js"}, ""))
+
+        with pytest.raises(ValueError, match="URL differs from its structured dependency URL"):
+            _browser_loader_descriptor(script)
+
+    def test_subclass_url_that_skips_the_plain_copy_is_still_refused(self):
+        # object.__setattr__ skips Dependency.__setattr__; the exact-type
+        # check at serialization still refuses the subclass that gets through.
+        script = Script(url="/static/a.js")
+        object.__setattr__(script, "url", _HidingUrl("/static/a.js"))
+
+        with pytest.raises(ValueError, match="URL differs from its structured dependency URL"):
+            _browser_loader_descriptor(script)
