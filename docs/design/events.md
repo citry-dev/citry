@@ -1389,14 +1389,17 @@ for every component on it: when a call's answer is an `html-fragment/1`
 Render, the dispatcher calls it with the call's `EventRequest` and
 serializes the fragment with the nonce it returns, so the page's runtime
 starts the fragment. The render inputs function (`_render_inputs`,
-Experimental) is engine-wide for the same reason: when Citry renders a
-component for a call's `Render`, the dispatcher calls it once with the
-call's `EventRequest`, after the handler, and passes the
-`template_globals` and `provides` it returns to every such render in the
-call. A render the handler built itself keeps its own inputs. A setting
-that is not a plain function fails at engine construction; a function
-that raises or returns another shape fails the call with
-`handler_error`. Engine-wide registries
+Experimental) is an ordinary per-component name: a component's `Events`
+class may assign one, which wins over `extensions_defaults["events"]`,
+and `None` turns the app-wide one off. When Citry renders a component for
+a call's `Render`, the dispatcher calls the calling component's function
+once with the call's `EventRequest`, after the handler, and passes the
+`RenderInputs` it returns (`template_globals` and `provides`) to
+`render()` for every such render in the call. A render the handler built
+itself keeps its own inputs. A value that is not a function or `None`, an
+`async def` function, or a method written in the `Events` class fails at
+engine construction or class definition; a function that raises or
+returns another shape fails the call with `handler_error`. Engine-wide registries
 and secrets are `CitrySettings` fields: `secret` (7.1),
 `event_result_resolvers` (result resolvers, 6.2), and
 `event_payload_codecs` (payload codecs, 6.2).

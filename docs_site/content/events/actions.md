@@ -138,15 +138,40 @@ A component that a handler returns gets neither, because no view renders
 it. A template that reads `user` then fails the call with
 `handler_error`.
 
-One app-wide function can supply these values for every `Render`. Set
-it as `_render_inputs` in `extensions_defaults["events"]` (the leading
-`_` is part of the name, as in the other Events options). Citry calls it
-with the call's [`EventRequest`][citry.ext.events.EventRequest], the same
-object a handler gets as its `request` parameter, and passes what it
-returns to [`render()`][citry.CitryElement.render]:
+A `_render_inputs` function fixes this. It returns the keyword
+arguments Citry passes to `.render()` for each component a `Render`
+renders: the same `template_globals=` and `provides=` you pass when you
+render a component yourself. When the function returns this:
 
 ```python
-def render_inputs(request):
+{
+    "template_globals": {"user": user},
+    "provides": {"locale": user.locale},
+}
+```
+
+Citry renders the returned component as if you had written:
+
+```python
+TaskList(tasks=tasks).render(
+    template_globals={"user": user},
+    provides={"locale": user.locale},
+)
+```
+
+Citry calls the function with the call's
+[`EventRequest`][citry.ext.events.EventRequest], the same object a
+handler gets as its `request` parameter. Type its return value as
+[`RenderInputs`][citry.ext.events.RenderInputs], so your type checker
+checks the keys and their types. Set it for every component in
+`extensions_defaults["events"]` (the leading `_` is part of the name,
+as in the other Events options):
+
+```python
+from citry.ext.events import EventRequest, RenderInputs
+
+
+def render_inputs(request: EventRequest) -> RenderInputs:
     # On Django, request.native is the HttpRequest.
     user = request.native.user
     return {
@@ -160,21 +185,38 @@ citry = Citry(
 )
 ```
 
+Or set it for one component on its `Events` class. Define the function
+outside the class and assign it, as you would assign `_csrf`:
+
+```python
+class TaskList(Component):
+    class Events:
+        _render_inputs = render_inputs
+
+        def add(self, data: TaskIn):
+            ...
+```
+
+The component's own value wins over the one in `extensions_defaults`.
+Set `_render_inputs = None` on a component to turn the app-wide function
+off for it.
+
 !!! warning "Experimental"
 
-    This setting is experimental. It may change in a minor release
-    without a deprecation period.
+    `_render_inputs` and `RenderInputs` are experimental. They may change
+    in a minor release without a deprecation period.
 
-Return either key or both. They mean what they mean in `render()`. When
-a name is set in several places, a component's `template_data()` wins
-over these globals, and these globals win over the Citry instance's
-`template_globals`.
+Return either key or both. When a name is set in several places, a
+component's `template_data()` wins over these globals, and these globals
+win over the Citry instance's `template_globals`.
 
 Citry calls the function once for each event call that returns a
 component, after the handler has run (or after the extension that
-answered the call). Every `Render` in that call, including a
-[`<c-mark>` update](#update-one-part-of-the-page), gets the same values.
-Citry does not call it:
+answered the call). It uses the function of the component whose handler
+ran, and every `Render` in that call gets the same values. That includes
+a [`<c-mark>` update](#update-one-part-of-the-page) and a
+[different component](#swap-in-a-different-component) the handler
+returns. Citry does not call it:
 
 - for a component the handler renders itself, such as
   `return Card(...).render(template_globals=...)`, which keeps the
@@ -200,10 +242,11 @@ function on the event loop, where it also renders, even when the handler
 is a plain `def`. A slow function delays every other request on that
 server, so do not wait on slow I/O or query a database in it.
 
-Set it only in `extensions_defaults["events"]`. A component's `Events`
-class that sets it raises `ValueError` when the class is defined, and
-`Citry(...)` raises `ValueError` when the setting is not callable or is
-an `async def` function.
+`Citry(...)` raises `ValueError` when the app-wide value is not callable
+or is an `async def` function. A component's `Events` class raises
+`ValueError` when it is defined if its value is neither a function nor
+`None`, is an `async def` function, or is a method written inside the
+class.
 
 The call fails with the error code `handler_error` when:
 

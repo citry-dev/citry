@@ -43,10 +43,10 @@ INJECTABLE_PARAMS = ("data", "state", "context", "request", "event")
 # settings-only and a component declaring one fails at class definition.
 # ``_csp_nonce`` (a function that returns the CSP nonce of the page that sent
 # a call) is engine-wide too, because a page's nonce is one fact for every
-# component on it. So is ``_render_inputs`` (a function that returns the
-# template globals and provided values for every Render a call performs),
-# because the request values it reads, such as the user and the locale, are
-# the same for every component an app renders.
+# component on it. ``_render_inputs`` (a function that returns the keyword
+# arguments Citry passes to ``render()`` for every Render a call performs) is
+# an ordinary per-component name: the calling component's value wins over
+# ``extensions_defaults["events"]``.
 CONFIG_NAMES = (
     "_guard",
     "_context",
@@ -63,9 +63,7 @@ CONFIG_NAMES = (
 
 # The engine-wide config names, which only ``extensions_defaults["events"]``
 # may set.
-ENGINE_CONFIG_NAMES = frozenset(
-    {"_max_body_bytes", "_max_form_fields", "_csrf_field_names", "_csp_nonce", "_render_inputs"}
-)
+ENGINE_CONFIG_NAMES = frozenset({"_max_body_bytes", "_max_form_fields", "_csrf_field_names", "_csp_nonce"})
 
 # The hidden field Django's ``{% csrf_token %}`` and its own forms write. A
 # page that keeps it inside a form sending a server event would otherwise
@@ -228,6 +226,20 @@ def validate_csrf_value(source: str, value: Any) -> str | bool | Callable[..., A
     if value == "auto" or value is False or callable(value):
         return value
     msg = f'{source} must be "auto", False, or a callable; got {value!r}.'
+    raise ValueError(msg)
+
+
+def validate_render_inputs_value(source: str, value: Any) -> Callable[..., Any] | None:
+    """Check a ``_render_inputs`` value: a plain (not async) function, or None."""
+    # The dispatcher calls the function without awaiting it, so an async
+    # function would hand back a coroutine instead of the inputs.
+    if value is None or (callable(value) and not inspect.iscoroutinefunction(value)):
+        return value
+    msg = (
+        f"{source} must be a plain (not async) function that takes the call's EventRequest"
+        " and returns a dict with the optional keys 'template_globals' and 'provides', or None;"
+        f" got {value!r}."
+    )
     raise ValueError(msg)
 
 

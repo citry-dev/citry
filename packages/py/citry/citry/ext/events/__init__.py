@@ -44,7 +44,7 @@ The optional typed base for ``Events`` classes is exported at the root as
 
 from citry.ext.events import actions
 from citry.ext.events.csrf import X_CITRY_EVENTS_HEADER
-from citry.ext.events.dispatcher import CallEvent, EventRequest, EventsDispatcher, TransportContext
+from citry.ext.events.dispatcher import CallEvent, EventRequest, EventsDispatcher, RenderInputs, TransportContext
 from citry.ext.events.errors import EventError
 from citry.ext.events.extension import EventsExtension
 from citry.ext.events.files import UploadedFile
@@ -59,6 +59,7 @@ __all__ = [
     "EventRequest",
     "EventsDispatcher",
     "EventsExtension",
+    "RenderInputs",
     "TransportContext",
     "UploadedFile",
     "ViewEvents",

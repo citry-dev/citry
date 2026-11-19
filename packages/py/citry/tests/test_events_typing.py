@@ -25,9 +25,9 @@ from typing import Any
 from typing_extensions import assert_type
 
 import citry
-from citry import CacheConfig, Citry, Component, DependenciesConfig, I18n, RouteRequest
+from citry import CacheConfig, Citry, CitryElement, Component, DependenciesConfig, I18n, RouteRequest
 from citry import Events as EventsBase
-from citry.ext.events import EventsExtension
+from citry.ext.events import EventRequest, EventsExtension, RenderInputs
 
 app = Citry()
 
@@ -79,6 +79,41 @@ class Plain(Component):
             assert_type(self.state, None)
 
 
+def _profile_inputs(request: EventRequest) -> RenderInputs:
+    # A dict literal is checked against RenderInputs: an unknown key or a
+    # non-mapping value is a checker error.
+    return {"template_globals": {"method": request.method}, "provides": {"locale": "en-GB"}}
+
+
+class Profile(Component):
+    citry = app
+
+    class Events(EventsBase):
+        # Checked against `Callable[[EventRequest], RenderInputs] | None`, so
+        # a function with another signature is a checker error.
+        _render_inputs = _profile_inputs
+
+        def ping(self) -> None:
+            return None
+
+
+class Unconfigured(Component):
+    citry = app
+
+    class Events(EventsBase):
+        # None turns off an engine-wide default for this component.
+        _render_inputs = None
+
+        def ping(self) -> None:
+            return None
+
+
+def _pass_render_inputs_on(inputs: RenderInputs, element: CitryElement) -> None:
+    # The keys are render()'s keyword arguments with the same types, so the
+    # dict unpacks straight into the call.
+    element.render(**inputs)
+
+
 def test_the_typing_base_is_the_root_export() -> None:
     assert citry.Events is EventsBase
 
@@ -97,3 +132,10 @@ def test_subclassing_the_base_changes_nothing_at_runtime() -> None:
 def test_ambient_members_exist_only_as_declarations() -> None:
     instance = TodoList.Events(None)
     assert isinstance(instance, citry.Events)
+
+
+def test_a_component_render_inputs_function_is_the_configured_one() -> None:
+    ext = app.extensions.get_extension("events")
+    assert isinstance(ext, EventsExtension)
+    assert ext.resolve(Profile).render_inputs is _profile_inputs
+    assert ext.resolve(Unconfigured).render_inputs is None

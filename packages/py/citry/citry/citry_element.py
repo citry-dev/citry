@@ -43,7 +43,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias
+
+# The types of the two render-wide inputs `render()` takes. Other APIs that
+# hand values on to `render()`, such as the Events `RenderInputs`, reuse these
+# names, so their types cannot drift from the signature below.
+RenderTemplateGlobals: TypeAlias = Mapping[str, Any]
+RenderProvides: TypeAlias = Mapping[str, Any]
 
 if TYPE_CHECKING:
     from citry.citry_render import CitryRender
@@ -143,8 +149,8 @@ class CitryElement:
     def render(
         self,
         *,
-        template_globals: Mapping[str, Any] | None = None,
-        provides: Mapping[str, Any] | None = None,
+        template_globals: RenderTemplateGlobals | None = None,
+        provides: RenderProvides | None = None,
     ) -> CitryRender:
         """
         Render this component into a ``CitryRender``.

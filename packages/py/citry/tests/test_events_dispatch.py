@@ -3568,6 +3568,9 @@ class TestPageCspNonce:
             _counter(_citry(extensions_defaults={"events": {"_csp_nonce": page_nonce}}))
 
 
+_NOT_SET = object()
+
+
 def _shows(output, *values):
     """Whether every value appears in a render's output as one dynamic text part (a JSON string)."""
     return all(json.dumps(value) in output for value in values)
@@ -3587,7 +3590,7 @@ class TestRenderInputs:
         "renderers": ["vue-prepared/1", "html-fragment/1"],
     }
 
-    def _greeter(self, c, *, handler_result="element"):
+    def _greeter(self, c, *, own_inputs=_NOT_SET):
         class GreeterState:
             count: int = 0
 
@@ -3600,9 +3603,16 @@ class TestRenderInputs:
             State = GreeterState
 
             class Events:
+                # The component-level form; left out when the test does not set it.
+                if own_inputs is not _NOT_SET:
+                    _render_inputs = own_inputs
+
                 def bump(self, state):
                     state.count += 1
                     return Greeter(count=state.count)
+
+                def swap(self, state):
+                    return Other()
 
                 def bump_twice(self, state):
                     state.count += 1
@@ -3629,6 +3639,12 @@ class TestRenderInputs:
                   </c-mark>
                   <button @c-click="bump">Bump</button>
                 </div>
+            """
+
+        class Other(Component):
+            citry = c
+            template = """
+                <p>Other for {{ user }}</p>
             """
 
         return Greeter
@@ -3794,9 +3810,9 @@ class TestRenderInputs:
         # The template still reads a global nobody supplied, so the render fails.
         assert result["error"]["code"] == "handler_error"
 
-    @pytest.mark.parametrize("value", [{"template_globals": {}}, None, 1])
+    @pytest.mark.parametrize("value", [{"template_globals": {}}, 1])
     def test_the_setting_must_be_a_function(self, value):
-        with pytest.raises(ValueError, match="'_render_inputs' must be a plain"):
+        with pytest.raises(ValueError, match="'_render_inputs'\\] must be a plain"):
             _citry(extensions_defaults={"events": {"_render_inputs": value}})
 
     def test_an_async_function_is_refused(self):
@@ -3806,15 +3822,62 @@ class TestRenderInputs:
         with pytest.raises(ValueError, match="plain \\(not async\\) function"):
             _citry(extensions_defaults={"events": {"_render_inputs": render_inputs}})
 
-    def test_a_component_cannot_set_it(self):
+    def test_a_component_can_set_its_own_function(self):
+        seen = []
         c = _citry()
-        with pytest.raises(ValueError, match="'_render_inputs' is engine-wide configuration"):
+        greeter = self._greeter(c, own_inputs=self._inputs(seen))
+        [result] = _dispatch(c, self._call(greeter, "bump"))["results"]
+        assert _shows(result["actions"][0]["html"], "Ada", "en-GB")
+        [request] = seen
+        assert isinstance(request, EventRequest)
+
+    def test_the_component_function_wins_over_the_engine_default(self):
+        def engine_inputs(_request):
+            raise AssertionError("the engine default ran although the component set its own function")
+
+        c = _citry(extensions_defaults={"events": {"_render_inputs": engine_inputs}})
+        greeter = self._greeter(c, own_inputs=self._inputs([]))
+        [result] = _dispatch(c, self._call(greeter, "bump"))["results"]
+        assert _shows(result["actions"][0]["html"], "Ada", "en-GB")
+
+    def test_a_component_can_turn_the_engine_default_off_with_none(self):
+        seen = []
+        c = _citry(extensions_defaults={"events": {"_render_inputs": self._inputs(seen)}})
+        greeter = self._greeter(c, own_inputs=None)
+        [result] = _dispatch(c, self._call(greeter, "bump"))["results"]
+        # Without inputs the template's `user` global is missing, so the render fails.
+        assert result["error"]["code"] == "handler_error"
+        assert seen == []
+
+    def test_the_calling_component_function_applies_to_a_different_rendered_component(self):
+        c = _citry()
+        greeter = self._greeter(c, own_inputs=self._inputs([]))
+        [result] = _dispatch(c, self._call(greeter, "swap"))["results"]
+        # Other has no Vue parts, so its fragment is plain HTML.
+        assert "Other for Ada" in result["actions"][0]["html"]
+
+    @pytest.mark.parametrize("value", [{"template_globals": {}}, 1], ids=["dict", "int"])
+    def test_a_component_value_that_is_not_a_function_fails_at_class_definition(self, value):
+        with pytest.raises(ValueError, match=r"Events\._render_inputs must be a plain"):
+            self._greeter(_citry(), own_inputs=value)
+
+    def test_a_method_written_in_the_events_class_fails_at_class_definition(self):
+        c = _citry()
+        with pytest.raises(ValueError, match="define the function outside the class and assign it"):
 
             class Page(Component):
                 citry = c
 
                 class Events:
-                    _render_inputs = {"template_globals": {}}
+                    def _render_inputs(self, request):
+                        return {}
 
                     def go(self):
                         return None
+
+    def test_a_component_async_function_fails_at_class_definition(self):
+        async def render_inputs(_request):
+            return {}
+
+        with pytest.raises(ValueError, match="plain \\(not async\\) function"):
+            self._greeter(_citry(), own_inputs=render_inputs)

@@ -15,10 +15,11 @@
 
 - Experimental: a component that an event handler returns can now
   read request values such as the current user or the locale, as it
-  does when a view renders the page. Set
-  `extensions_defaults["events"]["_render_inputs"]` to a function that
-  takes the event call's `EventRequest` and returns the
-  `template_globals` and `provides` for that call's renders. See
+  does when a view renders the page. Set `_render_inputs` in
+  `extensions_defaults["events"]`, or on one component's `Events`
+  class, to a function that takes the event call's `EventRequest` and
+  returns a `RenderInputs` dict: the `template_globals` and `provides`
+  Citry passes to `.render()` for that call's renders. See
   [Pass request values](https://citry.dev/events/actions/#give-every-render-the-request-values).
 
 ## v1.0.3
