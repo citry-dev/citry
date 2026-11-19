@@ -10,7 +10,7 @@ from html import unescape
 
 import pytest
 
-from citry import Citry, Component, Const, Extension, Markup, VueCodeError
+from citry import Citry, Component, Const, Extension, Markup, StaticHtmlPlacementError, VueCodeError
 from citry._vue.capture import (
     PreparedAttribute,
     PreparedElementClose,
@@ -505,8 +505,11 @@ def test_slot_does_not_turn_explicit_markup_into_svg_text() -> None:
         citry = registry
         template = "<svg><text><c-slot /></text></svg>"
 
-    with pytest.raises(TypeError, match="unsupported raw output: Markup"):
-        render_prepared(Root(slots={"default": Markup("<b>trusted</b>")}))
+    # The render keeps the `Markup` part, as the page render does; the Vue
+    # writer then refuses it inside <svg>, for the page and an event alike.
+    rendered = render_prepared(Root(slots={"default": Markup("<b>trusted</b>")}))
+    with pytest.raises(StaticHtmlPlacementError, match=r"A Markup value .* cannot sit inside <svg> or <math>"):
+        assemble_typed_render(rendered, revision=0, tag_for_type=lambda _key: "x-root")
 
 
 @pytest.mark.parametrize(

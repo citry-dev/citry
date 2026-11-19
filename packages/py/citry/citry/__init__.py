@@ -24,6 +24,14 @@ from markupsafe import Markup
 from citry._caller_warnings import CitryDeprecationWarning
 from citry._linting import TemplateLintInfo, TemplateVariableInfo
 from citry._nested_declarations import NestedSchemaReplacedWarning
+from citry._vue.capture import (
+    IncompleteStaticHtmlError,
+    ScriptInStaticHtmlError,
+    StaticHtmlError,
+    StaticHtmlPlacementError,
+    VueInsideStaticHtmlError,
+    VueSyntaxInStaticHtmlError,
+)
 from citry.analysis import (
     ComponentSourceLint,
     LspPosition,
@@ -310,6 +318,7 @@ __all__ = [
     "I18nService",
     "IfNode",
     "InMemoryCache",
+    "IncompleteStaticHtmlError",
     "LibraryComponent",
     "LibraryComponentContextError",
     "LibraryComponentInvocation",
@@ -380,6 +389,7 @@ __all__ = [
     "RouteRequest",
     "RouteResponse",
     "SchemaInfo",
+    "ScriptInStaticHtmlError",
     "Secret",
     "SecurityCspMode",
     "SecurityError",
@@ -398,6 +408,8 @@ __all__ = [
     "SlotNode",
     "SlotResult",
     "StaticHtmlAttr",
+    "StaticHtmlError",
+    "StaticHtmlPlacementError",
     "TemplateAnalysis",
     "TemplateHtmlAttr",
     "TemplateLintConsumer",
@@ -414,6 +426,8 @@ __all__ = [
     "UnitFormat",
     "UnresolvedComponentReference",
     "VueCodeError",
+    "VueInsideStaticHtmlError",
+    "VueSyntaxInStaticHtmlError",
     "citry",
     "collect_compiled_body_fills",
     "combine_assets",

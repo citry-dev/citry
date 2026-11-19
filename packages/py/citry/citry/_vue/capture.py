@@ -57,6 +57,147 @@ class UnsupportedPreparedView(TypeError):
     """Raised when a render cannot be turned into the HTML and Vue template that the browser runs."""
 
 
+class StaticHtmlError(Exception):
+    """
+    Base class for the errors Citry raises when it cannot put HTML inside an interactive component as a static block.
+
+    Inside an interactive component (one that runs in the browser with
+    Vue), Citry sends HTML that it did not compile to the browser as data,
+    and Vue inserts it as a block of static HTML that it never compiles.
+    Such HTML includes the output of a template with foreign spans, such
+    as a fill whose `{% %}` tags Django renders, a `Markup` value, and the
+    contents of `<c-raw>`. Each subclass names one reason Citry refuses
+    that HTML, and also subclasses the built-in exception Citry raises for
+    that reason, so `except ValueError` or `except TypeError` still
+    catches it.
+
+    Experimental:
+        `StaticHtmlError` and its subclasses are experimental. They may
+        change in a minor release without a deprecation period.
+
+    """
+
+
+class IncompleteStaticHtmlError(StaticHtmlError, ValueError):
+    """
+    Raised when HTML inside an interactive component is not one complete, well-formed fragment.
+
+    Vue inserts the HTML as one block, so every tag it opens must close
+    inside it, and the browser must read it without an HTML parse error.
+    Citry also raises this error when the HTML is over one of the size
+    limits within which Citry reads it. The message says which rule the
+    HTML breaks.
+
+    It subclasses `ValueError`, so `except ValueError` also catches it.
+
+    Experimental:
+        `IncompleteStaticHtmlError` is experimental. It may change in a
+        minor release without a deprecation period.
+
+    """
+
+
+class VueInsideStaticHtmlError(StaticHtmlError, ValueError):
+    """
+    Raised when a part that needs Vue sits inside an element of HTML that Citry did not compile.
+
+    Vue cannot place a component inside an element of a static block, so
+    an interactive component may sit between two pieces of such HTML, but
+    not inside one of its elements. This includes a component that a block
+    tag of the other engine, such as Django's `{% if %}`, wraps inside such
+    an element.
+
+    It subclasses `ValueError`, so `except ValueError` also catches it.
+
+    Attributes:
+        component_name: The class name of the component that needs Vue,
+            or `None` when the part is not a component.
+
+    Experimental:
+        `VueInsideStaticHtmlError` is experimental. It may change in a
+        minor release without a deprecation period.
+
+    """
+
+    def __init__(self, message: str, *, component_name: str | None = None) -> None:
+        super().__init__(message)
+        self.component_name = component_name
+
+
+class ScriptInStaticHtmlError(StaticHtmlError, ValueError):
+    """
+    Raised when HTML inside an interactive component holds a `<script>` or `<noscript>` element.
+
+    The browser never runs a script that Vue inserts as part of a static
+    block, and some browsers read a `<noscript>` in such a block with
+    scripts turned off, so they would show and run what it holds.
+
+    It subclasses `ValueError`, so `except ValueError` also catches it.
+
+    Attributes:
+        tag: The name of the refused element, `"script"` or `"noscript"`.
+
+    Experimental:
+        `ScriptInStaticHtmlError` is experimental. It may change in a
+        minor release without a deprecation period.
+
+    """
+
+    def __init__(self, message: str, *, tag: str) -> None:
+        super().__init__(message)
+        self.tag = tag
+
+
+class VueSyntaxInStaticHtmlError(StaticHtmlError, UnsupportedPreparedView):
+    """
+    Raised when a template with foreign spans has Vue syntax, such as `@click`, and its output reaches a Vue app.
+
+    Citry writes such a template as static HTML that Vue does not compile,
+    so the attribute would stay a plain attribute that does nothing in Vue.
+    Attributes in the same form for another library, such as Alpine.js's
+    `@click`, are refused too; its long form, such as `x-on:click`, is not
+    Vue syntax. Citry checks every template whose output Vue inserts this
+    way: a component's template, a template passed to
+    `Citry.render_template()`, and the fills written in them.
+
+    It subclasses `TypeError`, so `except TypeError` also catches it.
+
+    Attributes:
+        component_name: The class name of the component whose template has
+            the Vue syntax, or `None` for a template passed to
+            `Citry.render_template()`.
+        syntax: The Vue attribute and the tag it is on, such as
+            `"'@click' on <a>"`.
+
+    Experimental:
+        `VueSyntaxInStaticHtmlError` is experimental. It may change in a
+        minor release without a deprecation period.
+
+    """
+
+    def __init__(self, message: str, *, component_name: str | None, syntax: str) -> None:
+        super().__init__(message)
+        self.component_name = component_name
+        self.syntax = syntax
+
+
+class StaticHtmlPlacementError(StaticHtmlError, UnsupportedPreparedView):
+    """
+    Raised when HTML that Citry did not compile sits inside `<svg>`, `<math>`, or an element that holds only text.
+
+    Vue inserts the HTML with the HTML parser, which reads it differently
+    inside `<svg>` or `<math>`, and an element such as `<textarea>` holds
+    text, not HTML.
+
+    It subclasses `TypeError`, so `except TypeError` also catches it.
+
+    Experimental:
+        `StaticHtmlPlacementError` is experimental. It may change in a
+        minor release without a deprecation period.
+
+    """
+
+
 def include_prepared_attribute(name: str, value: object) -> bool:
     """
     Return whether a Python-computed attribute goes into the element's Vue ``v-bind`` values.
@@ -1473,23 +1614,19 @@ def _resolve_element_metadata(
 
 
 def _validate_prepared_render(render: CitryRender) -> None:
+    """
+    Check that an Events render holds only parts the Vue writer can write.
+
+    The page render reaches the writer directly. An event checks the whole
+    tree first, with the writer's own `is_prepared_leaf_part`, so it fails
+    before any handler output is sent and accepts exactly what the page does.
+    """
+    from citry._vue.direct_capture import is_prepared_leaf_part  # noqa: PLC0415
     from citry._vue.leaf_program import PreparedLeafProgram  # noqa: PLC0415
     from citry.citry_render import DeferredComponent, Placeholder, _DeferredRunRow  # noqa: PLC0415
 
     pending = [render]
     seen: set[int] = set()
-    leaf_types = (
-        PreparedSourceText,
-        PreparedVerbatimHtml,
-        PreparedStaticRun,
-        PreparedTextValue,
-        PreparedTrustedHtmlValue,
-        PreparedElementOpen,
-        PreparedElementClose,
-        PreparedDynamicElementOpen,
-        PreparedDynamicElementClose,
-        PreparedLeafProgram,
-    )
     while pending:
         current = pending.pop()
         if id(current) in seen:
@@ -1500,14 +1637,14 @@ def _validate_prepared_render(render: CitryRender) -> None:
         for part in current.parts:
             if isinstance(part, CitryRender):
                 pending.append(part)
-            elif type(part) is str:
+            elif is_prepared_leaf_part(part):
                 # An empty string is how ``on_render()`` suppresses a
                 # component's output. Any other plain string is HTML from a
                 # template compiled for static output (one with foreign
                 # spans) or a custom node, which the Vue writer turns into a
-                # static block.
-                continue
-            elif isinstance(part, leaf_types):
+                # static block, as it does a `Markup` part from such a
+                # template's `{{ }}`. Asset insertion points are filled by the
+                # static serializer; an event publishes its assets separately.
                 continue
             elif type(part) is SimpleVueRecord:
                 # A row Rust read has no leaf until an output asks for one;
@@ -1524,14 +1661,6 @@ def _validate_prepared_render(render: CitryRender) -> None:
                         pending.append(called)
                     else:
                         raise TypeError("prepared Vue rendering contains an unresolved runtime part")
-                continue
-            elif isinstance(part, Placeholder) and part.key in {"deps:css", "deps:js"}:
-                # Dependency insertion points are consumed by the ordinary
-                # serializer.  Direct event rendering deliberately omits
-                # them from the prepared view and publishes the dependency
-                # manifest separately, so they are resolved placeholders from
-                # the event renderer's perspective rather than unresolved
-                # runtime output.
                 continue
             # A call run's row (``_DeferredRunRow``) left in the list is an
             # unresolved part too, with the same message.

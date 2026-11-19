@@ -277,6 +277,12 @@ categories:
       - citry.OnTemplateCompiledContext
       - citry.ForeignClaim
       - citry.OnTemplateForeignCompiledContext
+      - citry.StaticHtmlError
+      - citry.IncompleteStaticHtmlError
+      - citry.VueInsideStaticHtmlError
+      - citry.ScriptInStaticHtmlError
+      - citry.VueSyntaxInStaticHtmlError
+      - citry.StaticHtmlPlacementError
       - citry.OnTemplateLoadedContext
       - citry.OnTemplateResetContext
       - citry.TemplateNamespaceContext

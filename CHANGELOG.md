@@ -23,6 +23,10 @@ APIs for the citry-django integration. It still requires citry-core
   response failed with "Prepared browser asset URL differs from its
   structured dependency URL". Citry still checks such a URL like any
   other.
+- An Events `Render` no longer fails with "unsupported raw output:
+  Markup" when a `Markup` value reaches the rendered component, such as
+  slot content passed from Python. It now renders as on the first page
+  load, with the same checks.
 
 ### Added
 
@@ -50,10 +54,18 @@ APIs for the citry-django integration. It still requires citry-core
   foreign spans, such as a fill with Django tags, on the first render
   and in an Events `Render`. Citry inserts it as static HTML that Vue
   never compiles, and raises an error that names the problem when the
-  HTML is not a complete fragment, holds a `<script>`, or has an
-  interactive component inside one of its elements. This prepares the
+  HTML is not a complete fragment, holds a `<script>`, has an
+  interactive component inside one of its elements, or comes from a
+  template that also has Vue syntax such as `@click`. This prepares the
   citry-django integration. See
   [Put foreign output inside interactive components](https://citry.dev/advanced/extensions/#foreign-output-in-vue).
+- Experimental, groundwork for the citry-django integration: you can
+  catch each of those errors by type. They subclass `StaticHtmlError`:
+  `IncompleteStaticHtmlError`, `VueInsideStaticHtmlError`,
+  `ScriptInStaticHtmlError`, `VueSyntaxInStaticHtmlError`, and
+  `StaticHtmlPlacementError`. Each one also subclasses the `ValueError`
+  or `TypeError` that Citry raised before, so existing handlers keep
+  working.
 - Experimental: a component that an event handler returns can now
   read request values such as the current user or the locale, as it
   does when a view renders the page. Set `_render_inputs` in

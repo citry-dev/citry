@@ -8,6 +8,8 @@ from citry._output_html import scan_output_html
 from citry.attrs import _html_attr_identity
 from citry_core.html_transform import mark_html, static_html_node_count, validate_html_fragment_boundary
 
+from .capture import IncompleteStaticHtmlError, ScriptInStaticHtmlError
+
 # How the fragment check starts its message when it refuses a parse error
 # rather than the shape of the tags (`validate_html_fragment_boundary`). Keep
 # in step with the message in `output_scanner.rs`.
@@ -55,7 +57,7 @@ def reject_cross_boundary_html(html: str, *, origin: str) -> None:
                 " Inside an interactive component, Vue inserts this HTML as one block, and Citry reads it"
                 f" first to check it.{hint}"
             )
-            raise ValueError(msg) from error
+            raise IncompleteStaticHtmlError(msg) from error
         # The check names a parse error it refuses by its name in the HTML
         # standard, so the message can say what to fix in the text itself;
         # the tag rules cover the shape of the tags.
@@ -76,7 +78,7 @@ def reject_cross_boundary_html(html: str, *, origin: str) -> None:
                 " tag starts and ends. Static pages do not need this, because there the HTML is written"
                 " into the page as is."
             )
-            raise ValueError(msg) from error
+            raise IncompleteStaticHtmlError(msg) from error
         msg = (
             f"{origin} is not a complete HTML fragment: {preview!r}. Inside an interactive component,"
             " Vue inserts this HTML as one block, so every tag it opens must be closed inside it, it must"
@@ -85,7 +87,7 @@ def reject_cross_boundary_html(html: str, *, origin: str) -> None:
             " template into it. Static pages do not have this rule, because there the HTML is written into"
             " the page as is."
         )
-        raise ValueError(msg) from error
+        raise IncompleteStaticHtmlError(msg) from error
 
 
 def reject_noscript_in_opaque_html(html: str, *, origin: str) -> None:
@@ -113,7 +115,7 @@ def reject_noscript_in_opaque_html(html: str, *, origin: str) -> None:
             " and Safari would show and run the contents of the <noscript>. Move the <noscript> outside the"
             " component, or remove it from the HTML."
         )
-        raise ValueError(msg)
+        raise ScriptInStaticHtmlError(msg, tag="noscript")
 
 
 def reject_script_in_opaque_html(html: str, *, origin: str) -> None:
@@ -138,7 +140,7 @@ def reject_script_in_opaque_html(html: str, *, origin: str) -> None:
             " it would run only when a page that Vue hydrates first loads."
             " Move the script into the component's js, or onto the page outside the component."
         )
-        raise ValueError(msg)
+        raise ScriptInStaticHtmlError(msg, tag="script")
 
 
 def mark_opaque_html(html: str, markers: tuple[tuple[str, object], ...]) -> str:

@@ -35,6 +35,7 @@ from citry.citry_render import (
     RenderFrame,
     RenderPart,
     SimpleVueRecord,
+    simple_vue_called_components,
 )
 from citry.citry_template import CitryTemplate
 from citry.client_directives import ComponentTagClientBindingKind
@@ -65,8 +66,11 @@ from .capture import (
     PreparedTextValue,
     PreparedTrustedHtmlValue,
     PreparedVerbatimHtml,
+    StaticHtmlPlacementError,
     StaticRunOpening,
     UnsupportedPreparedView,
+    VueInsideStaticHtmlError,
+    VueSyntaxInStaticHtmlError,
     conflicting_attribute_targets,
     element_key_conflict_message,
     format_prepared_element_attrs,
@@ -494,6 +498,46 @@ def _json_presence_attribute_map(values: Mapping[str, object]) -> dict[str, obje
     return {name: "" if (plain := _json_plain(value)) is True else plain for name, value in values.items()}
 
 
+# The output pieces, other than component and slot renders, that the Vue
+# writer below turns into template text or data. `Markup` is the trusted HTML
+# that a template compiled for static output (one with foreign spans) writes
+# for each `{{ }}`.
+_PREPARED_LEAF_PART_TYPES = (
+    PreparedSourceText,
+    PreparedVerbatimHtml,
+    PreparedStaticRun,
+    PreparedTextValue,
+    PreparedTrustedHtmlValue,
+    Markup,
+    PreparedLeafProgram,
+    PreparedElementOpen,
+    PreparedElementClose,
+    PreparedDynamicElementOpen,
+    PreparedDynamicElementClose,
+)
+# The insertion points the static serializer fills with asset tags. A Vue
+# view publishes its assets separately, so the writer skips them.
+_DEPENDENCY_PLACEHOLDER_KEYS = frozenset({"deps:css", "deps:js"})
+
+
+def is_prepared_leaf_part(part: object) -> bool:
+    """
+    Return whether the Vue writer accepts `part` as an output piece that is not a render.
+
+    The page writer, `_static_part_html` for the pieces it joins into a
+    static block, and the check an Events `Render` runs first all accept the
+    same pieces, so an event refuses no output that the page accepts, and
+    accepts none that the page refuses.
+    """
+    # A plain string is HTML that a template compiled for static output
+    # wrote; only the exact type is that, never a subclass from elsewhere.
+    return (
+        type(part) is str
+        or isinstance(part, _PREPARED_LEAF_PART_TYPES)
+        or (isinstance(part, Placeholder) and part.key in _DEPENDENCY_PLACEHOLDER_KEYS)
+    )
+
+
 def assemble_typed_render(
     render: CitryRender,
     *,
@@ -549,6 +593,10 @@ def assemble_typed_render(
     from citry.browser_render import _validate_template_context_names  # noqa: PLC0415
 
     _validate_template_context_names(template_context_names, "Prepared")
+    # The page and an Events render both assemble here, so this one check
+    # covers both: Vue syntax in a template whose output Vue inserts as a
+    # static block would do nothing, wherever the template sits in the tree.
+    _refuse_vue_in_static_templates(render)
     # One entry per occurrence, in the order the view lists them. A call run
     # whose rows one run object (``_NativeRun``) recorded has one entry, the
     # run itself, standing for all its rows at the place they start.
@@ -1999,13 +2047,9 @@ def assemble_typed_render(
                 needs Vue ends the block and is walked as usual, so the block
                 must be a complete fragment on its own.
                 """
-                # The author of this body may have written Vue syntax that
-                # the static block would silently drop.
-                try:
-                    owner_class: type[object] | None = citry.get_component_by_class_id(occurrence_types[data_owner_id])
-                except KeyError:
-                    owner_class = None
-                _refuse_vue_in_static_template(owner_class)
+                # Vue syntax that an author wrote in the template of this
+                # HTML was refused before the walk began, in
+                # `_refuse_vue_in_static_templates`.
                 flattened_render_ids: list[str] = []
                 pieces = [cast("str", parts[start])]
                 end = start + 1
@@ -2020,14 +2064,14 @@ def assemble_typed_render(
                     end += 1
                 html = "".join(pieces)
                 if any(tag in FOREIGN_CONTENT_TAGS for tag in element_stack):
-                    raise UnsupportedPreparedView(
+                    raise StaticHtmlPlacementError(
                         f"{_STATIC_HTML_ORIGIN} cannot sit inside <svg> or <math> in an interactive component,"
                         " because Vue inserts it with the HTML parser. Render the whole <svg> element in that"
                         " HTML, or write the SVG or MathML markup in a Citry template."
                     )
                 parent_tag = element_stack[-1] if element_stack else None
                 if parent_tag in _TEXT_ONLY_TAGS:
-                    raise UnsupportedPreparedView(
+                    raise StaticHtmlPlacementError(
                         f"{_STATIC_HTML_ORIGIN} cannot sit inside <{parent_tag}> in an interactive component,"
                         f" because <{parent_tag}> holds text, not HTML. Pass the text as a value instead."
                     )
@@ -2057,26 +2101,7 @@ def assemble_typed_render(
                     # parts is simply incomplete.
                     if end == len(parts):
                         raise
-                    neighbor = parts[end]
-                    neighbor_component = (
-                        neighbor.context.component
-                        if isinstance(neighbor, CitryRender) and neighbor.frame.is_component_root
-                        else None
-                    )
-                    what = (
-                        f"The component {type(neighbor_component).__name__}, which needs Vue,"
-                        if neighbor_component is not None
-                        else "A part that needs Vue"
-                    )
-                    preview = html if len(html) <= 80 else f"{html[:77]}..."
-                    msg = (
-                        f"{what} sits inside an element of {_STATIC_HTML_ORIGIN}, next to"
-                        f" {preview!r}. Inside an interactive component, Vue inserts that HTML as static blocks"
-                        " that it does not compile, so it cannot place a component inside one of their elements."
-                        " Write the elements around the component in a Citry template (use <c-if> and <c-for>"
-                        " for conditions and loops), or make the component its own Vue app."
-                    )
-                    raise ValueError(msg) from error
+                    raise _vue_inside_static_html_error(parts[end], html) from error
                 reject_noscript_in_opaque_html(html, origin=_STATIC_HTML_ORIGIN)
                 reject_script_in_opaque_html(html, origin=_STATIC_HTML_ORIGIN)
                 html = mark_opaque_html(html, root_markers if at_root else ())
@@ -3087,6 +3112,11 @@ def assemble_typed_render(
                         }
                     )
                     continue
+                # Every render kind is handled above. The rest of the part
+                # kinds this writer accepts are decided by the same function
+                # that checks an Events render first, so the two agree.
+                if not is_prepared_leaf_part(part):
+                    raise UnsupportedPreparedView(f"unsupported typed render part: {type(part).__name__}")
                 if isinstance(part, PreparedSourceText):
                     # Static text may meet the next part's `{` across a Citry tag.
                     output.append(_guard_template_braces(part.text))
@@ -3095,13 +3125,13 @@ def assemble_typed_render(
                     parent_tag = element_stack[-1] if element_stack else None
                     # The same tags as the `<c-element>` body check (`FOREIGN_CONTENT_TAGS`).
                     if any(tag in FOREIGN_CONTENT_TAGS for tag in element_stack):
-                        raise UnsupportedPreparedView(
+                        raise StaticHtmlPlacementError(
                             "<c-raw> cannot sit inside <svg> or <math> in an interactive component, because Vue"
                             " inserts its HTML with the HTML parser. Move the <c-raw> block outside, or write the"
                             " SVG or MathML markup directly in the template."
                         )
                     if parent_tag in {"script", "style", "textarea", "title"}:
-                        raise UnsupportedPreparedView(
+                        raise StaticHtmlPlacementError(
                             f"<c-raw> cannot sit inside <{parent_tag}> in an interactive component, because"
                             f" <{parent_tag}> holds text, not HTML. Write the text directly inside <{parent_tag}>."
                         )
@@ -3209,13 +3239,13 @@ def assemble_typed_render(
                     parent_tag = element_stack[-1] if element_stack else None
                     # The same tags as the `<c-element>` body check (`FOREIGN_CONTENT_TAGS`).
                     if any(tag in FOREIGN_CONTENT_TAGS for tag in element_stack):
-                        raise UnsupportedPreparedView(
+                        raise StaticHtmlPlacementError(
                             "A Markup value (trusted HTML from Python) cannot sit inside <svg> or <math> in an"
                             " interactive component, because Vue inserts it with the HTML parser. Write the SVG or"
                             " MathML markup in the template, or render the whole <svg> element from the value."
                         )
                     if parent_tag in {"script", "style", "textarea", "title"}:
-                        raise UnsupportedPreparedView(
+                        raise StaticHtmlPlacementError(
                             f"A Markup value (trusted HTML from Python) cannot sit inside <{parent_tag}> in an"
                             f" interactive component, because <{parent_tag}> holds text, not HTML. Pass a plain"
                             " string instead."
@@ -3709,7 +3739,7 @@ def assemble_typed_render(
                     element_keys.pop()
                     dom_depth -= 1
                     continue
-                if isinstance(part, Placeholder) and part.key in {"deps:css", "deps:js"}:
+                if isinstance(part, Placeholder) and part.key in _DEPENDENCY_PLACEHOLDER_KEYS:
                     continue
                 if type(part) is str:
                     if part == "":
@@ -3718,7 +3748,9 @@ def assemble_typed_render(
                         output, parts, part_index, data_values, at_root=project_root_markers and dom_depth == 0
                     )
                     continue
-                raise UnsupportedPreparedView(f"unsupported typed render part: {type(part).__name__}")
+                # `is_prepared_leaf_part` accepted the part, so a missing
+                # branch above is a bug in this writer, not in the render.
+                raise AssertionError(f"accepted typed render part has no writer: {type(part).__name__}")
             if dynamic_stack:
                 raise UnsupportedPreparedView("dynamic element opening has no close")
             if projected_keys is not None and projected_containers is not None:
@@ -4693,6 +4725,88 @@ _STATIC_HTML_ORIGIN = (
     "HTML that Citry did not compile (such as the output of a template whose {% %} tags Django renders)"
 )
 
+
+def _component_needing_vue(part: RenderPart) -> tuple[str | None, bool]:
+    """
+    Name the first component inside `part` that needs Vue, and say whether a render that is not a component wraps it.
+
+    A block tag of another engine, such as Django's `{% if %}`, or a
+    `<c-for>` loop in a template compiled for static output, hands its
+    output on as one render that is not a component, so the component that
+    needs Vue sits somewhere inside it. Returns `(None, False)` when no
+    component inside needs Vue, such as for an element with an Events
+    binding.
+    """
+    if type(part) is SimpleVueRecord:
+        return part.component_class.__name__, False
+    if not isinstance(part, CitryRender):
+        return None, False
+    if part.frame.is_component_root and part.context.component is not None:
+        return type(part.context.component).__name__, False
+    # Nested bodies use a stack of part iterators, so the first component in
+    # document order is found without Python recursion.
+    pending: list[Iterator[RenderPart]] = [iter((part,))]
+    while pending:
+        item = next(pending[-1], _END_OF_PARTS)
+        if item is _END_OF_PARTS:
+            pending.pop()
+            continue
+        if type(item) is SimpleVueRecord:
+            return item.component_class.__name__, item is not part
+        if not isinstance(item, CitryRender):
+            continue
+        component = item.context.component
+        if item.frame.is_component_root and component is not None:
+            # The same test that ended the block: a component that
+            # `_static_part_html` can write joins the block whole.
+            try:
+                _static_part_html(item, [])
+            except _NeedsVue:
+                return type(component).__name__, True
+            except UnsupportedPreparedView:
+                pass
+            continue
+        pending.append(iter(item.parts))
+    return None, False
+
+
+def _vue_inside_static_html_error(neighbor: RenderPart, html: str) -> VueInsideStaticHtmlError:
+    """
+    Describe the part that needs Vue and ended an incomplete block of HTML that Citry did not compile.
+
+    The block stopped at `neighbor` and leaves an element open, so the
+    neighbor sits inside one of the block's elements.
+    """
+    name, wrapped = _component_needing_vue(neighbor)
+    preview = html if len(html) <= 80 else f"{html[:77]}..."
+    if name is None:
+        msg = (
+            f"A part that needs Vue, such as an element with an Events binding, sits inside an element of"
+            f" {_STATIC_HTML_ORIGIN}, next to {preview!r}. Inside an interactive component, Vue inserts that"
+            " HTML as static blocks that it does not compile, so it cannot place that part inside one of"
+            " their elements. Write the elements around the part in a Citry template without foreign spans"
+            " (use <c-if> and <c-for> for conditions and loops)."
+        )
+    elif wrapped:
+        msg = (
+            f"The component {name}, which needs Vue, sits inside an element of {_STATIC_HTML_ORIGIN}, inside"
+            f" a block that wraps it, such as a Django {{% if %}} block or a <c-for> loop, next to {preview!r}."
+            " Inside an interactive component, Vue inserts that HTML as static blocks that it does not"
+            f" compile, so it cannot place {name} inside one of their elements, even inside a block. Move"
+            f" {name} out of the element, or write the element and the tags around {name} in Citry syntax"
+            " (<c-if> and <c-for> for conditions and loops) in a template without foreign spans."
+        )
+    else:
+        msg = (
+            f"The component {name}, which needs Vue, sits inside an element of {_STATIC_HTML_ORIGIN}, next to"
+            f" {preview!r}. Inside an interactive component, Vue inserts that HTML as static blocks that it"
+            " does not compile, so it cannot place a component inside one of their elements. Write the"
+            " elements around the component in a Citry template (use <c-if> and <c-for> for conditions and"
+            " loops), or make the component its own Vue app."
+        )
+    return VueInsideStaticHtmlError(msg, component_name=name)
+
+
 # Elements after whose start tag the HTML parser drops one newline.
 _LEADING_NEWLINE_TAGS = frozenset({"pre", "listing"})
 
@@ -5218,6 +5332,8 @@ def _ignored_contents_html(
     return "".join(out)
 
 
+# A template's source and spans do not change once it is compiled, so each
+# template is read once, not once per render that reaches a Vue app.
 @lru_cache(maxsize=256)
 def _vue_attribute_in_template_source(source: str, spans: tuple[tuple[int, int], ...]) -> str | None:
     """
@@ -5240,29 +5356,68 @@ def _vue_attribute_in_template_source(source: str, spans: tuple[tuple[int, int],
     return None
 
 
-def _refuse_vue_in_static_template(component_class: type[object] | None) -> None:
+def _refuse_vue_in_static_templates(render: CitryRender) -> None:
     """
-    Refuse a template compiled for static output whose author wrote Vue attributes, inside a Vue app.
+    Refuse every template compiled for static output in a Vue app's tree whose author wrote Vue attributes.
 
     Such a template's output becomes a static block that Vue never
-    compiles, so `@click` or `:title` there would silently do nothing.
+    compiles, so `@click` or `:title` there would silently do nothing. Each
+    render keeps the template it ran (`CitryContext.template_record`), so
+    this reads the template a render actually used: a component's own
+    template, a fill written in it, a transparent component's template, and
+    the template passed to `Citry.render_template()`, which its private root
+    component does not own.
     """
-    if component_class is None:
-        return
-    template = load_template(cast("type[Component]", component_class))
-    if template is None or not template.foreign_spans:
+    pending: list[CitryRender] = [render]
+    seen_renders: set[int] = set()
+    seen_templates: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen_renders:
+            continue
+        seen_renders.add(id(current))
+        template = current.context.template_record
+        component = current.context.component
+        if template is None and current.frame.is_component_root and component is not None:
+            # The root frame of a render replayed from the cache keeps its
+            # component but not the compiled record, so read the class's
+            # template. (Output of a template with foreign spans is never
+            # stored in the cache, so this only checks a cached component.)
+            template = load_template(type(component))
+        if template is not None and id(template) not in seen_templates:
+            seen_templates.add(id(template))
+            _refuse_vue_in_static_template(template, component)
+        for part in current.parts:
+            if isinstance(part, CitryRender):
+                pending.append(part)
+            elif type(part) is SimpleVueRecord and part.call_children is not None:
+                pending.extend(
+                    called for called in simple_vue_called_components(part) if isinstance(called, CitryRender)
+                )
+
+
+def _refuse_vue_in_static_template(template: CitryTemplate, component: object | None) -> None:
+    """Refuse one template with foreign spans whose author wrote a Vue attribute on an HTML element."""
+    if not template.foreign_spans:
         return
     spans = tuple((span.start_byte, span.end_byte) for span in template.foreign_spans)
     found = _vue_attribute_in_template_source(template.source, spans)
-    if found is not None:
-        msg = (
-            f"{component_class.__name__} has Vue syntax ({found}) in a template with foreign spans (tags that"
-            " another template engine, such as Django, renders), inside an interactive component. Citry writes"
-            " such a template as static HTML that Vue does not compile, so the Vue syntax would do nothing."
-            " Compute the foreign values in template_data() so the template has no foreign spans, or move the"
-            " Vue syntax into a component whose template has none."
-        )
-        raise UnsupportedPreparedView(msg)
+    if found is None:
+        return
+    # A template passed to `render_template()` belongs to Citry's private
+    # root component, whose name the author never wrote, so name the
+    # template by where it came from instead.
+    component_name = type(component).__name__ if component is not None and template.kind != "standalone" else None
+    who = component_name if component_name is not None else f"The template {template.origin}"
+    msg = (
+        f"{who} has Vue syntax ({found}) in a template with foreign spans (tags that"
+        " another template engine, such as Django, renders), inside an interactive component. Citry writes"
+        " such a template as static HTML that Vue does not compile, so the attribute would stay a plain"
+        " attribute that does nothing in Vue. Compute the foreign values in template_data() so the template"
+        " has no foreign spans, or move the Vue syntax into a component whose template has none. For a"
+        " library such as Alpine.js, write the long form (x-on:click, x-bind:class), which Vue does not read."
+    )
+    raise VueSyntaxInStaticHtmlError(msg, component_name=component_name, syntax=found)
 
 
 class _NeedsVue(Exception):
@@ -5315,9 +5470,11 @@ def _static_part_html(part: RenderPart, flattened_render_ids: list[str]) -> str:
         if item is _END_OF_PARTS:
             pending.pop()
             continue
-        if isinstance(item, str):
+        if type(item) is str or isinstance(item, Markup):
             # A plain string is HTML that a template compiled for static
-            # output wrote, and `Markup` is trusted HTML: both are written as is.
+            # output wrote, and `Markup` is trusted HTML: both are written as
+            # is. Only these two, the same as `is_prepared_leaf_part`, so a
+            # `str` subclass from elsewhere is refused here as on its own.
             out.append(item)
         elif isinstance(item, PreparedSourceText):
             out.append(item.text)
@@ -5383,7 +5540,6 @@ def _static_part_html(part: RenderPart, flattened_render_ids: list[str]) -> str:
                     # An Events `Render` finds a `<c-mark>` by its Vue
                     # occurrence, which a static block does not have.
                     raise _NeedsVue
-                _refuse_vue_in_static_template(type(component) if component is not None else None)
                 # A component inside the block has no Vue occurrence of its
                 # own, so its markers are written here, as the static
                 # serializer writes them.
