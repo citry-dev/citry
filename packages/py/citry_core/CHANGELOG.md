@@ -1,5 +1,23 @@
 # Release notes
 
+## v2.1.2
+
+### Fixed
+
+- Security: template text can no longer read private attributes
+  through a string's `format` or `format_map` method, or run a method
+  marked `@unsafe` or `alters_data` by passing it to another function.
+  Reading or calling either format method on any string, `str` and
+  Django lazy strings included, now raises `SecurityError`, and so does
+  a call when one of its arguments is a function the sandbox would not
+  call itself, such as an `@unsafe` method, an `alters_data` method, or
+  `eval`. A `validate_callable` hook passed to `safe_eval()` now also
+  receives every function and class passed as an argument, so a hook
+  that allows only named functions must also allow, for example, the
+  lambda in `sorted(xs, key=lambda x: x.name)`. Use an f-string instead
+  of `format`. See
+  [GHSA-c42m-36vw-xvm3](https://github.com/citry-dev/citry/security/advisories/GHSA-c42m-36vw-xvm3).
+
 ## v2.1.1
 
 ### Fixed

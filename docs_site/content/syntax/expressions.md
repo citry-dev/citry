@@ -258,7 +258,8 @@ expression could reach outside the template:
 | Private attributes such as `_name` | Access blocked |
 | Dunder attributes such as `__class__` | Access blocked |
 | Unsafe functions such as `eval`, `exec`, and `open` | Call blocked |
-| `format()` and `format_map()` on any string, `Markup` included | Blocked; use an f-string |
+| `format()` and `format_map()` on any string, `Markup` included | Blocked, even reading the method; use an f-string |
+| Passing a blocked function, such as an `@unsafe` or `alters_data` method, to a call: `items.sort(key=obj.delete)` | Call blocked |
 | A lambda parameter or loop variable whose name starts with `_sx_`, the prefix of the sandbox's own helpers | `SyntaxError` |
 
 A blocked operation raises [`SecurityError`][citry.SecurityError] when the

@@ -8,6 +8,7 @@ from citry_core import _rust
 from citry_core.safe_eval import error as error_module
 from citry_core.safe_eval.error import error_context, format_error_with_context
 from citry_core.safe_eval.sandbox import (
+    find_unsafe_callable_argument,
     is_safe_attribute,
     is_safe_callable,
     is_safe_variable,
@@ -47,7 +48,9 @@ def safe_eval(
         validate_variable: Optional extra validation for variable lookups.
         validate_attribute: Optional extra validation for attribute access.
         validate_subscript: Optional extra validation for subscript access.
-        validate_callable: Optional extra validation for function calls.
+        validate_callable: Optional extra validation for function calls. It also receives
+            every function or class passed as an argument to a call, because the receiving function
+            may call it.
         validate_assign: Optional extra validation for variable assignments.
 
     Returns:
@@ -137,6 +140,11 @@ def safe_eval(
         ) -> Any:
             if not validate_callable(func):
                 raise SecurityError(f"function '{func!r}' is unsafe")
+            # A function passed as an argument can be called by the function that receives
+            # it, such as `list.sort` with `key=`, so the hook sees those functions too.
+            for value in (*args, *kwargs.values()):
+                if callable(value) and not validate_callable(value):
+                    raise SecurityError(f"function '{value!r}' is unsafe and cannot be passed to '{func!r}'")
             return call(__context, __source, __token, func, *args, **kwargs)
     else:
         call_fn = call
@@ -447,6 +455,17 @@ def call(
         if replacement_message:
             error_msg += f". {replacement_message}"
         raise SecurityError(error_msg)
+    # A function that receives a refused function as an argument, such as `list.sort` with
+    # `key=`, would call it without passing through this check.
+    refused = find_unsafe_callable_argument(args, kwargs)
+    if refused is not None:
+        argument, replacement_message, check_error = refused
+        error_msg = f"function '{argument!r}' is unsafe and cannot be passed to '{func!r}'"
+        if replacement_message:
+            error_msg += f". {replacement_message}"
+        if check_error is not None:
+            error_msg += f". Checking it raised {type(check_error).__name__}"
+        raise SecurityError(error_msg) from check_error
     return func(*args, **kwargs)
 
 

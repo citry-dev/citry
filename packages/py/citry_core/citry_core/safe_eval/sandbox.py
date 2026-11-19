@@ -15,10 +15,16 @@ It refuses:
   The check compares the function, not its name, so a function passed in under another
   name, or wrapped in `functools.partial`, is refused too.
 - Text formatting that follows paths written inside the string: `format` and `format_map`
-  of any string type (`str`, its subclasses such as `markupsafe.Markup`, and
-  `collections.UserString`), every method of a `string.Formatter`, and building an
-  `operator.attrgetter` or `operator.methodcaller`. Use f-strings instead.
+  of any string type (`str`, its subclasses such as `markupsafe.Markup`,
+  `collections.UserString`, and Django lazy strings), every method of a
+  `string.Formatter`, and building an `operator.attrgetter` or
+  `operator.methodcaller`. Use f-strings instead. Reading
+  `format` or `format_map` from a string is refused too, not only calling it, so the
+  method cannot be handed to something else that calls it.
 - Functions marked with `@unsafe` or `alters_data = True`.
+- Handing a function from the list above to another call, such as
+  `items.sort(key=obj.delete)`. The function that receives it would call it without
+  these checks, so the call that passes it is refused.
 
 What the sandbox does not promise
 ---------------------------------
@@ -31,9 +37,11 @@ It is a second layer of protection. It does not make a template from a stranger 
   with `@unsafe`, or leave the object out of the context.
 - It checks only the lookups and calls that the expression text writes. A function that
   you pass in and that calls other functions or looks up names from text does so without
-  these checks. Examples are `map`, `functools.reduce`, a `key=` argument of `sorted` or
-  `list.sort`, a `getattr`-style helper, `inspect`, `importlib`, and `logging.Formatter`
-  with `{` style. Do not pass such helpers in.
+  these checks. Examples are `map`, `functools.reduce`, `sorted`, `operator.call`, a
+  `getattr`-style helper, `inspect`, `importlib`, and `logging.Formatter` with `{`
+  style. Do not pass such helpers in. A call that is handed a refused function directly
+  is refused; one inside a list or other container is not checked, and neither is a
+  function the app wrapped itself, such as in a lambda.
 - It hides an item key that starts with `_` only when the expression writes the lookup
   itself. `data["_key"]` is refused, but `data.get("_key")`, iterating over `data`, and
   `"%(_key)s" % data` read the same item.
@@ -81,6 +89,7 @@ import contextlib
 import functools
 import operator
 import string
+import sys
 import types
 from collections import UserString
 from collections.abc import Callable
@@ -146,7 +155,9 @@ UNSAFE_BUILTIN_FUNCTIONS: dict[Any, str | None] = {
 # type that has such methods is refused, not only `str`: `str` subclasses may define their
 # own (`markupsafe.Markup` does), `collections.UserString` is not a `str` subclass and calls
 # the real `str.format`, and `string.Formatter` is the object that does the lookup.
-# Use f-strings instead.
+# Reading the method is refused as well as calling it, on exact `str` too: a bound method
+# handed to a built-in such as `list.sort(key=...)` is called by C code, which never goes
+# through the call check. Use f-strings instead.
 _FORMAT_MESSAGE = "Use f-strings instead."
 
 #: The methods that format a string by following the paths written inside it.
@@ -257,18 +268,37 @@ def _is_internal_attribute(obj: Any, attr: str) -> bool:
     return attr.startswith("__")
 
 
+def _string_types() -> tuple[type, ...]:
+    """
+    Return the types whose `format` and `format_map` follow paths written in the text.
+
+    Besides `str` and `UserString`, this includes Django's lazy strings (`gettext_lazy(...)`,
+    `lazystr(...)`). They are not `str` instances, but Django copies the methods of `str`
+    onto them, so their `format` follows paths too. A template can choose the text when
+    the app passes a lazy-string function such as `gettext_lazy` in the context. Django's
+    class is looked up only when Django is already imported, so an app that does not use
+    Django never imports it.
+    """
+    functional = sys.modules.get("django.utils.functional")
+    promise = getattr(functional, "Promise", None)
+    if isinstance(promise, type):
+        return (str, UserString, promise)
+    return (str, UserString)
+
+
 def _is_formatting_member(obj: Any, attr: str) -> bool:
     """
     Test if reading `attr` from `obj` gives a method that formats text by following paths.
 
-    That is `format` or `format_map` on a `str` subclass or `collections.UserString` (the
-    object or the class itself), and any method of `string.Formatter` on a formatter or a
-    formatter class. Exact `str` and `UserString` are left out: their methods are known
-    functions that `is_safe_callable` refuses with a message when they are called.
+    That is `format` or `format_map` on any `str` or `collections.UserString`, subclasses
+    included, or on a Django lazy string (the object or the class itself), and any method
+    of `string.Formatter` on a formatter or a formatter class.
 
     >>> _is_formatting_member(string.Formatter(), "vformat")
     True
     >>> _is_formatting_member("text", "format")
+    True
+    >>> _is_formatting_member("text", "upper")
     False
     """
     is_class = isinstance(obj, type)
@@ -278,9 +308,7 @@ def _is_formatting_member(obj: Any, attr: str) -> bool:
 
     if derives_from(string.Formatter):
         return attr in _FORMATTER_METHOD_NAMES
-    if attr in _FORMAT_METHOD_NAMES and derives_from((str, UserString)):
-        return (obj if is_class else type(obj)) not in (str, UserString)
-    return False
+    return attr in _FORMAT_METHOD_NAMES and derives_from(_string_types())
 
 
 def is_safe_attribute(obj: Any, attr: str) -> bool:
@@ -291,7 +319,7 @@ def is_safe_attribute(obj: Any, attr: str) -> bool:
     - Starting with an underscore `_`
     - Internal attributes as set by `_is_internal_attribute`.
     - The methods that format text by following paths inside it: `format` and
-      `format_map` on a `str` subclass or `UserString`, and the methods of a
+      `format_map` on any `str`, `UserString` or Django lazy string, and the methods of a
       `string.Formatter` (see `_is_formatting_member`).
     """
     # Non-string subscripts should be fine, as they should be found only
@@ -300,11 +328,13 @@ def is_safe_attribute(obj: Any, attr: str) -> bool:
         return True
     if attr.startswith("_"):
         return False
-    if type(obj) in _SAFE_EXACT_ATTRIBUTE_TYPES:
-        return True
-    # The name test comes first so that no other attribute pays for the `isinstance` calls.
+    # This runs before the exact-type shortcut below, because exact `str` is one of the
+    # types it refuses. The name test comes first so that no other attribute pays for the
+    # `isinstance` calls.
     if attr in _FORMATTING_ATTRIBUTE_NAMES and _is_formatting_member(obj, attr):
         return False
+    if type(obj) in _SAFE_EXACT_ATTRIBUTE_TYPES:
+        return True
     return not _is_internal_attribute(obj, attr)
 
 
@@ -327,9 +357,34 @@ def _formatting_method_message(obj: Any) -> str | None:
     # part in the same path lookup as `format`.
     if isinstance(owner, string.Formatter):
         return _FORMAT_MESSAGE
-    if isinstance(owner, (str, UserString)) and getattr(obj, "__name__", None) in _FORMAT_METHOD_NAMES:
+    string_types = _string_types()
+    if not isinstance(owner, string_types):
+        return None
+    if getattr(obj, "__name__", None) in _FORMAT_METHOD_NAMES:
+        return _FORMAT_MESSAGE
+    # Django names every method of a lazy string `__wrapper__`, so the name does not say
+    # which method it is. The function is the one stored on the class under that name.
+    function = getattr(obj, "__func__", None)
+    if function is not None and any(getattr(type(owner), name, None) is function for name in _FORMAT_METHOD_NAMES):
         return _FORMAT_MESSAGE
     return None
+
+
+def _refusal_in(table: dict[Any, str | None], obj: Any) -> tuple[bool, str | None]:
+    """
+    Return `(True, message)` if `obj` is a key of `table`, and `(False, None)` otherwise.
+
+    A callable instance of a class that defines `__eq__` without `__hash__` cannot be
+    hashed, so a plain `in` raises `TypeError`. Such an object cannot be a key of the
+    table either, so it is not listed. This matters because every callable passed
+    as an argument is checked, and a template that passes one must keep working.
+    """
+    try:
+        if obj in table:
+            return (True, table[obj])
+    except TypeError:
+        pass
+    return (False, None)
 
 
 def is_safe_callable(obj: Any) -> tuple[bool, str | None]:
@@ -345,8 +400,8 @@ def is_safe_callable(obj: Any) -> tuple[bool, str | None]:
     - Decorated with `@unsafe`
     - Marked with `obj.alters_data = True` (Django convention)
     - Unsafe builtins (e.g. `eval`)
-    - `format` or `format_map` of any `str` instance, subclasses included, and of
-      `collections.UserString` (use f-strings instead)
+    - `format` or `format_map` of any `str` instance, subclasses included, of
+      `collections.UserString`, and of a Django lazy string (use f-strings instead)
     - Every method of a `string.Formatter` instance
     - `operator.attrgetter` and `operator.methodcaller`, which would let the template name
       the attribute to read
@@ -370,20 +425,20 @@ def is_safe_callable(obj: Any) -> tuple[bool, str | None]:
         if getattr(underlying_func, "unsafe_callable", False) or getattr(underlying_func, "alters_data", False):
             return (False, None)
         # Check if the underlying function is in our unsafe dictionaries
-        if underlying_func in UNSAFE_FUNCTIONS:
-            return (False, UNSAFE_FUNCTIONS[underlying_func])
-        if underlying_func in UNSAFE_BUILTIN_FUNCTIONS:
-            return (False, UNSAFE_BUILTIN_FUNCTIONS[underlying_func])
+        for table in (UNSAFE_FUNCTIONS, UNSAFE_BUILTIN_FUNCTIONS):
+            listed, message = _refusal_in(table, underlying_func)
+            if listed:
+                return (False, message)
 
     # Check marks on the outer function (decorated with @unsafe or alters_data)
     if getattr(obj, "unsafe_callable", False) or getattr(obj, "alters_data", False):
         return (False, None)
 
     # Check identity for unbound functions
-    if obj in UNSAFE_FUNCTIONS:
-        return (False, UNSAFE_FUNCTIONS[obj])
-    if obj in UNSAFE_BUILTIN_FUNCTIONS:
-        return (False, UNSAFE_BUILTIN_FUNCTIONS[obj])
+    for table in (UNSAFE_FUNCTIONS, UNSAFE_BUILTIN_FUNCTIONS):
+        listed, message = _refusal_in(table, obj)
+        if listed:
+            return (False, message)
 
     # Check the type the method is bound to. The identity checks above know `str.format`
     # but not the `format` that a subclass such as `Markup` defines for itself.
@@ -398,6 +453,43 @@ def is_safe_callable(obj: Any) -> tuple[bool, str | None]:
         return is_safe_callable(obj.func)
 
     return (True, None)
+
+
+def find_unsafe_callable_argument(
+    args: tuple[Any, ...], kwargs: dict[str, Any]
+) -> tuple[Any, str | None, Exception | None] | None:
+    """
+    Find an argument that is a function the sandbox refuses to call.
+
+    The call check runs only for calls that the expression text writes. A function that
+    receives another function and calls it, such as `list.sort` with `key=` or an app's
+    `map`, makes that inner call itself, without the check. So a call that is handed a
+    refused function is refused as a whole, whatever function receives it.
+
+    Only the arguments themselves are checked, not the contents of a list or dict passed
+    as an argument. The built-in methods of values that template text can create take a
+    function only as a direct argument (`list.sort(key=...)` is the only one).
+
+    Returns:
+        `(argument, replacement_message, error)` for the first refused argument, or None
+        when every argument is safe. `error` is the exception the check raised, when it
+        could not check the argument at all.
+
+    """
+    for value in (*args, *kwargs.values()):
+        # Most arguments are plain data, and `callable()` keeps them off the slower check.
+        if callable(value):
+            try:
+                is_safe, replacement_message = is_safe_callable(value)
+            except Exception as error:  # noqa: BLE001
+                # The check reads attributes of the object, and an object's own
+                # `__getattr__` or `__hash__` can raise anything. An object the sandbox
+                # cannot check is refused with a `SecurityError`, and the caller keeps
+                # the object's own error as its cause.
+                return (value, None, error)
+            if not is_safe:
+                return (value, replacement_message, None)
+    return None
 
 
 def is_safe_variable(var_name: str) -> bool:

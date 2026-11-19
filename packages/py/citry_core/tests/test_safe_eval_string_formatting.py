@@ -131,15 +131,15 @@ class TestStringTypes:
     @pytest.mark.parametrize("method", ["format", "format_map"])
     def test_a_user_string_function_stored_first_is_refused_when_called(self, method):
         # `UserString.format` is a plain function that is not the one on `str`, so the
-        # call check must know it by itself.
+        # call check must know it by itself. The template cannot read it from the class,
+        # so this test has the app put it in the context.
         text = FORMAT_TEXT if method == "format" else FORMAT_MAP_TEXT
         argument = "holder" if method == "format" else "{'o': holder}"
         context: dict[str, Any] = {
-            "cls": collections.UserString,
+            "fn": getattr(collections.UserString, method),
             "value": collections.UserString(text),
             "holder": Holder(),
         }
-        safe_eval(f"(fn := cls.{method})")(context)
         with pytest.raises(SecurityError) as error:
             safe_eval(f"fn(value, {argument})")(context)
         assert SECRET not in str(error.value)
@@ -283,11 +283,12 @@ class TestPolicyFunctions:
         assert is_safe_attribute(SubclassedUserString, name) is False
 
     @pytest.mark.parametrize("name", ["format", "format_map"])
-    def test_attribute_policy_leaves_exact_str_to_the_call_check(self, name):
-        # `str.format` stays readable so the refusal comes from the call, with its message.
+    def test_attribute_policy_for_exact_str(self, name):
+        # Exact `str` and `UserString` are refused at the read as well, so a bound method
+        # cannot be handed to a built-in that calls it. The call check still knows them.
         for exact in (str, collections.UserString):
-            assert is_safe_attribute(exact("x"), name) is True
-            assert is_safe_attribute(exact, name) is True
+            assert is_safe_attribute(exact("x"), name) is False
+            assert is_safe_attribute(exact, name) is False
             assert is_safe_callable(getattr(exact("x"), name)) == (False, "Use f-strings instead.")
             assert is_safe_callable(getattr(exact, name)) == (False, "Use f-strings instead.")
 
