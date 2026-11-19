@@ -324,4 +324,6 @@ The release notes say when this list changes. Experimental now:
 - returning asset tags apart from the HTML: the `"separate"` value of
   `DepsPosition`, `SerializedAssets`, the `runtime_assets`,
   `app_assets` and `component_assets` fields of `SerializedRender`,
-  `CitryRender.needs_browser_runtime()`, and `combine_assets()`
+  `CitryRender.needs_browser_runtime()`, `combine_assets()`,
+  `SerializedAssetEntry` with the `css_entries` and `js_entries`
+  fields of `SerializedAssets`, and `OutsideSlotContentError`

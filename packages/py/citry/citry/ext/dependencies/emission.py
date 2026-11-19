@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 import re
 from copy import copy
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -64,9 +64,10 @@ VUE_RUNTIME_REQUIRED_KEY = "vue_runtime_required"
 _VUE_RUNTIME_SCRIPT_KEY = "_citry_vue_managed_runtime_script"
 VUE_FRAGMENT_MOUNT_KEY = "vue_fragment_mount"
 VUE_DEPENDENCIES_PREPARED_KEY = "vue_dependencies_prepared"
-# Set by serialize for deps_position="separate": the per-call random value in
-# the comments that wrap each tag, so the serializer can cut the tags out of
-# the finished page and return them grouped (see mark_separate_asset).
+# Set by serialize for deps_position="separate": a SeparateAssets holding the
+# per-call random value in the comments that wrap each tag, so the serializer
+# can cut the tags out of the finished page and return them grouped (see
+# mark_separate_asset).
 SEPARATE_ASSETS_KEY = "_citry_separate_assets"
 # The groups deps_position="separate" returns, as SerializedRender fields
 # named "<group>_assets": tags every Vue app on a page shares, tags of one
@@ -91,14 +92,37 @@ SERIALIZATION_NOTE_KEYS: tuple[str, ...] = (
 )
 
 
-def separate_assets_token(context: CitryContext) -> str | None:
-    """Return this serialize call's wrapper value when it uses deps_position='separate'."""
-    token = context.extra.get(SEPARATE_ASSETS_KEY)
-    return token if type(token) is str else None
+@dataclass(slots=True)
+class SeparateAssets:
+    """
+    One serialize call's notes for ``deps_position="separate"``.
+
+    ``token`` is the random value in the comments that wrap each tag.
+    ``owners`` holds, for each wrapped tag in the order it was wrapped, the
+    component class ids Citry's dependency records name for it and whether
+    it carries one render's data. A wrapper comment carries only its tag's
+    position in ``owners``, so the serializer never reads an owner from
+    the tag's text.
+    """
+
+    token: str
+    owners: list[tuple[tuple[str, ...], bool]] = field(default_factory=list)
+
+
+def separate_assets_token(context: CitryContext) -> SeparateAssets | None:
+    """Return this serialize call's notes when it uses deps_position='separate'."""
+    notes = context.extra.get(SEPARATE_ASSETS_KEY)
+    return notes if type(notes) is SeparateAssets else None
 
 
 def mark_separate_asset(
-    token: str, group: Literal["runtime", "app", "component"], kind: Literal["css", "js"], tag: str
+    notes: SeparateAssets,
+    group: Literal["runtime", "app", "component"],
+    kind: Literal["css", "js"],
+    tag: str,
+    *,
+    class_ids: tuple[str, ...] = (),
+    instance: bool = False,
 ) -> str:
     """
     Wrap one finished tag so the serializer can cut it out later.
@@ -106,17 +130,45 @@ def mark_separate_asset(
     The tag stays in the page through every later step (the Vue host
     checks, the nonce and integrity pass, the CSP and JavaScript checks),
     exactly where ``"smart"`` would put it, and only then is removed.
+    ``class_ids`` and ``instance`` fill the fields of the tag's
+    ``SerializedAssetEntry``.
     """
-    return f"<!--citry-asset:{token}:{group}:{kind}-->{tag}<!--/citry-asset:{token}-->"
+    index = len(notes.owners)
+    # Every tag of one Vue app belongs to that app alone (its stylesheets
+    # name the app, and its data and start script differ per render).
+    notes.owners.append((class_ids, instance or group == "app"))
+    return f"<!--citry-asset:{notes.token}:{group}:{kind}:{index}-->{tag}<!--/citry-asset:{notes.token}-->"
 
 
 def separate_asset_pattern(token: str) -> re.Pattern[str]:
     """Match one tag wrapped by mark_separate_asset with this call's value."""
     # The value is hex, so it needs no escaping inside the pattern.
     return re.compile(
-        rf"<!--citry-asset:{token}:(runtime|app|component):(css|js)-->(.*?)<!--/citry-asset:{token}-->",
+        rf"<!--citry-asset:{token}:(runtime|app|component):(css|js):([0-9]+)-->(.*?)<!--/citry-asset:{token}-->",
         re.DOTALL,
     )
+
+
+def _asset_owner(dep: Dependency, class_owners: Mapping[Dependency, dict[str, None]]) -> dict[str, Any]:
+    """
+    Return the ``mark_separate_asset`` owner arguments for one dependency.
+
+    The class ids come from the records that listed this dependency. A tag
+    that an ``on_dependencies`` hook added or rebuilt is in no record, so its
+    own ``origin_class_id`` names its component, if the hook set one.
+    """
+    owners = class_owners.get(dep)
+    if owners:
+        return {
+            "class_ids": tuple(owners),
+            # A css_data() stylesheet holds one instance's values; every
+            # other recorded tag is the class's own and the same each render.
+            "instance": dep.kind == "variables",
+        }
+    # No record proves this tag is the same on every render: a hook may have
+    # built it from request data. Code that bundles tags reads instance=False
+    # as safe to share, so an unknown tag must not claim it.
+    return {"class_ids": (dep.origin_class_id,) if dep.origin_class_id else (), "instance": True}
 
 
 def _style_asset_group(style: Dependency) -> Literal["app", "component"]:
@@ -286,6 +338,10 @@ def emit_dependencies(
     # and work under both.
     with_client_js = ctx.deps_strategy == "document"
     vue_runtime_required = with_client_js and ctx.context.extra.get(VUE_RUNTIME_REQUIRED_KEY) is True
+    # With "separate", record which component classes listed each tag, so
+    # the returned entries name them. Other positions skip this work.
+    separate = separate_assets_token(ctx.context)
+    class_owners: dict[Dependency, dict[str, None]] = {}
     if ctx.context.extra.get(VUE_DEPENDENCIES_PREPARED_KEY) is True:
         # The Vue producer (_vue/events.py) already resolved these records
         # while it built the app's asset list, running each instance's
@@ -304,6 +360,7 @@ def emit_dependencies(
             with_client_js=with_client_js,
             script_security=script_security,
             captures=ctx.context.extra.get(EXTRA_KEY),
+            class_owners=class_owners if separate is not None else None,
         )
         scripts, styles = resolved.scripts, resolved.styles
         has_component_calls = resolved.has_component_calls
@@ -359,8 +416,7 @@ def emit_dependencies(
     else:
         ctx.context.extra.pop(_VUE_RUNTIME_SCRIPT_KEY, None)
 
-    token = separate_assets_token(ctx.context)
-    if token is None:
+    if separate is None:
         js_html = "".join(
             str(script.render()) if script_security is None else script_security.render(script)
             for script in [*core_scripts, *scripts]
@@ -373,19 +429,22 @@ def emit_dependencies(
         # hook's early scripts and the component scripts are ordinary tags.
         js_html = "".join(
             mark_separate_asset(
-                token,
+                separate,
                 "runtime" if script is managed_runtime else "component",
                 "js",
                 str(script.render()) if script_security is None else script_security.render(script),
+                # Citry's own runtime is the same file for every render.
+                **({} if script is managed_runtime else _asset_owner(script, class_owners)),
             )
             for script in [*core_scripts, *scripts]
         )
         css_html = "".join(
             mark_separate_asset(
-                token,
+                separate,
                 _style_asset_group(style),
                 "css",
                 str(style.render()) if script_security is None else script_security.render_style(style),
+                **_asset_owner(style, class_owners),
             )
             for style in styles
         )
@@ -462,6 +521,8 @@ def _emit_without_javascript(
     security_javascript: SecurityJavascriptMode,
 ) -> str:
     """Emit server HTML, CSS, and safe inert data scripts without a manager."""
+    separate = separate_assets_token(ctx.context)
+    class_owners: dict[Dependency, dict[str, None]] = {}
     resolved = _resolve_records(
         citry,
         records,
@@ -469,6 +530,7 @@ def _emit_without_javascript(
         as_urls=False,
         script_security=script_security,
         captures=ctx.context.extra.get(EXTRA_KEY),
+        class_owners=class_owners if separate is not None else None,
     )
     hook_ctx = OnDependenciesContext(
         citry=citry,
@@ -491,18 +553,31 @@ def _emit_without_javascript(
     styles = javascript_policy.process_dependencies(hook_ctx.styles, position="stylesheet")
 
     retained = [*early_scripts, *scripts]
-    token = separate_assets_token(ctx.context)
-    if token is None:
+    if separate is None:
         js_html = "".join(_render_dependency(dep, script_security) for dep in retained)
         css_html = "".join(_render_dependency(dep, script_security) for dep in styles)
     else:
         # Without JavaScript there is no runtime and no Vue app, so every
         # tag is an ordinary component tag.
         js_html = "".join(
-            mark_separate_asset(token, "component", "js", _render_dependency(dep, script_security)) for dep in retained
+            mark_separate_asset(
+                separate,
+                "component",
+                "js",
+                _render_dependency(dep, script_security),
+                **_asset_owner(dep, class_owners),
+            )
+            for dep in retained
         )
         css_html = "".join(
-            mark_separate_asset(token, "component", "css", _render_dependency(dep, script_security)) for dep in styles
+            mark_separate_asset(
+                separate,
+                "component",
+                "css",
+                _render_dependency(dep, script_security),
+                **_asset_owner(dep, class_owners),
+            )
+            for dep in styles
         )
     return _place_dependency_html(
         ctx,
@@ -587,6 +662,7 @@ def _resolve_records(
     script_security: _ScriptSecurityMaterializer | None = None,
     allow_prerendered: bool = False,
     captures: Mapping[DependencyRecord, _DependencyCacheCapture | None] | None = None,
+    class_owners: dict[Dependency, dict[str, None]] | None = None,
 ) -> _Resolved:
     """
     Turn the collected records into the ``scripts`` / ``styles`` lists and
@@ -611,6 +687,11 @@ def _resolve_records(
     ``captures`` is the render's own record-to-capture map. A ``css_data()``
     stylesheet, linked or inlined, comes from it when present, so a page does
     not depend on what another worker last wrote to the shared cache.
+
+    ``class_owners``, when given, is filled with the class ids of the records
+    that listed each dependency. Each value is a dict used as an ordered
+    set, so the ids keep first-seen order. Equal dependencies share one key,
+    so a stylesheet two components declare names both.
     """
     mounted = citry.mounted_prefix is not None
 
@@ -765,11 +846,15 @@ def _resolve_records(
                 script_security.validate_declared_nonce(script)
             _bucket(script, core_js, extra_js, component_js)
             script_owner_groups.setdefault(script, set()).add(record.component_id)
+            if class_owners is not None:
+                class_owners.setdefault(script, {})[comp_cls.class_id] = None
         for style in instance_styles:
             if script_security is not None:
                 script_security.validate_declared_nonce(style)
             _bucket(style, core_css, extra_css, component_css)
             style_owner_groups.setdefault(style, set()).add(record.component_id)
+            if class_owners is not None:
+                class_owners.setdefault(style, {})[comp_cls.class_id] = None
 
     all_styles = [*core_css, *extra_css, *component_css]
     # Equal stylesheets (same URL or same inline content) are emitted once, so

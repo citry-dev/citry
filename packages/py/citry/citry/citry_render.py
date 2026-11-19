@@ -192,6 +192,68 @@ class SerializedSecurity:
     csp_script_hashes: tuple[str, ...] = ()
 
 
+class OutsideSlotContentError(TypeError):
+    """
+    Raised when a child render that holds slot content from outside it is serialized on its own as a Vue app.
+
+    A child component's render may be serialized on its own before its
+    parent, and it then becomes its own Vue app. That fails when the child
+    holds slot content that a component outside it wrote, such as text the
+    parent passed between the child's tags, because nothing in the new app
+    owns that content. Serialize the component that wrote the slot content
+    instead.
+
+    It subclasses `TypeError`, so `except TypeError` also catches it.
+
+    Experimental:
+        `OutsideSlotContentError` is experimental. It may change in a minor
+        release without a deprecation period.
+
+    """
+
+
+@dataclass(frozen=True, slots=True)
+class SerializedAssetEntry:
+    """
+    One asset tag, with the components that declared it.
+
+    Citry fills these fields from what it recorded while it rendered each
+    component. So code that bundles or caches tags can decide what to do
+    with a tag without reading its attributes.
+
+    Attributes:
+        tag: The complete tag, the same string as in `css` or `js`.
+        class_ids: The [`class_id`][citry.Component.class_id] of each
+            component that declared this tag, in the order the render
+            first used them. There is more than one when components
+            declare the same file or the same CSS text. It is empty for
+            Citry's own tags, such as the browser runtime, preload hints
+            and a Vue app's data and start script, and usually for a Vue
+            app's stylesheets, whose components the app tracks itself. A
+            tag that an `on_dependencies` hook added or rebuilt names only
+            its own `origin_class_id`, or nothing when the hook set none.
+        instance: `True` when the tag may hold data from one render, so
+            it may differ between renders: a stylesheet with one
+            instance's `css_data()` values, every tag in `app_assets`, and
+            any tag that Citry cannot show is the same on every render,
+            such as one an `on_dependencies` hook added or rebuilt. Do not
+            put such a tag into a file that other pages share. `False`
+            only for the tags in `runtime_assets` and for a component's
+            own or `Dependencies` tags, which are the same wherever the
+            component is used.
+
+    Experimental:
+        `SerializedAssetEntry` and the `css_entries` and `js_entries`
+        fields of `SerializedAssets` are experimental. They may change in a
+        minor release without a deprecation period.
+
+    """
+
+    tag: str
+    class_ids: tuple[str, ...] = ()
+    instance: bool = False
+
+
 @dataclass(frozen=True, slots=True)
 class SerializedAssets:
     """
@@ -206,6 +268,16 @@ class SerializedAssets:
             in the order to write them.
         js: The scripts that belong where `<c-js />` would put them, usually
             at the end of `<body>`, in the order they must run.
+        css_entries: **Experimental.** The same tags as `css`, in the same
+            order, each as a [`SerializedAssetEntry`][citry.SerializedAssetEntry]
+            that says which components declared it. Empty when the group
+            was built without them.
+        js_entries: **Experimental.** The same for `js`.
+
+    Raises:
+        ValueError: When you create the group and `css_entries` or
+            `js_entries` is not empty and does not hold the same tags as
+            `css` or `js`, in the same order.
 
     Experimental:
         `SerializedAssets`, `deps_position="separate"` and the asset fields
@@ -216,6 +288,16 @@ class SerializedAssets:
 
     css: tuple[str, ...] = ()
     js: tuple[str, ...] = ()
+    css_entries: tuple[SerializedAssetEntry, ...] = ()
+    js_entries: tuple[SerializedAssetEntry, ...] = ()
+
+    def __post_init__(self) -> None:
+        # Code reads an entry as describing the tag at the same position, so
+        # entries that name other tags would attach owners to the wrong tag.
+        for tags, entries, name in ((self.css, self.css_entries, "css"), (self.js, self.js_entries, "js")):
+            if entries and tuple(entry.tag for entry in entries) != tags:
+                msg = f"{name}_entries must be empty or hold the same tags as {name}, in the same order."
+                raise ValueError(msg)
 
 
 # The attribute by which the browser runtime finds the stylesheet tags an
@@ -238,6 +320,11 @@ def combine_assets(groups: Iterable[SerializedAssets]) -> SerializedAssets:
       lets each app use it. Each app's configuration data and start script
       stay as they are, because they differ per app.
     - Every other tag is kept as it is, with its `nonce` and `integrity`.
+    - When every group that has `css` tags also has `css_entries`, the
+      result has them too, and the same for `js`. A merged tag's entry
+      lists the components of every tag it replaced, and has
+      `instance=True` when any of them does. A group that has tags but
+      no entries leaves the result without entries for that kind.
 
     The tags come in the order of the groups you pass, and within a group
     in the order the render gave them. A tag several renders share stays
@@ -274,19 +361,36 @@ def combine_assets(groups: Iterable[SerializedAssets]) -> SerializedAssets:
 
     """
     groups = tuple(groups)
-    return SerializedAssets(
-        css=_combine_tags(tag for group in groups for tag in group.css),
-        js=_combine_tags(tag for group in groups for tag in group.js),
+    css, css_entries = _combine_tags(
+        [tag for group in groups for tag in group.css],
+        # Entries are combined only when every group has them; otherwise
+        # some tags would have no owner to report.
+        [entry for group in groups for entry in group.css_entries]
+        if all(group.css_entries or not group.css for group in groups)
+        else None,
     )
+    js, js_entries = _combine_tags(
+        [tag for group in groups for tag in group.js],
+        [entry for group in groups for entry in group.js_entries]
+        if all(group.js_entries or not group.js for group in groups)
+        else None,
+    )
+    return SerializedAssets(css=css, js=js, css_entries=css_entries, js_entries=js_entries)
 
 
-def _combine_tags(tags: Iterable[str]) -> tuple[str, ...]:
+def _combine_tags(
+    tags: list[str], entries: list[SerializedAssetEntry] | None
+) -> tuple[tuple[str, ...], tuple[SerializedAssetEntry, ...]]:
     """Keep each tag once, and merge stylesheet tags that differ only in the apps they name."""
     # A tag kept as written is keyed by itself; a stylesheet tag that can be
     # merged is keyed by its text before and after the app list, and collects
     # the app ids of every tag with that key. A dict keeps first-seen order.
     kept: dict[tuple[str, ...], list[str] | None] = {}
-    for tag in tags:
+    # The entries of the tags each key stands for, so the combined entry can
+    # name every component behind them. SerializedAssets keeps entries in
+    # step with tags, so the same index finds a tag's entry.
+    sources: dict[tuple[str, ...], list[SerializedAssetEntry]] = {}
+    for index, tag in enumerate(tags):
         # Search only the opening tag, so text in a <style> body that looks
         # like the attribute is never rewritten. Citry escapes `>` in
         # attribute values, so the first `>` ends the opening tag.
@@ -295,17 +399,32 @@ def _combine_tags(tags: Iterable[str]) -> tuple[str, ...]:
         # Only a tag with exactly one app attribute, naming each app once as
         # the browser runtime requires, is merged; any other is kept as written.
         if not ids or len(set(ids)) != len(ids):
-            kept.setdefault((tag,), None)
-            continue
-        match = matches[0]
-        # Tags with the same text around the list are byte-identical apart
-        # from the apps they name, so one tag stands for all of them with the
-        # same URL, nonce and integrity.
-        apps = cast("list[str]", kept.setdefault((tag[: match.start(1)], tag[match.end(1) :]), []))
-        for app_id in ids:
-            if app_id not in apps:
-                apps.append(app_id)
-    return tuple(key[0] if apps is None else f"{key[0]}{' '.join(apps)}{key[1]}" for key, apps in kept.items())
+            key: tuple[str, ...] = (tag,)
+            kept.setdefault(key, None)
+        else:
+            match = matches[0]
+            # Tags with the same text around the list are byte-identical apart
+            # from the apps they name, so one tag stands for all of them with the
+            # same URL, nonce and integrity.
+            key = (tag[: match.start(1)], tag[match.end(1) :])
+            apps = cast("list[str]", kept.setdefault(key, []))
+            for app_id in ids:
+                if app_id not in apps:
+                    apps.append(app_id)
+        if entries is not None:
+            sources.setdefault(key, []).append(entries[index])
+    combined = tuple(key[0] if apps is None else f"{key[0]}{' '.join(apps)}{key[1]}" for key, apps in kept.items())
+    if entries is None:
+        return combined, ()
+    return combined, tuple(
+        SerializedAssetEntry(
+            tag=tag,
+            # dict.fromkeys keeps each class id once, in first-seen order.
+            class_ids=tuple(dict.fromkeys(class_id for entry in sources[key] for class_id in entry.class_ids)),
+            instance=any(entry.instance for entry in sources[key]),
+        )
+        for tag, key in zip(combined, kept, strict=True)
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -652,7 +771,9 @@ class CitryRender:
         parent can still be serialized afterwards. This works only when the
         child holds no slot content that a component outside it wrote, such
         as text the parent passed between the child's tags; serializing such
-        a child on its own raises ``TypeError``.
+        a child on its own raises
+        [`OutsideSlotContentError`][citry.OutsideSlotContentError], a
+        ``TypeError``.
 
         Returns:
             Whether this render needs Citry's browser runtime.
@@ -779,9 +900,10 @@ class CitryRender:
                 ``security_javascript="forbid"`` finds a component that
                 needs browser behavior; or if a component uses ``Events``
                 and no web integration is mounted.
-            TypeError: If ``ssr`` is not a bool or ``None``, or if this
-                render is a child component's render that needs Vue and
-                holds slot content that a component outside it wrote.
+            TypeError: If ``ssr`` is not a bool or ``None``.
+            OutsideSlotContentError: If this render is a child component's
+                render that needs Vue and holds slot content that a
+                component outside it wrote. It subclasses ``TypeError``.
 
         """
         return self.serialize_result(
@@ -815,8 +937,11 @@ class CitryRender:
 
         With ``deps_position="separate"``, the result's ``html`` holds no
         asset tags, and its ``runtime_assets``, ``app_assets`` and
-        ``component_assets`` hold them instead. See
-        [Combine several renders](/advanced/asset-placement/#combine-several-renders).
+        ``component_assets`` hold them instead. Each group's
+        ``css_entries`` and ``js_entries`` say which components declared
+        each tag. See
+        [Combine several renders](/advanced/asset-placement/#combine-several-renders)
+        and [Find a tag's components](/advanced/asset-placement/#find-a-tags-components).
 
         Example:
             ```python

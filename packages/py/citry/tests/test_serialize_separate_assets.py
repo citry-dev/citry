@@ -9,7 +9,8 @@ same nonce, integrity and security results; each tag lands in the right group;
 and Vue hydrates the HTML as it does with ``"smart"``. They also lock the
 ``CitryRender.needs_browser_runtime()`` check, the rule that a child
 component's render may be serialized as its own Vue app before its parent,
-and how ``combine_assets()`` writes the tags of several renders once.
+how ``combine_assets()`` writes the tags of several renders once, and the
+entries that name the components behind each tag.
 """
 
 import re
@@ -23,6 +24,8 @@ from citry import (
     Component,
     Extension,
     Markup,
+    OutsideSlotContentError,
+    SerializedAssetEntry,
     SerializedAssets,
     SerializedRender,
     combine_assets,
@@ -500,8 +503,10 @@ $component({data() { return {n: 0}; }});
     assert child.needs_browser_runtime()
     # The page wrote the slot content, so a Vue app made from the child
     # alone has no owner for it.
-    with pytest.raises(TypeError, match="slot content that a component outside it wrote"):
+    with pytest.raises(OutsideSlotContentError, match="slot content that a component outside it wrote") as caught:
         child.serialize_result(deps_position="separate")
+    # It is a TypeError, so `except TypeError` catches it too.
+    assert isinstance(caught.value, TypeError)
     # The parent still serializes whole.
     assert "text from the page" in rendered.serialize()
 
@@ -603,3 +608,225 @@ def test_combine_assets_reads_the_app_list_only_from_the_opening_tag() -> None:
     combined = combine_assets([SerializedAssets(css=(style("a" * 32),)), SerializedAssets(css=(style("c" * 32),))])
     # The attribute names both apps, and the body is unchanged.
     assert combined.css == (style("a" * 32 + " " + "c" * 32),)
+
+
+def _entry_tags(assets: SerializedAssets) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    return tuple(e.tag for e in assets.css_entries), tuple(e.tag for e in assets.js_entries)
+
+
+def _shared_widgets(engine: Citry) -> tuple[type[Component], type[Component], type[Component]]:
+    """Return two static components that share a file and CSS, and a page holding both."""
+
+    class Card(Component):
+        citry = engine
+        template = """
+<div class="card"></div>
+"""
+        css = """
+.shared { color: red; }
+"""
+
+        class Dependencies:
+            css = {"all": [Style(url="https://cdn.example.com/lib.css")]}
+
+    class Tile(Component):
+        citry = engine
+        template = """
+<div class="tile" c-style="{'--size': size}"></div>
+"""
+        css = """
+.shared { color: red; }
+"""
+
+        class Dependencies:
+            css = {"all": [Style(url="https://cdn.example.com/lib.css")]}
+
+        def template_data(self, kwargs: object, slots: object) -> dict[str, object]:
+            return {"size": "2px"}
+
+        def css_data(self, kwargs: object, slots: object) -> dict[str, object]:
+            return {"accent": "blue"}
+
+    class Board(Component):
+        citry = engine
+        template = """
+<main><c-Card /><c-Tile /></main>
+"""
+
+    return Card, Tile, Board
+
+
+@pytest.mark.parametrize("strategy", ["document", "simple"])
+def test_component_entries_name_the_components_from_their_records(strategy: str) -> None:
+    engine = _engine()
+    card, tile, board = _shared_widgets(engine)
+    result = board().render().serialize_result(deps_strategy=strategy, deps_position="separate")  # type: ignore[arg-type]
+    group = result.component_assets
+    # The entries describe the same tags as the strings, in the same order.
+    assert _entry_tags(group) == (group.css, group.js)
+
+    by_tag = {entry.tag: entry for entry in group.css_entries}
+    lib = next(tag for tag in by_tag if "lib.css" in tag)
+    shared = next(tag for tag in by_tag if ".shared { color: red; }" in tag)
+    variables = [tag for tag in by_tag if tag not in (lib, shared)]
+    # Both components list the file and the byte-identical CSS, so both
+    # entries name both, in the order the page met them.
+    assert by_tag[lib] == SerializedAssetEntry(lib, (card.class_id, tile.class_id), instance=False)
+    assert by_tag[shared] == SerializedAssetEntry(shared, (card.class_id, tile.class_id), instance=False)
+    # The css_data() stylesheet holds one instance's values.
+    assert len(variables) == 1
+    assert by_tag[variables[0]] == SerializedAssetEntry(variables[0], (tile.class_id,), instance=True)
+
+
+def test_vue_entries_mark_app_tags_as_one_render_and_name_no_component() -> None:
+    widget, _ = _widgets(_engine())
+    result = widget().render().serialize_result(deps_position="separate")
+    for group in (result.runtime_assets, result.app_assets, result.component_assets):
+        assert _entry_tags(group) == (group.css, group.js)
+    # Citry's own runtime and preload hints are shared and have no component.
+    runtime = result.runtime_assets
+    assert all(e.class_ids == () and not e.instance for e in (*runtime.css_entries, *runtime.js_entries))
+    # Every tag of the app belongs to this render alone.
+    app = result.app_assets
+    assert app.css_entries
+    assert app.js_entries
+    assert all(e.class_ids == () and e.instance for e in (*app.css_entries, *app.js_entries))
+
+
+def test_entries_without_javascript_name_their_components() -> None:
+    engine = _engine()
+    card, tile, board = _shared_widgets(engine)
+    result = board().render().serialize_result(deps_position="separate", security_javascript="omit")
+    group = result.component_assets
+    assert _entry_tags(group) == (group.css, group.js)
+    assert group.css_entries
+    assert all(card.class_id in e.class_ids or tile.class_id in e.class_ids for e in group.css_entries)
+    assert sum(e.instance for e in group.css_entries) == 1
+
+
+def test_a_hook_tag_names_the_component_it_sets_and_counts_as_one_render() -> None:
+    class Analytics(Extension):
+        name = "analytics"
+
+        def on_dependencies(self, ctx):  # type: ignore[no-untyped-def]
+            ctx.scripts.append(Script(url="/static/analytics.js"))
+            ctx.scripts.append(Script(url="/static/owned.js", origin_class_id="Named_1"))
+
+    engine = _engine(extensions=[Analytics])
+    _, badge = _widgets(engine)
+    result = badge().render().serialize_result(deps_position="separate")
+    # No record shows a hook's tag is the same on every render, so it is
+    # never offered as shareable.
+    assert result.component_assets.js_entries == (
+        SerializedAssetEntry('<script src="/static/analytics.js"></script>', instance=True),
+        SerializedAssetEntry('<script src="/static/owned.js"></script>', ("Named_1",), instance=True),
+    )
+
+
+@pytest.mark.parametrize("strategy", ["document", "simple"])
+def test_a_stylesheet_a_hook_rebuilds_is_never_shareable(strategy: str) -> None:
+    class Minify(Extension):
+        name = "minify"
+
+        def on_dependencies(self, ctx):  # type: ignore[no-untyped-def]
+            # A copy with new content and no kind, as a minifier builds it.
+            ctx.styles[:] = [
+                Style(content=f"/*min*/{style.content}", attrs=dict(style.attrs)) if style.content else style
+                for style in ctx.styles
+            ]
+
+    engine = _engine(extensions=[Minify])
+    *_, board = _shared_widgets(engine)
+    result = board().render().serialize_result(deps_strategy=strategy, deps_position="separate")  # type: ignore[arg-type]
+    inline = [e for e in result.component_assets.css_entries if e.tag.startswith("<style")]
+    assert len(inline) == 2
+    # The css_data() sheet lost its kind in the copy; it must still not be
+    # reported as shareable.
+    assert all(e.instance and e.class_ids == () for e in inline)
+    lib = [e for e in result.component_assets.css_entries if "lib.css" in e.tag]
+    assert [e.instance for e in lib] == [False]
+
+
+def test_serializing_again_with_another_position_leaves_no_wrappers() -> None:
+    engine = _engine()
+    *_, board = _shared_widgets(engine)
+    rendered = board().render()
+    separate = rendered.serialize_result(deps_position="separate")
+    smart = rendered.serialize()
+    assert "citry-asset:" not in separate.html
+    assert "citry-asset:" not in smart
+    assert all(tag in smart for tag in separate.component_assets.css)
+
+
+def test_owners_come_from_records_not_from_the_tag_text() -> None:
+    engine = _engine()
+
+    class Real(Component):
+        citry = engine
+        template = """
+<p>r</p>
+"""
+
+        class Dependencies:
+            # Attributes and content that look like Citry's own markers and
+            # wrapper comments, as a value from data could.
+            css = {
+                "all": [
+                    Style(
+                        url="https://cdn.example.com/a.css",
+                        attrs={"data-citry-css-class": "Fake_1"},
+                    ),
+                    Style(content="/* <!--citry-asset:00:component:css:0--> */"),
+                ]
+            }
+
+    result = Real().render().serialize_result(deps_strategy="simple", deps_position="separate")
+    entries = result.component_assets.css_entries
+    assert len(entries) == 2
+    assert 'data-citry-css-class="Fake_1"' in entries[0].tag
+    assert all(entry.class_ids == (Real.class_id,) for entry in entries)
+    assert not any(entry.instance for entry in entries)
+
+
+def test_combine_assets_combines_entries() -> None:
+    widget, _ = _widgets(_engine())
+    results = [widget().render().serialize_result(deps_position="separate") for _ in range(2)]
+
+    apps = combine_assets(result.app_assets for result in results)
+    assert _entry_tags(apps) == (apps.css, apps.js)
+    assert all(e.instance for e in (*apps.css_entries, *apps.js_entries))
+    runtime = combine_assets(result.runtime_assets for result in results)
+    assert runtime == results[0].runtime_assets
+
+    # A merged tag names every component behind the tags it stands for.
+    a = SerializedAssetEntry("<link href='/a.css'>", ("A_1",))
+    b = SerializedAssetEntry("<link href='/a.css'>", ("B_1", "A_1"), instance=True)
+    combined = combine_assets(
+        [SerializedAssets(css=(a.tag,), css_entries=(a,)), SerializedAssets(css=(b.tag,), css_entries=(b,))]
+    )
+    assert combined.css_entries == (SerializedAssetEntry(a.tag, ("A_1", "B_1"), instance=True),)
+
+    # A group without entries leaves the combined group without them, since
+    # its tags would have no owner to report.
+    bare = combine_assets(
+        [SerializedAssets(css=(a.tag,), css_entries=(a,)), SerializedAssets(css=("<style>x</style>",))]
+    )
+    assert bare.css == (a.tag, "<style>x</style>")
+    assert bare.css_entries == ()
+    # An empty group has nothing to describe, so it does not drop them.
+    kept = combine_assets([SerializedAssets(css=(a.tag,), css_entries=(a,)), SerializedAssets()])
+    assert kept.css_entries == (a,)
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"css": ("<a>",), "css_entries": (SerializedAssetEntry("<b>"),)},
+        {"js": ("<a>", "<b>"), "js_entries": (SerializedAssetEntry("<a>"),)},
+        {"css_entries": (SerializedAssetEntry("<a>"),)},
+    ],
+    ids=["other-tag", "fewer", "no-tags"],
+)
+def test_serialized_assets_refuses_entries_for_other_tags(fields: dict[str, object]) -> None:
+    with pytest.raises(ValueError, match="_entries must be empty or hold the same tags"):
+        SerializedAssets(**fields)  # type: ignore[arg-type]

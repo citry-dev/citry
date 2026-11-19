@@ -13,6 +13,17 @@
   `CitryRender.needs_browser_runtime()` returns whether
   a render needs the browser runtime. See
   [Combine several renders](https://citry.dev/advanced/asset-placement/#combine-several-renders).
+- Experimental, groundwork for the citry-django integration: the asset
+  tags that `deps_position="separate"` returns now say which components
+  declared each tag and whether it holds one render's data, in each
+  group's `css_entries` and `js_entries`. A tool that bundles tags can
+  use them instead of reading the tags' attributes. See
+  [Find a tag's components](https://citry.dev/advanced/asset-placement/#find-a-tags-components).
+- Experimental, groundwork for the citry-django integration: when you
+  serialize a child render on its own and it holds slot content from
+  outside it, Citry now raises `OutsideSlotContentError`, so you can
+  catch that case by type. It is a subclass of `TypeError`, so existing
+  handlers keep working.
 - An interactive component can now hold HTML from a template with
   foreign spans, such as a fill with Django tags, on the first render
   and in an Events `Render`. Citry inserts it as static HTML that Vue
