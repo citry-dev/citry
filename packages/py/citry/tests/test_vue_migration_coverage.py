@@ -1499,7 +1499,9 @@ def test_finalize_and_merge_handle_simple_componentless_and_extension_failures()
             _finalize(initial.render, None)
 
 
-def test_component_render_rejects_raw_prepared_outputs_and_foreign_spans() -> None:
+def test_component_render_keeps_raw_prepared_outputs() -> None:
+    # Plain strings are HTML from a template compiled for static output. A Vue
+    # render keeps them, and the Vue writer turns them into a static block.
     app = Citry(autodiscover=False)
 
     class Page(Component):
@@ -1508,8 +1510,7 @@ def test_component_render_rejects_raw_prepared_outputs_and_foreign_spans() -> No
 
     with typed_render_scope(direct=True, vue=True):
         rendered = render_prepared_direct(Page())
-        with pytest.raises(TypeError, match="raw compiled output"):
-            _render_body(["raw"], rendered.context)
+        assert _render_body(["raw"], rendered.context) == ["raw"]
 
         class RawNode:
             position = (0, 1)
@@ -1517,23 +1518,11 @@ def test_component_render_rejects_raw_prepared_outputs_and_foreign_spans() -> No
             def render(self, _context):
                 return "raw node"
 
-        with pytest.raises(TypeError, match="raw output"):
-            _render_body([RawNode()], rendered.context)
+        assert _render_body([RawNode()], rendered.context) == ["raw node"]
 
         prepared = _get_compiled_template(Page, prepared=True)
         assert prepared is not None
         assert _get_compiled_template(Page, prepared=True) is prepared
-
-        from citry.citry_template import CitryTemplate
-
-        foreign = CitryTemplate(
-            "<p>foreign</p>",
-            "<foreign>",
-            foreign_spans=(object(),),
-            foreign_prepared=True,
-        )
-        with pytest.raises(TypeError, match="foreign template spans"):
-            _get_compiled_template(Page, template_override=foreign, prepared=True)
 
 
 def test_component_render_finalization_propagates_hook_failures_and_keeps_render_on_noop(

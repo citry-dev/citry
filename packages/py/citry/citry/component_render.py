@@ -3050,16 +3050,12 @@ def _get_compiled_template(
                     template.foreign_spans = spans
                     template.foreign_provider_metadata = metadata
                     template.foreign_prepared = True
-        compile_prepared = prepared
-        if prepared and template.foreign_spans:
-            from citry._vue.capture import vue_render_active  # noqa: PLC0415
-
-            if vue_render_active():
-                raise TypeError("prepared Vue rendering does not yet support foreign template spans")
-            # Static serialization still preserves the established
-            # foreign-provider hook contract. Its selected output is
-            # ordinary trusted HTML and never enters the Vue compiler.
-            compile_prepared = False
+        # A template with foreign spans compiles for static output in every
+        # mode, so the foreign-provider hooks see the nodes they expect. Its
+        # output is ordinary trusted HTML: inside a Vue app it becomes one
+        # static block (see `write_static_html_run` in direct_capture.py)
+        # and never enters the Vue compiler.
+        compile_prepared = prepared and not template.foreign_spans
         generate = _compile_template(
             template,
             comp_cls.citry._tag_rules(),
@@ -3287,11 +3283,10 @@ def _compile_nested_template(
         root_source=root_source,
         **template_kwargs,
     )
-    from citry._vue.capture import prepared_render_active, vue_render_active  # noqa: PLC0415
+    from citry._vue.capture import prepared_render_active  # noqa: PLC0415
 
     prepared = prepared_render_active()
-    if prepared and core_spans and vue_render_active():
-        raise TypeError("prepared Vue rendering does not yet support foreign template spans")
+    # Foreign spans compile for static output, as in `_get_compiled_template`.
     generate = _compile_template(template, user_rules, prepared=prepared and not core_spans)
     if component_class is None:
         return generate
@@ -3327,13 +3322,12 @@ class _BodyFrame:
     error passes through it.
     """
 
-    __slots__ = ("context", "direct_prepared", "items", "parts", "tracing", "value_token")
+    __slots__ = ("context", "items", "parts", "tracing", "value_token")
 
     def __init__(self, body: Iterable[BodyItem], context: CitryContext, parts: list[RenderPart]) -> None:
         self.items = iter(body)
         self.context = context
         self.parts = parts
-        self.direct_prepared = vue_render_active()
         # Hoisted: one level check per body walk, not per node.
         self.tracing = is_tracing()
         # Set last: once it is set, the renderer's error handling resets it.
@@ -3406,7 +3400,6 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
             frame: _BodyFrame = stack[-1]  # type: ignore[assignment]
             parts = frame.parts
             frame_context = frame.context
-            direct_prepared = frame.direct_prepared
             tracing = frame.tracing
             pushed = False
             # A StopIteration a slot's steps carried out, raised below,
@@ -3414,8 +3407,10 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
             stopped: StopIteration | None = None
             for item in frame.items:
                 if isinstance(item, str):
-                    if direct_prepared:
-                        raise TypeError("prepared Vue rendering received unsupported raw compiled output")
+                    # A static string from a template compiled for static
+                    # output, or from a hook that edited the node list.
+                    # Inside a Vue app the Vue writer turns it into a static
+                    # block, so every render target keeps it.
                     parts.append(item)
                     continue
                 if tracing:
@@ -3453,10 +3448,6 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
                 # because this runs once for every part of every render; the
                 # two must stay alike.
                 if type(part) is str:
-                    if direct_prepared:
-                        raise TypeError(
-                            f"prepared Vue rendering received unsupported raw output from {type(item).__name__}"
-                        )
                     parts.append(part)
                     continue
                 if (
@@ -3500,13 +3491,13 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
                 # Raised outside the `except`, as above.
                 _attach_template_position(stopped, node_frame.node, outer.context)
                 raise stopped
-            _add_rendered_part(part, node_frame.node, outer)
+            _add_rendered_part(part, outer)
     except BaseException as err:
         _unwind_body_frames(stack, err)
         raise
 
 
-def _add_rendered_part(part: RenderPart, item: BodyItem, frame: _BodyFrame) -> None:
+def _add_rendered_part(part: RenderPart, frame: _BodyFrame) -> None:
     """
     Add a finished ``<c-if>``, ``<c-for>`` or ``<c-slot>`` part to the body that holds it.
 
@@ -3514,8 +3505,6 @@ def _add_rendered_part(part: RenderPart, item: BodyItem, frame: _BodyFrame) -> N
     for every other node's part; the two must stay alike.
     """
     if type(part) is str:
-        if frame.direct_prepared:
-            raise TypeError(f"prepared Vue rendering received unsupported raw output from {type(item).__name__}")
         frame.parts.append(part)
         return
     if isinstance(part, CitryRender) and part.context is not frame.context and not _contains_deferred(part):

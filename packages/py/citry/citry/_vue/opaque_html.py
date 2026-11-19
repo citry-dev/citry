@@ -116,6 +116,31 @@ def reject_noscript_in_opaque_html(html: str, *, origin: str) -> None:
         raise ValueError(msg)
 
 
+def reject_script_in_opaque_html(html: str, *, origin: str) -> None:
+    """
+    Reject opaque markup that holds a `<script>` element.
+
+    Vue builds an opaque block by parsing it inside a `<template>`, and the
+    browser never runs a script parsed there. The script would run only when a
+    hydrating page first loads, and never once Vue inserts the block again, so
+    it would work only some of the time. The Vue writer calls this for HTML
+    that Citry did not compile, such as a template whose `{% %}` tags another
+    engine renders, because its author expects the script to run as it does
+    on a static page.
+    """
+    # Most blocks never name the tag, so skip the scan for them.
+    if "script" not in html.casefold():
+        return
+    if any(element.start_tag.name.content.casefold() == "script" for element in scan_output_html(html).elements):
+        msg = (
+            f"{origin} holds a <script> element, which is not accepted inside an interactive component."
+            " Vue inserts this HTML as one block, and the browser never runs a script inserted that way, so"
+            " it would run only when a page that Vue hydrates first loads."
+            " Move the script into the component's js, or onto the page outside the component."
+        )
+        raise ValueError(msg)
+
+
 def mark_opaque_html(html: str, markers: tuple[tuple[str, object], ...]) -> str:
     """Apply validated component-root markers while preserving all other bytes."""
     if type(html) is not str:
@@ -180,4 +205,10 @@ def opaque_html_record(html: str, *, pinned: bool = False) -> dict[str, object]:
     return record
 
 
-__all__ = ["mark_opaque_html", "opaque_html_record", "reject_cross_boundary_html", "reject_noscript_in_opaque_html"]
+__all__ = [
+    "mark_opaque_html",
+    "opaque_html_record",
+    "reject_cross_boundary_html",
+    "reject_noscript_in_opaque_html",
+    "reject_script_in_opaque_html",
+]

@@ -1500,12 +1500,12 @@ def _validate_prepared_render(render: CitryRender) -> None:
         for part in current.parts:
             if isinstance(part, CitryRender):
                 pending.append(part)
-            elif type(part) is str and part == "":
-                # ``on_render()`` uses an empty string as the public way to
-                # suppress a component's output.  Direct assembly already
-                # treats this exact marker as zero output; keep validation in
-                # step with that consumer while continuing to reject all
-                # non-empty raw strings.
+            elif type(part) is str:
+                # An empty string is how ``on_render()`` suppresses a
+                # component's output. Any other plain string is HTML from a
+                # template compiled for static output (one with foreign
+                # spans) or a custom node, which the Vue writer turns into a
+                # static block.
                 continue
             elif isinstance(part, leaf_types):
                 continue
