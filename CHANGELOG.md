@@ -11,13 +11,13 @@
   once. `CitryRender.needs_browser_runtime()` returns whether
   a render needs the browser runtime. See
   [Combine several renders](https://citry.dev/advanced/asset-placement/#combine-several-renders).
-- Groundwork for the citry-django integration: an interactive component
-  can now hold HTML from a template with foreign spans, such as a fill
-  with Django tags, on the first render and in an Events `Render`.
-  Citry inserts it as static HTML that Vue never compiles, and raises
-  an error that names the problem when the HTML is not a complete
-  fragment, holds a `<script>`, or has an interactive component inside
-  one of its elements. See
+- An interactive component can now hold HTML from a template with
+  foreign spans, such as a fill with Django tags, on the first render
+  and in an Events `Render`. Citry inserts it as static HTML that Vue
+  never compiles, and raises an error that names the problem when the
+  HTML is not a complete fragment, holds a `<script>`, or has an
+  interactive component inside one of its elements. This prepares the
+  citry-django integration. See
   [Put foreign output inside interactive components](https://citry.dev/advanced/extensions/#foreign-output-in-vue).
 
 ### Fixes

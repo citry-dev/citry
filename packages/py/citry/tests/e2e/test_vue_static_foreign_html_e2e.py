@@ -51,8 +51,9 @@ class _Foreign(Extension):
         ctx.mark_resolved(*ctx.claims)
 
 
+@pytest.mark.parametrize("ssr", [True, False], ids=["hydrated", "mounted"])
 def test_static_foreign_html_hydrates_and_survives_an_events_render(
-    page: Any, serve_live: Any, wait_for_citry_ready: Any
+    page: Any, serve_live: Any, wait_for_citry_ready: Any, ssr: bool
 ) -> None:
     engine = Citry(
         secret="static-foreign-html-e2e-secret",  # noqa: S106
@@ -104,11 +105,12 @@ def test_static_foreign_html_hydrates_and_survives_an_events_render(
     page.on("pageerror", lambda error: faults.append(str(error)))
     page.on("console", lambda message: warnings.append(message.text) if message.type == "warning" else None)
     rendered = Page().render()
-    html = rendered.serialize()
-    assert '"hydrate":true' in html
-    admission = hydration_admission(rendered)
-    assert admission is not None
-    assert admission.declines == ()
+    html = rendered.serialize(ssr=ssr)
+    if ssr:
+        assert '"hydrate":true' in html
+        admission = hydration_admission(rendered)
+        assert admission is not None
+        assert admission.declines == ()
 
     base = serve_live(engine, html, "")
     page.add_init_script("globalThis.__citryHydrationDiagnostics = true")
@@ -119,15 +121,15 @@ def test_static_foreign_html_hydrates_and_survives_an_events_render(
     )
     page.goto(base + "/")
     wait_for_citry_ready()
-    page.wait_for_function("window.__citryHydrationReport !== undefined")
-    report = page.evaluate("window.__citryHydrationReport")
-    assert report["mountError"] is None, report
-    assert report["mismatchCount"] == 0, report
-    assert report["replacedElementCount"] == 0, report
-
-    # Vue adopted the server's nodes for both blocks.
-    assert page.evaluate("globalThis.__servedFill === document.querySelector('#fill')") is True
-    assert page.evaluate("globalThis.__servedLink === document.querySelector('#link')") is True
+    if ssr:
+        page.wait_for_function("window.__citryHydrationReport !== undefined")
+        report = page.evaluate("window.__citryHydrationReport")
+        assert report["mountError"] is None, report
+        assert report["mismatchCount"] == 0, report
+        assert report["replacedElementCount"] == 0, report
+        # Vue adopted the server's nodes for both blocks.
+        assert page.evaluate("globalThis.__servedFill === document.querySelector('#fill')") is True
+        assert page.evaluate("globalThis.__servedLink === document.querySelector('#link')") is True
     # The Vue syntax in the HTML stayed text and plain attributes.
     assert page.text_content("#fill") == "{{ 7*7 }} kept"
     assert page.locator("#injected").count() == 0

@@ -2891,7 +2891,8 @@ nodes at the app's root would otherwise keep the page from hydrating.
 
 A static component inside a run has no Vue occurrence. Its render id is
 mapped to the occurrence whose template holds the block, so its
-stylesheets load with that occurrence.
+stylesheets load with that occurrence. A `<c-mark>` ends the run instead,
+because an Events `Render` finds a mark by its occurrence.
 
 On an Events `Render`, the component renders under `vue_render_active()`.
 The renderer compiles a template with foreign spans for static output
@@ -2910,6 +2911,14 @@ serialized:
 - A run holding `<script>` (the browser never runs a script inserted this
   way) or `<noscript>` (Chromium and WebKit build its contents as markup).
 - A run inside `<svg>`, `<math>`, or a text-only element.
+- A template with foreign spans whose author wrote a Vue attribute
+  (`@click`, `:title`, `v-if`) on an HTML element, when its output
+  reaches a Vue app, either as the body of a run or as a static component
+  inside one. The attribute would reach the browser as plain text, so the
+  writer reads the template source with the foreign spans blanked
+  (`_vue_attribute_in_template_source`), which tells the author's
+  attributes apart from what the other engine wrote. Events bindings in
+  such a template are already refused when it compiles.
 
 The record's site has origin `markup`, so the browser checks it for
 `<noscript>` again, and the settled `security_javascript` and

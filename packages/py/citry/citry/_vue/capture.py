@@ -1504,7 +1504,8 @@ def _validate_prepared_render(render: CitryRender) -> None:
                 # An empty string is how ``on_render()`` suppresses a
                 # component's output. Any other plain string is HTML from a
                 # template compiled for static output (one with foreign
-                # spans), which the Vue writer turns into a static block.
+                # spans) or a custom node, which the Vue writer turns into a
+                # static block.
                 continue
             elif isinstance(part, leaf_types):
                 continue

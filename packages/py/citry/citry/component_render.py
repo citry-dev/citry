@@ -3408,8 +3408,9 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
             for item in frame.items:
                 if isinstance(item, str):
                     # A static string from a template compiled for static
-                    # output. Inside a Vue app the Vue writer turns it into
-                    # a static block, so every render target keeps it.
+                    # output, or from a hook that edited the node list.
+                    # Inside a Vue app the Vue writer turns it into a static
+                    # block, so every render target keeps it.
                     parts.append(item)
                     continue
                 if tracing:

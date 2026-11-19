@@ -666,7 +666,7 @@ depend on which thread finished first.
 ## Put foreign output inside interactive components { #foreign-output-in-vue }
 
 A template with foreign spans writes finished HTML: the other engine
-renders its tags, and Citry joins the result as it is. Such HTML can sit
+renders its tags, and Citry adds the result to the page unchanged. Such HTML can sit
 inside an interactive component, a component that runs in the browser
 with Vue. A fill with Django tags, passed to a modal, is one example:
 
@@ -679,7 +679,9 @@ block of static HTML that it never compiles. Text such as `{{ x }}` or
 an attribute such as `@click` in the HTML stays plain text or a plain
 attribute. This works when the page first renders and when an event
 handler renders the component again. Components inside the HTML that do
-not need the browser become part of the block and keep their styles.
+not need the browser become part of the block and keep their styles. A
+`<c-mark>` stays a part of the Vue app, so an event handler can still
+render into it.
 
 Citry trusts this HTML as it trusts a `Markup` value, so the other
 engine must escape the request values it writes, as Django does. The
@@ -689,12 +691,16 @@ read a `Markup` value.
 Citry raises an error that says what to change when the HTML:
 
 - is not a complete fragment: each tag it opens must close inside it;
+- uses Vue syntax, such as `@click` or `:title`, in the template
+  with foreign spans itself. Vue would not compile it, so compute the
+  foreign values in `template_data()` instead;
 - has an interactive component inside one of its elements. Between two
   pieces of the HTML, the component itself is fine, but Vue cannot place
   it inside an element that it does not compile. Write those elements in
   the Citry template, using `<c-if>` and `<c-for>` for conditions and
   loops;
-- holds a `<script>`, which the browser would never run, or a
+- holds a `<script>`, which would run only when a page that Vue
+  hydrates first loads, never after Vue inserts the block again, or a
   `<noscript>`;
 - sits inside `<svg>`, `<math>`, or an element that holds only text,
   such as `<textarea>`.

@@ -189,6 +189,53 @@ class TestFills:
         assert len(styles) == 2
         assert all(style["owner"]["occurrenceIds"] == [root_id] for style in styles)
 
+    def test_a_static_component_with_a_fill_inside_an_element_of_the_html_joins_the_block(self) -> None:
+        engine = _engine()
+        _components(engine)
+
+        class Card(Component):
+            citry = engine
+            template = """
+<div class="card"><c-slot /></div>
+"""
+
+        assert Card
+        html = engine.render_template(
+            "<c-modal title='t'><ul><li>{% word %}<c-card>{% bold %}</c-card></li></ul></c-modal>", {}
+        ).serialize()
+        assert _opaque_records(_configuration(html)) == [
+            '<ul><li>Hello &amp; bye\n<div class="card"><b>yes</b></div>\n</li></ul>'
+        ]
+
+    def test_a_provide_inside_an_element_of_the_html_joins_the_block(self) -> None:
+        engine = _engine()
+        _components(engine)
+        html = engine.render_template(
+            "<c-modal title='t'><p>{% word %}<c-provide key='k' c-value='1'><b>x</b></c-provide></p></c-modal>", {}
+        ).serialize()
+        assert _opaque_records(_configuration(html)) == ["<p>Hello &amp; bye<b>x</b></p>"]
+
+    def test_a_mark_keeps_its_vue_occurrence_so_a_render_can_find_it(self) -> None:
+        engine = _engine()
+        _components(engine)
+        html = engine.render_template(
+            "<c-modal title='t'>{% word %}<c-mark name='m'><b>x</b></c-mark></c-modal>", {}
+        ).serialize()
+        configuration = _configuration(html)
+        assert [marker["name"] for marker in configuration["manifest"]["markers"]] == ["m"]
+        with pytest.raises(ValueError, match=r"The component Mark, which needs Vue, sits inside an element"):
+            engine.render_template(
+                "<c-modal title='t'><p>{% word %}<c-mark name='m'><b>x</b></c-mark></p></c-modal>", {}
+            ).serialize()
+
+    def test_line_breaks_around_an_interactive_component_keep_the_page_hydrating(self) -> None:
+        engine = _engine()
+        _components(engine)
+        rendered = engine.render_template("\n<c-modal title='t'>{% bold %}</c-modal>\n", {})
+        html = rendered.serialize()
+        assert '"hydrate":true' in html
+        assert _opaque_records(_configuration(html)) == ["<b>yes</b>"]
+
     def test_an_interactive_component_beside_static_html_in_a_fill_stays_a_vue_component(self) -> None:
         engine = _engine()
         _components(engine)
@@ -232,10 +279,72 @@ class TestRefusals:
     def test_an_interactive_component_inside_an_element_of_the_html_is_refused(self) -> None:
         engine = _engine()
         _components(engine)
-        with pytest.raises(ValueError, match=r"A component that needs Vue sits inside an element of HTML that Citry"):
+        with pytest.raises(ValueError, match=r"The component Modal, which needs Vue, sits inside an element"):
             engine.render_template(
                 "<c-modal title='outer'><div>{% bold %}<c-modal title='inner'>a</c-modal></div></c-modal>", {}
             ).serialize()
+
+    def test_unbalanced_html_after_an_interactive_component_is_named_as_unbalanced(self) -> None:
+        engine = _engine()
+        _components(engine)
+        with pytest.raises(ValueError, match=r"is not a complete HTML fragment: '<div>x'"):
+            engine.render_template(
+                "<c-modal title='t'><c-modal title='in'>a</c-modal>{% open %}x</c-modal>", {}
+            ).serialize()
+
+    @pytest.mark.parametrize("template", ['<a @click="go">{% word %}</a>', '<a :title="x">{% word %}</a>'])
+    def test_vue_syntax_in_a_component_template_with_foreign_spans_is_refused(self, template: str) -> None:
+        engine = _engine()
+        components = _components(engine)
+
+        class Linked(Component):
+            citry = engine
+
+        Linked.template = template
+
+        class Holder(Component):
+            citry = engine
+            template = """
+<div><button @click="1">b</button><c-linked /></div>
+"""
+
+        assert Holder
+        assert components
+        with pytest.raises(TypeError, match=r"Linked has Vue syntax \('(@click|:title)' on <a>\)"):
+            engine.render_template("<c-holder />", {}).serialize()
+
+    def test_vue_syntax_in_a_static_component_inside_the_html_is_refused(self) -> None:
+        engine = _engine()
+        _components(engine)
+
+        class Linked(Component):
+            citry = engine
+            template = """
+<a v-if="1">{% word %}</a>
+"""
+
+        assert Linked
+        with pytest.raises(TypeError, match=r"Linked has Vue syntax \('v-if' on <a>\)"):
+            engine.render_template("<c-modal title='t'><p>{% bold %}<c-linked /></p></c-modal>", {}).serialize()
+
+    @pytest.mark.parametrize(
+        "html",
+        [
+            "<script>1</script>",
+            "<SCRIPT>1</SCRIPT>",
+            "<svg><script>1</script></svg>",
+            "<template><script>1</script></template>",
+        ],
+    )
+    def test_each_spelling_of_a_script_is_refused(self, html: str) -> None:
+        engine = _engine()
+        _components(engine)
+        _FOREIGN_HTML["{% spelled %}"] = html
+        try:
+            with pytest.raises(ValueError, match=r"holds a <script> element"):
+                engine.render_template("<c-modal title='t'>{% spelled %}</c-modal>", {}).serialize()
+        finally:
+            del _FOREIGN_HTML["{% spelled %}"]
 
     def test_a_script_is_refused(self) -> None:
         engine = _engine()
