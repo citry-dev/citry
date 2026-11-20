@@ -188,7 +188,7 @@ citry = Citry(
 Or set it for one component on its `Events` class. Define the function
 outside the class and assign it:
 
-```python
+```citry
 class TaskList(Component):
     class Events:
         _render_inputs = render_inputs
