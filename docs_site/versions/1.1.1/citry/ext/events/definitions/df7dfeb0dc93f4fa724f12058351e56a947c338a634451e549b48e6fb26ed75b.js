@@ -1,0 +1,16 @@
+try {
+(function() {
+
+__citryRuntime.registerTypeOptions.bind(null, "SliderForm_bc1669", "bf3cc86f2c039d8f42f91c3947f0ed75bf0c7402a2655160286cb14444d7a04b")({
+  data() {
+    return {
+      result:'Submit to inspect values'
+    };
+  },
+});
+
+})();
+__citryRuntime.finishScript("af92b9eebf811fb47ebbb8e2c001cc129e83f075d4c2da9b8909ac0745bd1c12");
+} catch (error) {
+__citryRuntime.finishScript("af92b9eebf811fb47ebbb8e2c001cc129e83f075d4c2da9b8909ac0745bd1c12", error);
+}

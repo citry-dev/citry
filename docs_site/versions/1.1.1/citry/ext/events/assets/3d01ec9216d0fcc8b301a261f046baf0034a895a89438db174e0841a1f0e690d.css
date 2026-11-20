@@ -1,0 +1,41 @@
+
+:where(.icon-meaning) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+  max-width: 58rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.icon-meaning article) {
+  padding: 1rem;
+  border: 1px solid light-dark(#d8dac7, #55563a);
+  border-radius: 0.75rem;
+  background: Canvas;
+}
+
+:where(.icon-meaning h2) {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+}
+
+:where(.icon-meaning__notice) {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  color: light-dark(#9a3412, #fdba74);
+}
+
+:where(.icon-meaning__weather) {
+  display: grid;
+  place-items: center;
+  min-block-size: 4rem;
+  color: light-dark(#15803d, #86efac);
+  font-size: 2rem;
+}
+
+:where(.icon-meaning code) {
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}

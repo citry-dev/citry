@@ -1,0 +1,75 @@
+
+:where(.split-button-brand-demo) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 1rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+:where(.split-button-brand-demo__card) {
+  min-block-size: 18rem;
+  padding: 1.25rem;
+  border-radius: 1rem;
+}
+:where(.split-button-brand-demo__card > p) { margin-block: 0 1rem; font-weight: 700; }
+:where(.split-button-brand-demo__subject) { max-inline-size: 20rem; }
+
+:where(.split-button-brand-demo__card--orchard) {
+  color-scheme: light;
+  background: #f5f0df;
+  --cui-button-background: #315f37;
+  --cui-button-foreground: #fffdf5;
+  --cui-button-hover-background: #244c2a;
+  --cui-menu-background: #fffdf5;
+  --cui-menu-foreground: #203422;
+  --cui-menu-focus-background: #d9e9cf;
+  --cui-menu-focus-foreground: #17351c;
+  --cui-split-button-divider-color: #c5d7bb;
+  --cui-split-button-divider-width: 2px;
+  --cui-split-button-radius: 0.75rem;
+}
+
+:where(.split-button-brand-demo__card--harbor) {
+  color-scheme: dark;
+  background: #102b38;
+  --cui-button-background: #c6ecff;
+  --cui-button-foreground: #082633;
+  --cui-button-border-color: #79bfdc;
+  --cui-button-hover-background: #a7ddf5;
+  --cui-menu-background: #173c4c;
+  --cui-menu-foreground: #eefaff;
+  --cui-menu-focus-background: #95d9f4;
+  --cui-menu-focus-foreground: #062531;
+  --cui-split-button-divider-color: #29586b;
+  --cui-split-button-divider-width: 1px;
+  --cui-split-button-radius: 0.375rem;
+}
+
+:where(.split-button-brand-demo [data-citry-ui-part="split-button-primary"]) {
+  min-inline-size: 0;
+}
+:where(.split-button-brand-demo [data-citry-ui-part="split-button-primary-content"]) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(.split-button-brand-demo) {
+    --cui-menu-duration: 0ms;
+  }
+}
+@media (forced-colors: active) {
+  :where(.split-button-brand-demo__card) {
+    border: 1px solid CanvasText;
+    forced-color-adjust: auto;
+  }
+}
+@media print {
+  :where(.split-button-brand-demo__card) {
+    break-inside: avoid;
+    border: 1px solid currentColor;
+    background: transparent;
+    color: black;
+  }
+}

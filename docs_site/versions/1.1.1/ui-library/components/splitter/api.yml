@@ -1,0 +1,150 @@
+schema_version: 1
+family: splitter
+
+components:
+  - CSplitter
+  - CSplitterPanel
+
+inputs:
+  - id: csplitter-server-inputs
+    component: CSplitter
+    channel: server
+    column_widths: [fit, 14rem, 7rem, auto]
+    entries:
+      - {id: sizes, name: sizes, type: 'Sequence[int | float] | None', default: {kind: literal, value: null}, effect: Sets initial percentage sizes totaling 100; omission divides space equally.}
+      - {id: orientation, name: orientation, type: {display: '"horizontal" | "vertical"', interfaces: [CSplitterOrientation]}, default: {kind: literal, value: horizontal}, effect: Places panels side by side or stacked.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables every resize handle.}
+      - {id: keyboard-step, name: keyboard_step, type: float, default: {kind: literal, value: 2}, effect: Sets Arrow-key movement in percentage points.}
+      - {id: variant, name: variant, type: {display: '"plain" | "soft" | "outline"', interfaces: [CSplitterVariant]}, default: {kind: literal, value: plain}, effect: Selects surface treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CSplitterSize]}, default: {kind: literal, value: md}, effect: Selects handle geometry.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted root attributes without replacing owned structure state or runtime.}
+  - id: csplitter-client-inputs
+    component: CSplitter
+    channel: client
+    column_widths: [fit, 13rem, 12rem, auto]
+    entries:
+      - {id: sizes, name: sizes, type: 'number[] | null', omitted: Uses uncontrolled committed sizes., effect: Controls percentages while supplied; null releases control.}
+      - {id: orientation, name: orientation, type: {display: '"horizontal" | "vertical"', interfaces: [CSplitterOrientation]}, omitted: Uses the server value., effect: Reactively changes layout and keyboard axis.}
+      - {id: disabled, name: disabled, type: bool, omitted: Uses the server value., effect: Reactively disables resizing.}
+      - {id: keyboard-step, name: keyboardStep, type: number, omitted: Uses the server value., effect: Reactively changes Arrow-key movement.}
+      - {id: variant, name: variant, type: {display: '"plain" | "soft" | "outline"', interfaces: [CSplitterVariant]}, omitted: Uses the server value., effect: Reactively changes surface treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CSplitterSize]}, omitted: Uses the server value., effect: Reactively changes handle geometry.}
+      - {id: on-resize-start, name: onResizeStart, type: '((detail: CSplitterResizeDetail) => void) | undefined', omitted: No component callback runs., effect: Receives the beginning of a pointer or keyboard transaction.}
+      - {id: on-resize, name: onResize, type: '((sizes: number[], detail: CSplitterResizeDetail) => void) | undefined', omitted: No component callback runs., effect: Receives each valid adjacent-pair resize request.}
+      - {id: on-resize-end, name: onResizeEnd, type: '((sizes: number[], detail: CSplitterResizeDetail) => void) | undefined', omitted: No component callback runs., effect: Receives the settled end of a resize transaction.}
+  - id: csplitter-panel-server-inputs
+    component: CSplitterPanel
+    channel: server
+    column_widths: [fit, 14rem, 7rem, auto]
+    entries:
+      - {id: id, name: id, type: str, default: {kind: required}, effect: Supplies stable panel identity and relationship targets.}
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Supplies the panel and adjacent separator accessible names.}
+      - {id: min-size, name: min_size, type: float, default: {kind: literal, value: 10}, effect: Sets the minimum percentage.}
+      - {id: max-size, name: max_size, type: float, default: {kind: literal, value: 100}, effect: Sets the maximum percentage.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the concrete panel.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds inline styles to the concrete panel.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted panel attributes without replacing owned semantics identity or sizing.}
+
+slots:
+  - id: csplitter-slots
+    component: CSplitter
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CSplitterDefaultSlotData]}, fallback: None. Requires two or more direct CSplitterPanel declarations.}
+  - id: csplitter-panel-slots
+    component: CSplitterPanel
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{id, index, size, is_first, is_last}', interfaces: [CSplitterPanelDefaultSlotData]}, fallback: None. Supplies panel content.}
+
+events:
+  - id: csplitter-events
+    component: CSplitter
+    entries:
+      - {id: resize-start, name: onResizeStart, signature: {display: '(detail: CSplitterResizeDetail) => void', interfaces: [CSplitterResizeDetail]}, trigger: Pointerdown or an accepted keyboard resize., detail: {display: '{sizes, previousSizes, handleIndex, controlled, source, sourceEvent}', interfaces: [CSplitterResizeDetail]}, behavior: Begins a resize transaction.}
+      - {id: resize, name: onResize, signature: {display: '(sizes: number[], detail: CSplitterResizeDetail) => void', interfaces: [CSplitterResizeDetail]}, trigger: Each accepted pointer or keyboard resize request., detail: {display: '{sizes, previousSizes, handleIndex, controlled, source, sourceEvent}', interfaces: [CSplitterResizeDetail]}, behavior: Commits immediately when uncontrolled and waits for owner acceptance when controlled.}
+      - {id: resize-end, name: onResizeEnd, signature: {display: '(sizes: number[], detail: CSplitterResizeDetail) => void', interfaces: [CSplitterResizeDetail]}, trigger: Pointerup pointercancel disability or an accepted keyboard resize., detail: {display: '{sizes, previousSizes, handleIndex, controlled, source, sourceEvent}', interfaces: [CSplitterResizeDetail]}, behavior: Ends the transaction and is the persistence composition point.}
+
+methods: []
+
+css:
+  - id: csplitter-css-variables
+    component: CSplitter
+    entries:
+      - {id: cui-splitter-min-block-size, name: --cui-splitter-min-block-size, type: length, purpose: Minimum root block size., default: 12rem}
+      - {id: cui-splitter-radius, name: --cui-splitter-radius, type: length, purpose: Root corner radius., default: 0.75rem}
+      - {id: cui-splitter-background, name: --cui-splitter-background, type: color, purpose: Root background., default: 'plain and outline transparent; soft subtle CanvasText mix'}
+      - {id: cui-splitter-border-color, name: --cui-splitter-border-color, type: color, purpose: Outline root border., default: 'light #d0d5dd; dark #535862'}
+      - {id: cui-splitter-handle-size, name: --cui-splitter-handle-size, type: length, purpose: Handle hit-area thickness., default: 'sm 0.5rem; md 0.75rem; lg 1rem'}
+      - {id: cui-splitter-handle-color, name: --cui-splitter-handle-color, type: color, purpose: Inactive line and grip., default: 'light #98a2b3; dark #717680'}
+      - {id: cui-splitter-handle-active-color, name: --cui-splitter-handle-active-color, type: color, purpose: Hover and active grip., default: 'light #175cd3; dark #84adff'}
+      - {id: cui-splitter-focus-color, name: --cui-splitter-focus-color, type: color, purpose: Keyboard focus outline., default: Highlight}
+
+attributes:
+  - id: csplitter-attributes
+    component: CSplitter
+    entries:
+      - {id: role, name: role, element: Panel or separator div, type: 'group | separator', meaning: Gives panels and resize handles their owned semantics.}
+      - {id: tabindex, name: tabindex, element: Separator div, type: '0 | -1', meaning: Includes enabled handles in Tab order and removes disabled handles.}
+      - {id: aria-label, name: aria-label, element: Panel or separator div, type: string, meaning: Names each panel and each adjacent-pair handle.}
+      - {id: aria-disabled, name: aria-disabled, element: Separator div, type: 'true | false', meaning: Reflects effective resize availability.}
+      - {id: data-orientation, name: data-orientation, element: Root div, type: 'horizontal | vertical', meaning: Mirrors effective layout.}
+      - {id: data-disabled, name: data-disabled, element: Root or handle, type: present-or-absent, meaning: Reflects effective resizing unavailability.}
+      - {id: data-resizing, name: data-resizing, element: Root div, type: present-or-absent, meaning: Present during pointer resizing.}
+      - {id: data-variant, name: data-variant, element: Root div, type: 'plain | soft | outline', meaning: Mirrors effective surface treatment.}
+      - {id: data-size, name: data-size, element: Root div, type: 'sm | md | lg', meaning: Mirrors effective geometry.}
+      - {id: data-panel-id, name: data-panel-id, element: Panel div, type: string, meaning: Exposes canonical panel identity.}
+      - {id: data-index, name: data-index, element: Panel div, type: nonnegative-integer-string, meaning: Exposes settled order.}
+      - {id: data-size-percent, name: data-size-percent, element: Panel div, type: number-string, meaning: Mirrors effective percentage.}
+      - {id: data-min-size, name: data-min-size, element: Panel div, type: number-string, meaning: Exposes minimum percentage.}
+      - {id: data-max-size, name: data-max-size, element: Panel div, type: number-string, meaning: Exposes maximum percentage.}
+      - {id: data-handle-index, name: data-handle-index, element: Separator div, type: nonnegative-integer-string, meaning: Identifies the adjacent pair.}
+      - {id: data-active, name: data-active, element: Separator div, type: present-or-absent, meaning: Present during its pointer transaction.}
+      - {id: aria-controls, name: aria-controls, element: Separator div, type: IDREF-list, meaning: Identifies both adjacent panels.}
+      - {id: aria-orientation, name: aria-orientation, element: Separator div, type: 'vertical | horizontal', meaning: Exposes physical separator orientation.}
+      - {id: aria-valuemin, name: aria-valuemin, element: Separator div, type: number-string, meaning: Exposes pair minimum.}
+      - {id: aria-valuemax, name: aria-valuemax, element: Separator div, type: number-string, meaning: Exposes pair maximum.}
+      - {id: aria-valuenow, name: aria-valuenow, element: Separator div, type: number-string, meaning: Exposes the preceding panel percentage.}
+
+selectors:
+  - id: csplitter-selectors
+    component: CSplitter
+    entries:
+      - {id: part-splitter, selector: '[data-citry-ui-part="splitter"]', element: Root div, purpose: Stable root and attrs destination.}
+      - {id: part-panel, selector: '[data-citry-ui-part="panel"]', element: Panel div, purpose: Stable content and panel attrs destination.}
+      - {id: part-handle, selector: '[data-citry-ui-part="handle"]', element: Separator div, purpose: Stable focusable resize control.}
+      - {id: part-handle-line, selector: '[data-citry-ui-part="handle-line"]', element: Decorative span, purpose: Stable separator line.}
+      - {id: part-handle-grip, selector: '[data-citry-ui-part="handle-grip"]', element: Decorative span, purpose: Stable resize affordance.}
+
+interfaces:
+  - id: csplitter-aliases
+    kind: aliases
+    entries:
+      - {id: csplitter-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: csplitter-style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+      - {id: csplitter-orientation, name: CSplitterOrientation, definition: 'Literal["horizontal", "vertical"]'}
+      - {id: csplitter-variant, name: CSplitterVariant, definition: 'Literal["plain", "soft", "outline"]'}
+      - {id: csplitter-size, name: CSplitterSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: csplitter-resize-source, name: CSplitterResizeSource, definition: 'Literal["pointer", "keyboard"]'}
+  - {id: csplitter-default-slot-data, kind: record, name: CSplitterDefaultSlotData, entries: []}
+  - id: csplitter-panel-default-slot-data
+    kind: record
+    name: CSplitterPanelDefaultSlotData
+    entries:
+      - {id: id, name: id, type: str, meaning: Canonical panel identity.}
+      - {id: index, name: index, type: int, meaning: Zero-based settled panel index.}
+      - {id: size, name: size, type: float, meaning: Server-rendered percentage.}
+      - {id: is-first, name: is_first, type: bool, meaning: Whether this is the first panel.}
+      - {id: is-last, name: is_last, type: bool, meaning: Whether this is the last panel.}
+  - id: csplitter-resize-detail
+    kind: record
+    name: CSplitterResizeDetail
+    entries:
+      - {id: sizes, name: sizes, type: 'number[]', meaning: Requested effective vector.}
+      - {id: previous-sizes, name: previousSizes, type: 'number[]', meaning: Vector before this transaction step.}
+      - {id: handle-index, name: handleIndex, type: int, meaning: Zero-based changed separator index.}
+      - {id: controlled, name: controlled, type: bool, meaning: Whether client sizes currently controls state.}
+      - {id: source, name: source, type: {display: '"pointer" | "keyboard"', interfaces: [CSplitterResizeSource]}, meaning: Interaction source.}
+      - {id: source-event, name: sourceEvent, type: Event, meaning: Native PointerEvent or KeyboardEvent.}
+
+translations: []

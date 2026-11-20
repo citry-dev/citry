@@ -9,7 +9,7 @@
     "module_url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/pyodide.mjs"
   },
   "citry": {
-    "version": "1.0.3",
+    "version": "1.1.1",
     "core_version": "2.1.2",
     "ui_version": "0.7.0"
   },
@@ -48,10 +48,10 @@
     },
     {
       "name": "citry",
-      "version": "1.0.3",
+      "version": "1.1.1",
       "source": "pypi",
-      "filename": "citry-1.0.3-py3-none-any.whl",
-      "sha256": "2fadde248d8e58c9fb594f5f2ec6dbb3864bf6931610daa53059ba4bd09e76d1"
+      "filename": "citry-1.1.1-py3-none-any.whl",
+      "sha256": "b3caa5738ac83b136c3439a395e81e32b40075292455e57213dd0ebc15e16245"
     },
     {
       "name": "citry-ui",

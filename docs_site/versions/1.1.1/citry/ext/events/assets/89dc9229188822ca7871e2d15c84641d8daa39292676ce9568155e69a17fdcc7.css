@@ -1,0 +1,26 @@
+
+:where(.flow-wrapping) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 1rem;
+  max-inline-size: 46rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.flow-wrapping__group) {
+  inline-size: 100%;
+  padding: 0.75rem;
+  background: light-dark(#f1e0c7, #352b23);
+}
+
+:where(.flow-wrapping__group span) {
+  padding: 0.35rem 0.55rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+:where(.flow-wrapping__scroll) {
+  overflow-x: auto;
+}
