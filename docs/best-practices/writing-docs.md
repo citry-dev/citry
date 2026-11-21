@@ -8,6 +8,8 @@ write text that gets them to their answer.
 
 Use it for anything a Citry user reads: pages under `docs_site/content/`,
 package READMEs, public docstrings, error messages, and changelog entries.
+Blog posts written in the maintainer's own voice follow
+[`writing-blog-posts.md`](writing-blog-posts.md) instead.
 The sentence-level rules (plain words, actions over nouns, one-line
 definitions of project terms) live in the House style section of
 [`CLAUDE.md`](../../CLAUDE.md#house-style). This guide covers how to build a

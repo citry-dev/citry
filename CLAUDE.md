@@ -1154,6 +1154,8 @@ around it:
 - Monorepo dev / build / release -> [`docs/codebase.md`](docs/codebase.md)
 - Writing user-facing text ->
   [`docs/best-practices/writing-docs.md`](docs/best-practices/writing-docs.md)
+- Writing a personal blog post in the maintainer's voice ->
+  [`docs/best-practices/writing-blog-posts.md`](docs/best-practices/writing-blog-posts.md)
 - Brand assets (the C3 logo, favicons, icons) ->
   [`docs/codebase.md`](docs/codebase.md) "Brand assets"
 - Python `citry` changelog -> [`CHANGELOG.md`](CHANGELOG.md); auxiliary package
