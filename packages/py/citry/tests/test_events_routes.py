@@ -2405,6 +2405,87 @@ class TestRouteResponseEscape:
         assert response.json()["results"][0]["error"]["code"] == "handler_error"
 
 
+class TestPageNonceHeader:
+    """An answer to a call that sends ``X-Citry-Page-Nonce`` carries that nonce and is never stored."""
+
+    def _save(self, client, greeter, headers=None):
+        return _post_call(
+            client,
+            greeter,
+            "save",
+            {"callerRenderId": "i1", "args": {"text": "Hi"}, "stateToken": _token(greeter), "sendSequence": 2},
+            headers=headers,
+        )
+
+    def test_a_render_carries_the_nonce_the_call_sent(self):
+        c = _citry()
+        greeter = _greeter(c)
+        response = self._save(_mounted(c), greeter, {"X-Citry-Page-Nonce": "dGFiLW9uZQ"})
+        [action] = response.json()["results"][0]["actions"]
+        assert 'data-citry-vue-fragment nonce="dGFiLW9uZQ"' in action["html"]
+        # The answer depends on one tab's nonce, so no cache keeps it for another visitor.
+        assert response.headers["cache-control"] == "no-store"
+        assert response.headers["vary"] == "X-Citry-Page-Nonce"
+
+    def test_two_tabs_each_get_their_own_nonce(self):
+        c = _citry()
+        greeter = _greeter(c)
+        client = _mounted(c)
+        for nonce in ("dGFiLW9uZQ", "dGFiLXR3bw"):
+            [action] = self._save(client, greeter, {"X-Citry-Page-Nonce": nonce}).json()["results"][0]["actions"]
+            assert f'data-citry-vue-fragment nonce="{nonce}"' in action["html"]
+
+    def test_the_apps_nonce_function_wins_over_the_header(self):
+        c = _citry(extensions_defaults={"events": {"_csp_nonce": lambda _request: "ZnJvbS1hcHA"}})
+        greeter = _greeter(c)
+        response = self._save(_mounted(c), greeter, {"X-Citry-Page-Nonce": "ZnJvbS1oZWFkZXI"})
+        [action] = response.json()["results"][0]["actions"]
+        assert 'nonce="ZnJvbS1hcHA"' in action["html"]
+        assert "ZnJvbS1oZWFkZXI" not in action["html"]
+
+    def test_a_header_of_another_shape_is_ignored_but_still_marks_the_answer(self):
+        c = _citry()
+        greeter = _greeter(c)
+        response = self._save(_mounted(c), greeter, {"X-Citry-Page-Nonce": '"><script>alert(1)</script>'})
+        [action] = response.json()["results"][0]["actions"]
+        assert "nonce=" not in action["html"]
+        assert response.headers["vary"] == "X-Citry-Page-Nonce"
+
+    def test_a_call_without_the_header_is_answered_as_before(self):
+        c = _citry()
+        greeter = _greeter(c)
+        response = self._save(_mounted(c), greeter)
+        [action] = response.json()["results"][0]["actions"]
+        assert "nonce=" not in action["html"]
+        assert "vary" not in response.headers
+        assert "cache-control" not in response.headers
+
+    def test_an_escape_hatch_response_keeps_its_cache_policy_and_extends_its_vary(self):
+        c = _citry()
+
+        class Exporter(Component):
+            citry = c
+            template = "<p>x</p>"
+
+            class Events:
+                @event(bundle=False)
+                def export(self):
+                    return RouteResponse(
+                        content="x",
+                        headers=(("Cache-Control", "private, max-age=60"), ("Vary", "Accept-Language")),
+                    )
+
+        client = _mounted(c)
+        response = _post_envelope(
+            client,
+            _event_url(Exporter, "export"),
+            {"protocol": "citry-events/1", "requestId": "r1", "calls": [{"args": {}}]},
+            headers={"X-Citry-Page-Nonce": "dGFiLW9uZQ"},
+        )
+        assert response.headers["cache-control"] == "private, max-age=60"
+        assert response.headers["vary"] == "Accept-Language, X-Citry-Page-Nonce"
+
+
 class TestDownloadResponse:
     def test_serves_unicode_filename_and_body_on_the_per_event_route(self):
         c = _citry()

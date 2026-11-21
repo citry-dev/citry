@@ -121,12 +121,13 @@ categories:
       `Markup(value)` trusts the complete value without sanitizing or validating anything.
       `safe_eval` runs an expression in the sandbox, `unsafe` marks a function that
       sandboxed expressions must not call, and `SecurityError` is what a blocked access raises.
-      Three parts of this page are experimental and may change in a minor release:
+      Four parts of this page are experimental and may change in a minor release:
       `RenderFrame`; the asset tags that `deps_position="separate"` returns
       (`SerializedAssets`, `SerializedAssetEntry`, the asset fields of `SerializedRender`,
-      `CitryRender.needs_browser_runtime()`, `combine_assets()`, and `OutsideSlotContentError`); and the API for embedding Citry tags
+      `CitryRender.needs_browser_runtime()`, `combine_assets()`, and `OutsideSlotContentError`); the API for embedding Citry tags
       in another template engine (`CompiledBody`, `render_compiled_body` and
-      `collect_compiled_body_fills`).
+      `collect_compiled_body_fills`); and `page_nonce_from_headers()` with
+      `PAGE_NONCE_HEADER`, which read the page's CSP nonce from a request.
     symbols:
       - citry.CitryElement
       - citry.CitryRender
@@ -137,6 +138,8 @@ categories:
       - citry.OutsideSlotContentError
       - citry.SerializedSecurity
       - citry.SerializedScriptSecurity
+      - citry.page_nonce_from_headers
+      - citry.PAGE_NONCE_HEADER
       - citry.CitryContext
       - citry.CitryTemplate
       - citry.CompiledBody
@@ -402,6 +405,7 @@ categories:
       - { key: "$onEvent", anchor: on-event, role: "js:function" }
       - { key: "$i18n", anchor: i18n, role: "js:data" }
       - { key: Citry.configure, anchor: citry-configure, role: "js:function" }
+      - { key: Citry.pageNonce, anchor: citry-page-nonce, role: "js:function" }
       - { key: Citry.events, anchor: citry-events, role: "js:data" }
       - { key: Citry.events.send, anchor: citry-events-send, role: "js:function" }
       - { key: Citry.events.on, anchor: citry-events-on, role: "js:function" }

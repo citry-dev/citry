@@ -368,9 +368,13 @@ Citry.configure({
 | `cookie` | The name of the cookie to read the token from when `token` is not set. The default is `csrftoken`. |
 | `header` | The request header that carries the token. The default is `X-CSRFToken`. |
 
-With no `Citry.configure` call, Citry reads the `csrftoken` cookie and sends
-it as `X-CSRFToken`, which is what Django expects. Each `csrf` value
-replaces the earlier one as a whole, and requests sent afterwards use it.
+With no `Citry.configure` call, Citry uses the names from the server's
+[`_csrf_cookie` and `_csrf_header` settings](/security/#csrf-names), and
+without those it reads the `csrftoken` cookie and sends it as
+`X-CSRFToken`, which is what Django expects. Each name the call sets
+wins over the server's setting, whichever comes first, and a name it
+leaves out keeps the server's value. Each `csrf` value replaces the
+earlier one as a whole, and requests sent afterwards use it.
 When the token is empty, or the cookie is missing, Citry sends no token
 header.
 
@@ -397,6 +401,31 @@ its own headers, and names the browser does not let a page send, such as
 [`Citry.events.configure`](#citry-events-configure) can set a different
 token for event calls. Event calls then use that token, and the request
 that loads messages keeps using the `Citry.configure` token.
+
+<h3 class="doc-heading" id="citry-page-nonce"><code>Citry.pageNonce</code></h3>
+
+Get the page's CSP nonce, so that a request your own code sends (htmx,
+`fetch()`) can tell the server which page it comes from:
+
+```js
+const nonce = Citry.pageNonce();
+const response = await fetch("/cards/42", {
+  headers: nonce ? {"X-Citry-Page-Nonce": nonce} : {},
+});
+```
+
+It returns the nonce on the tag that loaded Citry's runtime, or `null`
+when that tag has none. The server reads the header with
+`page_nonce_from_headers()` and serializes the fragment with that nonce,
+so the fragment starts in the tab that asked for it. See
+[Nonces in fragments](/security/#html-fragments), which also has an htmx
+snippet. Send the header only to your own origin.
+
+Citry never adds the nonce to a fragment by itself: a fragment starts only
+when the server wrote the page's nonce into it. Any script already running
+on the page can read a nonce from a script tag, so this function gives
+running code nothing new, and injected markup that does not run cannot
+call it. `Citry.pageNonce` is Experimental.
 
 ## Page-wide events API
 

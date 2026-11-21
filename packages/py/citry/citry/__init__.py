@@ -24,6 +24,7 @@ from markupsafe import Markup
 from citry._caller_warnings import CitryDeprecationWarning
 from citry._linting import TemplateLintInfo, TemplateVariableInfo
 from citry._nested_declarations import NestedSchemaReplacedWarning
+from citry._page_nonce import PAGE_NONCE_HEADER, page_nonce_from_headers
 from citry._vue.capture import (
     IncompleteStaticHtmlError,
     ScriptInStaticHtmlError,
@@ -241,6 +242,7 @@ from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, URLRou
 from citry_core.safe_eval import SecurityError, safe_eval, unsafe
 
 __all__ = [
+    "PAGE_NONCE_HEADER",
     "AlreadyRegistered",
     "AssetInfo",
     "CacheConfig",
@@ -443,6 +445,7 @@ __all__ = [
     "merge_attrs",
     "normalize_class",
     "normalize_style",
+    "page_nonce_from_headers",
     "parse_string_style",
     "prepare_python_component_assets",
     "render_compiled_body",

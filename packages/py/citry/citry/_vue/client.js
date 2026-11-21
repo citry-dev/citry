@@ -390,14 +390,56 @@
     }
     return "";
   };
-  // With no configured token, read Django's default `csrftoken` cookie: Django apps work with no setup,
-  // and on another host a missing cookie only means no header is sent.
+  // The CSRF names the server wrote into a configuration block (`csrfNames`, from the Events
+  // `_csrf_cookie` and `_csrf_header` settings). They are one site-wide fact, so the first block that
+  // names them sets them for the page; see adoptServerCsrf. A null cookie means the token is not in a
+  // cookie, and the page gives it with `Citry.configure({csrf: {token}})`.
+  let serverCsrf = Object.freeze(Object.create(null));
+  let serverCsrfSet = false;
+  // Each name comes from the first source that sets it: an explicit `Citry.configure({csrf})` call,
+  // then the server's block, then Django's defaults. The call wins because it is the page's own,
+  // later decision, such as a token function the server cannot write. Own keys only, so a value added
+  // to Object.prototype cannot choose the cookie or the header.
+  const pageCsrfCookie = () =>
+    own(pageCsrf, "cookie") ? pageCsrf.cookie : own(serverCsrf, "cookie") ? serverCsrf.cookie : "csrftoken";
+  // With no configured token, read the cookie: Django apps work with no setup, and on another host a
+  // missing cookie only means no header is sent.
   const pageCsrfToken = () => {
-    const token = pageCsrf.token;
-    if (token !== undefined) return typeof token === "function" ? token() : token;
-    return readCsrfCookie(pageCsrf.cookie ?? "csrftoken");
+    if (own(pageCsrf, "token")) return typeof pageCsrf.token === "function" ? pageCsrf.token() : pageCsrf.token;
+    const cookie = pageCsrfCookie();
+    return cookie === null ? "" : readCsrfCookie(cookie);
   };
-  const pageCsrfHeader = () => pageCsrf.header ?? "X-CSRFToken";
+  const pageCsrfHeader = () =>
+    own(pageCsrf, "header") ? pageCsrf.header : own(serverCsrf, "header") ? serverCsrf.header : "X-CSRFToken";
+  // A cookie name is an HTTP token, the same rule the server applies to `_csrf_cookie`.
+  const COOKIE_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+  // Takes the CSRF names from a configuration block the page trusts: a document block, a fragment
+  // that carries the page's nonce, or a fragment that page code loaded itself. A fragment found in a
+  // page without a nonce never gets here with names (checkBlockWithoutNonce removes them), since
+  // injected markup could otherwise choose which cookie the runtime reads. Every block comes from the
+  // same server settings, so a later block that names others is a mistake to report, not to follow.
+  const adoptServerCsrf = configuration => {
+    if (!own(configuration, "csrfNames")) return;
+    const names = plain(configuration.csrfNames, "csrfNames");
+    const adopted = Object.create(null);
+    if (own(names, "cookie")) {
+      if (names.cookie !== null && (typeof names.cookie !== "string" || !COOKIE_NAME.test(names.cookie)))
+        throw new TypeError("csrfNames.cookie must be a cookie name or null");
+      adopted.cookie = names.cookie;
+    }
+    if (own(names, "header")) {
+      if (typeof names.header !== "string" || !HEADER_NAME.test(names.header) || reservedCsrfHeader(names.header))
+        throw new TypeError("csrfNames.header must be an HTTP header name that Citry and the browser leave free");
+      adopted.header = names.header;
+    }
+    if (!serverCsrfSet) {
+      serverCsrf = Object.freeze(adopted);
+      serverCsrfSet = true;
+    } else if (serverCsrf.cookie !== adopted.cookie || serverCsrf.header !== adopted.header) {
+      console.warn("[Citry] a configuration block names other CSRF names than the page's first one; " +
+        "keeping the first. Serve every page and fragment with the same Events CSRF settings.");
+    }
+  };
   // The headers that carry the page's CSRF token on one request to `url`. They are given only for a URL
   // that resolves to the page's own origin: a URL that resolves elsewhere (another site, an opaque or
   // unparseable URL) gets none. The page's origin is read from `origin`, which is "null" in a sandboxed
@@ -3528,6 +3570,7 @@
   async function startPreparedOwned(configuration, lifecycle, startAttempt) {
     if (lifecycle) configuration = {...configuration, nonce: lifecycle.nonce};
     plain(configuration, "prepared bootstrap");
+    adoptServerCsrf(configuration);
     const manifest = plain(configuration.manifest, "prepared manifest");
     // Exactly one element must match, as the fragment manager requires, so an element that markup
     // added earlier in the page with the same id stops the start instead of receiving the app.
@@ -6043,6 +6086,9 @@
     // The server never writes `csrf` into a block. It would choose which cookie or token the
     // runtime sends, so a block that has one did not come from the server.
     if (checked.csrf !== undefined) refuse("it sets its own CSRF options");
+    // The server does write the CSRF names, but here they could come from injected markup, which
+    // would then choose the cookie the runtime reads. The fragment uses the page's names instead.
+    delete checked.csrfNames;
     for (const [field, route, what] of [["endpoint", "ext/events/call", "Events call URL"],
         ["eventBaseUrl", "ext/events/e/", "Events base URL"]]) {
       if (checked[field] === undefined) continue;
@@ -6060,6 +6106,15 @@
     }
     return checked;
   }
+  // The page's nonce, for page code that loads fragments with its own requests (htmx, fetch()). It
+  // sends the value in the X-Citry-Page-Nonce header, and the server writes it into the fragment, so
+  // the fragment passes the nonce check above in the tab that asked for it. The runtime never puts
+  // the nonce on a fragment itself: that check is what keeps markup injected into the page from
+  // passing as a fragment. Any script on the page can read a nonce already (`script.nonce`), so this
+  // gives nothing to code that runs; markup that does not run cannot call it. Null without a nonce.
+  Object.defineProperty(citryNamespace, "pageNonce", {
+    value: () => documentNonce || null, enumerable: true, configurable: true, writable: true,
+  });
   function runtimeScriptNonce() {
     // A named element in the page, such as <form name="currentScript">, replaces
     // document.currentScript with itself, and its empty nonce would switch off every nonce

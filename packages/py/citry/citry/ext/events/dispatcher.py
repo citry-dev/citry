@@ -41,6 +41,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypedDict
 
 from citry._input_types import _restore_json_tuples
+from citry._page_nonce import page_nonce_from_headers
 from citry._protocol.events import (
     ARGS_SOURCE_FORM,
     CAPABILITIES_BASELINE_V1,
@@ -388,15 +389,19 @@ class OnEventErrorContext:
 
 def _page_csp_nonce(ctx: TransportContext, plan: _CallPlan) -> str | None:
     """
-    Return the CSP nonce of the page that sent the call, from the ``_csp_nonce`` setting.
+    Return the CSP nonce of the page that sent the call.
 
     An HTML fragment from a Render starts on a nonce-protected page only when
-    it carries that page's nonce, and only the app knows which nonce the
-    page got, so the app's function answers for each call.
+    it carries that page's nonce. The app's ``_csp_nonce`` function answers
+    when the app set one. Otherwise the ``X-Citry-Page-Nonce`` header that
+    page code sends (from ``Citry.pageNonce()``) does, which is right even
+    with several tabs open. A forged header
+    only changes the answer to the forger's own call, and the HTTP routes
+    mark every answer to a call that sent it as not storable.
     """
     nonce_for = ctx.citry.settings.extensions_defaults.get("events", {}).get("_csp_nonce")
     if nonce_for is None:
-        return None
+        return page_nonce_from_headers(ctx.headers)
     nonce = nonce_for(plan.events.request)
     # A wrong type would otherwise surface as a confusing error deep inside
     # serialize(); the call still answers handler_error either way.
