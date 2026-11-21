@@ -412,8 +412,10 @@ Citry's runtime has loaded:
 
 ```js
 const nonce = window.Citry?.pageNonce?.();
-const response = await fetch("/cards/42", {
+const url = new URL("/cards/42", location.href);
+const response = await fetch(url, {
   headers: nonce ? {"X-Citry-Page-Nonce": nonce} : {},
+  redirect: "error",
 });
 ```
 
@@ -421,7 +423,10 @@ It returns the nonce on the tag that loaded Citry's runtime, or `null`
 when that tag has none. The server reads the header with
 `page_nonce_from_headers()` and serializes the fragment with that nonce,
 so the fragment starts in the tab that asked for it. Send the header only
-to your own origin. See [Nonces in fragments](/security/#html-fragments),
+to your own origin, and build the URL from `location.href`: `fetch()`
+resolves a relative path against the page's base URL, which a `<base>`
+tag can change. `redirect: "error"` keeps a redirect from passing the
+header on to another site. See [Nonces in fragments](/security/#html-fragments),
 which also has an htmx snippet.
 
 Citry never adds the nonce to a fragment itself. A fragment starts only
