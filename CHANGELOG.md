@@ -1,5 +1,15 @@
 # Release notes
 
+## Unreleased
+
+### Added
+
+- Experimental, for host integrations such as citry-django:
+  `CitryRender.has_server_events()` returns whether a render has a
+  component with server events, before you serialize it. A host can use
+  it to set the CSRF cookie only on pages whose event calls need it. See
+  [Find renders with server events](https://citry.dev/advanced/asset-placement/#find-renders-with-server-events).
+
 ## v1.1.1
 
 Citry 1.1.1 changes only the package's PyPI metadata, with no code

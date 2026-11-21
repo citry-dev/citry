@@ -803,6 +803,54 @@ class CitryRender:
         # app, minus the call-local security policy, which is not known here.
         return self.render_target == "prepared" and bool(analyze_vue_serialization(self).runtime_requirements)
 
+    def has_server_events(self) -> bool:
+        """
+        Whether this render has a component with server events.
+
+        It returns ``True`` when a component in this render declares
+        ``class Events``. Then ``serialize()`` gives the browser what it
+        needs to call that component's event handlers, and each call sends
+        Citry's CSRF token, so the response must let the browser read it.
+        It returns ``False`` when no event call can come from this render.
+
+        Host integrations such as citry-django use it to set a CSRF cookie
+        only on pages that need one, because the cookie keeps shared
+        caches from storing the page. It answers from what Citry recorded
+        while rendering, so you can call it before ``serialize()``, and it
+        does not change the render.
+
+        Like [`needs_browser_runtime()`][citry.CitryRender.needs_browser_runtime],
+        the answer depends only on what was rendered, not on the
+        ``serialize()`` arguments: with ``security_javascript="omit"`` or
+        ``"forbid"``, serialize still leaves out the event handlers or
+        refuses the render. A child component's render answers for that
+        child alone, which is what serializing it on its own gives.
+
+        Returns:
+            Whether serializing this render gives the browser server events.
+
+        Experimental:
+            This method may change in a minor release without a deprecation
+            period.
+
+        Example:
+            ```python
+            rendered = Page().render()
+            if rendered.has_server_events():
+                get_token(request)
+            html = rendered.serialize()
+            ```
+
+        """
+        # Imported here, not at module load, to avoid an import cycle:
+        # the Vue serialization module imports CitryRender from this module.
+        from citry._vue.serialization import has_selected_event_instances  # noqa: PLC0415
+
+        # Serialize writes an occurrence's event context only on the Vue
+        # path, and only for Events records of the selected tree, so this
+        # asks the same two questions without building the manifest.
+        return self.render_target == "prepared" and has_selected_event_instances(self)
+
     def serialize(
         self,
         deps_strategy: DepsStrategy = "document",

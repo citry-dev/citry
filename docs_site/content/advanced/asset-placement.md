@@ -273,6 +273,25 @@ child_results = [
 ]
 ```
 
+### Find renders with server events
+
+[`has_server_events()`][citry.CitryRender.has_server_events]
+(Experimental) returns whether a render has a component with server
+events (`class Events`). The browser sends Citry's CSRF token with
+every event call, so a host that sets the CSRF cookie only when a page
+needs it can ask before it serializes:
+
+```python
+rendered = Page().render()
+if rendered.has_server_events():
+    get_token(request)  # Django sets the CSRF cookie
+html = rendered.serialize()
+```
+
+A page without the cookie can be stored by shared caches, which a
+page with it usually cannot. Called on a child render, it answers for
+that child alone, as serializing it on its own would.
+
 ## Next steps
 
 - [Component JS and CSS](/advanced/js-and-css-dependencies/) adds
