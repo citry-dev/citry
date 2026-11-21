@@ -1,0 +1,22 @@
+
+:where(.shore-custom-control) {
+  max-width: 40rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#b9d8df, #315967);
+  border-radius: 0.875rem;
+  background: Canvas;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.shore-custom-control textarea) {
+  box-sizing: border-box;
+  inline-size: 100%;
+  padding: 0.75rem;
+  border: 1px solid color-mix(in srgb, CanvasText 38%, transparent);
+  border-radius: 0.5rem;
+  background: Canvas;
+  color: CanvasText;
+  font: inherit;
+  resize: vertical;
+}

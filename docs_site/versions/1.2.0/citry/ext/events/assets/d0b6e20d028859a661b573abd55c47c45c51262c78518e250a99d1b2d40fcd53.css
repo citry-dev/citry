@@ -1,0 +1,3 @@
+
+:where(.pin-input-state-grid){display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap:1.5rem;align-items:start}
+:where(.pin-input-brand){--cui-pin-input-focus-color:#7c3aed;--cui-pin-input-radius:.75rem}

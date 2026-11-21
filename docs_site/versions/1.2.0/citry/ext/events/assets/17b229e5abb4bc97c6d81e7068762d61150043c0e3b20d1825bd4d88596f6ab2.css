@@ -1,0 +1,35 @@
+
+:where(.mineral-catalog) {
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.mineral-catalog h2) {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+}
+
+:where(.mineral-catalog__list) {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:where(.mineral-catalog__list > li) {
+  padding: 0.85rem;
+  border: 1px solid light-dark(#d7cfbe, #5e574c);
+  border-radius: 0.55rem;
+  background: light-dark(#fffaf0, #29251f);
+  font-size: 0.78rem;
+}
+
+:where(.mineral-catalog__nested) {
+  margin-block-start: 0.6rem;
+}
+
+:where(.mineral-catalog__nested span) {
+  padding: 0.35rem;
+  border-radius: 0.25rem;
+  background: light-dark(#e5eee9, #263a32);
+  text-align: center;
+}

@@ -1,0 +1,6 @@
+
+:where(.forest-tags) {
+  --cui-tag-selected-background: #176b4d;
+  --cui-tag-selected-foreground: #fff;
+  --cui-tag-radius: 0.45rem;
+}

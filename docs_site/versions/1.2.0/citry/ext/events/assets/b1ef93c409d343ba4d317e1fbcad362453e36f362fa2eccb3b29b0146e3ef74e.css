@@ -1,0 +1,30 @@
+
+:where(.button-intents) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 0.75rem;
+  max-width: 64rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.button-intents article) {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid light-dark(#d5ddd8, #40594b);
+  border-radius: 0.75rem;
+  background: Canvas;
+}
+
+:where(.button-intents h2) {
+  margin-block: 0;
+  font-size: 0.875rem;
+}
+
+:where(.button-intents article div) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+}

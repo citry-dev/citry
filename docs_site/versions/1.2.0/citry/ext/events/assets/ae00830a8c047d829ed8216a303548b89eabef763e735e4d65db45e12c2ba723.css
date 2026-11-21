@@ -1,0 +1,13 @@
+
+:where(.image-composition) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 1rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+:where(.image-composition h3, .image-composition figure) { margin: 0; }
+:where(.image-composition [data-citry-ui-part="image-root"]) { inline-size: 100%; }
+:where(.image-composition__pair) { display: grid; gap: 0.5rem; }
+:where(.image-composition__link) { align-self: start; border-radius: 0.75rem; }
+:where(.image-composition__link:focus-visible) { outline: 3px solid Highlight; outline-offset: 3px; }

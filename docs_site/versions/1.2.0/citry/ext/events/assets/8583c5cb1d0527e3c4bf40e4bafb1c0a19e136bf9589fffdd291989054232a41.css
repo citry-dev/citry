@@ -1,0 +1,8 @@
+
+:where(.alert-icons) {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 50rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}

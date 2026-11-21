@@ -1,0 +1,26 @@
+try {
+(function() {
+
+__citryRuntime.registerTypeOptions.bind(null, "InfiniteScrollVirtualList_e4edee", "3ccd6c68dd607b19b779c795433e36c736ee8ed0d48006a73c8c0c277180ef0c")({
+  data() {
+    return { expanded: false, loading: false, hasMore: true };
+  },
+  methods: {
+    loadSnapshot() {
+      if (this.loading || !this.hasMore) return;
+      this.loading = true;
+      return new Promise(resolve => setTimeout(() => {
+        this.expanded = true;
+        this.hasMore = false;
+        this.loading = false;
+        resolve();
+      }, 220));
+    },
+  },
+});
+
+})();
+__citryRuntime.finishScript("8c9b0c4dc967f8d29075f76c534d539e7ef4fe21ff91bec55e7c9030df2233d2");
+} catch (error) {
+__citryRuntime.finishScript("8c9b0c4dc967f8d29075f76c534d539e7ef4fe21ff91bec55e7c9030df2233d2", error);
+}

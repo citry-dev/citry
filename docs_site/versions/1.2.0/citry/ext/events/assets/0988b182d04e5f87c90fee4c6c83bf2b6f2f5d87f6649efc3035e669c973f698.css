@@ -1,0 +1,25 @@
+
+:where(.checkbox-configurator) {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 50rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#b7cfba, #3a5940);
+  border-radius: 0.875rem;
+  background: Canvas;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  box-shadow: 0 0.75rem 2rem rgb(15 23 42 / 10%);
+}
+
+:where(.checkbox-configurator h2, .checkbox-configurator p) {
+  margin: 0;
+}
+
+:where(.checkbox-configurator header p) {
+  color: light-dark(#287047, #7ed6a0);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

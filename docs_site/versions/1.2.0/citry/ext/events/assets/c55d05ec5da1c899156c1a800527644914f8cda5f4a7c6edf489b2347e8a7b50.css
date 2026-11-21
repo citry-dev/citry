@@ -1,0 +1,24 @@
+
+:where(.command-palette-environment) {
+  display: grid;
+  gap: 0.75rem;
+  color: CanvasText;
+  color-scheme: light;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+:where(.command-palette-environment--dark) {
+  color-scheme: dark;
+  background: Canvas;
+}
+:where(.command-palette-environment h2, .command-palette-environment p) { margin: 0; }
+:where(.command-palette-environment [role="group"]) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+@media (forced-colors: active) {
+  :where(.command-palette-environment) { border: 1px solid CanvasText; }
+}
+@media print {
+  :where(.command-palette-environment [role="group"]) { display: none; }
+}
