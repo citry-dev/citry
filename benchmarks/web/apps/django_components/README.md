@@ -1,6 +1,6 @@
 # Django Components, HTMX and Alpine project board
 
-This app uses django-components 0.152.0 and djc-core 1.3.1 with Django 6.1.1,
+This app uses django-components 0.152.0 and djc-core 1.3.1 with Django 6.1.3,
 HTMX 2.0.10 and Alpine 3.17.2. Uvicorn 0.52.4 serves the production Django ASGI
 application with `DEBUG=False`. The independent lockfile pins published packages;
 it does not import the repository's Citry implementation.
