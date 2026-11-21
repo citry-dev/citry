@@ -1233,13 +1233,13 @@ When adding a new Rust dependency to any crate in the workspace, follow these gu
 
 ### Adding a new package
 
-When adding a new package to the monorepo (either a new Rust crate or a new Python package), you need to ensure that Dependabot is configured to watch its dependencies.
+When adding a new package to the monorepo (either a new Rust crate or a new Python package), you need to make sure its dependencies are watched.
 
 #### Rust packages
 
-**No additional Dependabot configuration needed** for Rust crates. All Rust dependencies are centralized in the root [`Cargo.toml`](../Cargo.toml) under `[workspace.dependencies]`, so Dependabot automatically monitors all Rust dependencies when configured for the root directory.
+**No Dependabot entry to add** for a Rust crate. Dependabot's `cargo` ecosystem is turned off for the whole workspace, because Dependabot cannot load a workspace whose path dependencies point into the `third_party/rust/ruff` submodule ([#76](https://github.com/citry-dev/citry/issues/76)). The full reasoning sits beside the commented-out entry in [`.github/dependabot.yml`](../.github/dependabot.yml).
 
-The existing Dependabot entry for `package-ecosystem: "cargo"` at the root directory will cover all Rust crates in the workspace.
+Declare the crate's external dependencies in the root [`Cargo.toml`](../Cargo.toml) under `[workspace.dependencies]`. The `rust-audit` job in [`repo--security.yml`](../.github/workflows/repo--security.yml) runs `cargo deny check advisories`, which checks them against RustSec, the Rust security advisory database. It runs on pull requests that change a lockfile or manifest, on pushes to main, and every Monday, and the Monday run opens a tracking issue when it fails. Accepted advisories are listed in [`deny.toml`](../deny.toml), each with its reason and tracking issue. A Rust dependency changes version only when someone opens a pull request that bumps it.
 
 #### Python packages
 
