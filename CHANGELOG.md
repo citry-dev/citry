@@ -1,6 +1,11 @@
 # Release notes
 
-## Unreleased
+## v1.2.0
+
+Citry 1.2.0 adds Experimental APIs for host integrations such as
+citry-django: CSRF names set in Python, the CSP nonce for fragments
+that a host's own requests load, and `CitryRender.needs_csrf_token()`.
+It still requires citry-core 2.1.2.
 
 ### Added
 
