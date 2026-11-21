@@ -15,6 +15,7 @@ import re
 import pytest
 
 from citry import Citry, CitryRender, Component, InMemoryCache
+from citry._vue import events as vue_events
 from citry.ext.events import actions
 from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
 
@@ -22,6 +23,25 @@ _SIGNING_KEY = "test-secret-key"
 _DATA_BLOCK = re.compile(
     r'<script type="application/json" data-citry-vue-(document|fragment)\b[^>]*>(.*?)</script>', re.DOTALL
 )
+
+
+# The Events records each serialization prepared, newest last.
+_prepared_entries: list[list[object]] = []
+
+
+@pytest.fixture(autouse=True)
+def _record_prepared_entries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Record the Events records preparation selects for the manifest."""
+    real = vue_events.build_events_manifest
+    _prepared_entries.clear()
+
+    def recording(extension, citry, entries):  # type: ignore[no-untyped-def]
+        # These are the records that get an eventContext, so the test can
+        # compare the answer with preparation's own selection too.
+        _prepared_entries.append(list(entries))
+        return real(extension, citry, entries)
+
+    monkeypatch.setattr(vue_events, "build_events_manifest", recording)
 
 
 def _engine(**settings: object) -> Citry:
@@ -58,6 +78,9 @@ def _assert_agrees(rendered: CitryRender, *, expected: bool) -> None:
         # A "no" is only evidence when a Vue manifest was written to check.
         assert _manifests(html) if rendered.needs_browser_runtime() else not _manifests(html)
         assert _serialized_events(html) is expected
+        if rendered.needs_browser_runtime():
+            # Preparation picked Events records exactly when the answer was yes.
+            assert bool(_prepared_entries[-1]) is expected
     # Asking does not change the render, so the answer stays the same.
     assert rendered.has_server_events() is answer
 
@@ -166,6 +189,28 @@ def test_an_events_component_in_a_slot_says_yes() -> None:
         citry = engine
         template = """
 <main><c-Card><c-Counter /></c-Card></main>
+"""
+
+    _assert_agrees(Page().render(), expected=True)
+
+
+def test_an_events_component_called_by_a_simple_vue_component_says_yes() -> None:
+    engine = _engine()
+    _components(engine)
+
+    class Row(Component):
+        # A simple='vue' component renders as a record, not a frame, so
+        # the Counter it calls is reached only through that record.
+        citry = engine
+        simple = "vue"
+        template = """
+<li><c-Counter /></li>
+"""
+
+    class Page(Component):
+        citry = engine
+        template = """
+<ul><c-Row /><c-Slider /></ul>
 """
 
     _assert_agrees(Page().render(), expected=True)

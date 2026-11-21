@@ -4,10 +4,10 @@
 
 ### Added
 
-- Experimental, for host integrations such as citry-django:
-  `CitryRender.has_server_events()` returns whether a render has a
-  component with server events, before you serialize it. A host can use
-  it to set the CSRF cookie only on pages whose event calls need it. See
+- You can now ask a render whether it has server events before you
+  serialize it, with the Experimental `CitryRender.has_server_events()`.
+  It is for host integrations such as citry-django, which can use it to
+  set the CSRF cookie only on pages whose event calls need it. See
   [Find renders with server events](https://citry.dev/advanced/asset-placement/#find-renders-with-server-events).
 
 ## v1.1.1

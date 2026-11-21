@@ -810,24 +810,33 @@ class CitryRender:
         It returns ``True`` when a component in this render declares
         ``class Events``. Then ``serialize()`` gives the browser what it
         needs to call that component's event handlers, and each call sends
-        Citry's CSRF token, so the response must let the browser read it.
-        It returns ``False`` when no event call can come from this render.
+        Citry's CSRF token, so the response must give the browser that
+        token, for example by setting the CSRF cookie. It returns
+        ``False`` when no event call can come from this render.
 
-        Host integrations such as citry-django use it to set a CSRF cookie
-        only on pages that need one, because the cookie keeps shared
-        caches from storing the page. It answers from what Citry recorded
-        while rendering, so you can call it before ``serialize()``, and it
-        does not change the render.
+        Host integrations such as citry-django use it to set the CSRF
+        cookie only on pages whose event calls need it, because the cookie
+        keeps shared caches from storing the page. It answers from what
+        Citry recorded while rendering, so you can call it before
+        ``serialize()``, and it does not change the render.
+
+        It covers server events only. A locale switch with
+        ``$i18n.switchLocale()`` also sends the CSRF token, and a form you
+        write that posts to an event URL needs the framework's own CSRF
+        field, so a page with either needs the cookie even when this
+        returns ``False``.
 
         Like [`needs_browser_runtime()`][citry.CitryRender.needs_browser_runtime],
         the answer depends only on what was rendered, not on the
-        ``serialize()`` arguments: with ``security_javascript="omit"`` or
-        ``"forbid"``, serialize still leaves out the event handlers or
-        refuses the render. A child component's render answers for that
-        child alone, which is what serializing it on its own gives.
+        ``serialize()`` arguments. It can return ``True`` even when
+        ``security_javascript="omit"`` or ``"forbid"`` makes
+        ``serialize()`` leave the event handlers out or refuse the render.
+        A child component's render answers for that child alone, which is
+        what serializing it on its own gives.
 
         Returns:
-            Whether serializing this render gives the browser server events.
+            Whether serializing this render lets the browser call a server
+            event handler.
 
         Experimental:
             This method may change in a minor release without a deprecation
@@ -837,7 +846,7 @@ class CitryRender:
             ```python
             rendered = Page().render()
             if rendered.has_server_events():
-                get_token(request)
+                get_token(request)  # Django sets the CSRF cookie
             html = rendered.serialize()
             ```
 

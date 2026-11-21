@@ -292,6 +292,12 @@ A page without the cookie can be stored by shared caches, which a
 page with it usually cannot. Called on a child render, it answers for
 that child alone, as serializing it on its own would.
 
+It covers server events only. A locale switch with
+`$i18n.switchLocale()` also sends the CSRF token, and a form you write
+that posts to an event URL needs your framework's CSRF field, so such
+a page needs the cookie even when `has_server_events()` returns
+`False`.
+
 ## Next steps
 
 - [Component JS and CSS](/advanced/js-and-css-dependencies/) adds
