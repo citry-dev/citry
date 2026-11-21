@@ -129,6 +129,12 @@ carries the rules, or the work is done without them.
   merge it; the maintainer reviews every pull request first. Open it ready
   for review and list it in your report. When the scope of a merge
   instruction is unclear, ask which pull requests it covers.
+- **Offer to drive a well-documented routine task to completion.** Once a
+  routine task, such as a release, has been done at least once and its steps
+  are written down in full, you may offer to carry the next one through to
+  the end: open and merge its pull requests, publish, and similar steps. Do
+  it only after the maintainer grants that permission explicitly for that
+  task, and only for what was granted. The grant ends when the task is done.
 
 ## Sibling repositories
 
