@@ -70,18 +70,18 @@ filterwarnings = [
 ## Upgrade the packages { #upgrade-the-packages }
 
 ```console
-python -m pip install -U "citry>=1.0.0,<2"
+pip install -U citry
 ```
 
-Add the packages you use to the same command:
+Upgrade the other Citry packages you use in the same way:
 
-- `"citry-lsp>=1.0.0,<2"`: the language server behind editor support.
-  If you use the [VS Code extension](/ide/vscode/), update it to 1.0.0
-  at the same time.
-- `"pygments-citry>=1.0.0,<2"`: Citry syntax highlighting for Pygments.
-- `"citry-ui>=0.6.0,<0.7"`: the [UI library](/ui-library/).
+- `citry-lsp`: the language server behind editor support. If you use
+  the [VS Code extension](/ide/vscode/), update it to 1.0.0 at the
+  same time.
+- `pygments-citry`: Citry syntax highlighting for Pygments.
+- `citry-ui`: the [UI library](/ui-library/).
     - 0.6.0 needs Citry 1.0.0 or later.
-    - Still 0.x, so pin one minor release.
+    - Still 0.x, so pin one minor release: `citry-ui>=0.6.0,<0.7`.
 
 Then:
 
