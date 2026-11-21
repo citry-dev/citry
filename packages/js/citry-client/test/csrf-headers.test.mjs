@@ -150,3 +150,12 @@ test("names inherited from Object.prototype choose nothing", () => {
     );
   }
 });
+
+test("a csrf key given as undefined counts as not given", () => {
+  // `{token: window.maybeToken}` on a page without that global must still read the cookie.
+  const page = csrfOnPage({ cookie: "csrftoken=from-cookie; site=s" });
+  page.configure(vm.runInContext("({csrf: {token: undefined, cookie: undefined, header: undefined}})", page));
+  assert.deepEqual({ ...page.csrfHeaders("/a") }, { "X-CSRFToken": "from-cookie" });
+  page.adopt(block(page, { cookie: "site", header: "X-Site" }));
+  assert.deepEqual({ ...page.csrfHeaders("/a") }, { "X-Site": "s" });
+});

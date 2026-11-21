@@ -358,10 +358,8 @@ def profile(request):
 ```
 
 If Django stores the token in the session, or makes the CSRF cookie
-`HttpOnly`, browser code cannot read the cookie. Set `_csrf_cookie` to
-`None` so that Citry does not read a stale `csrftoken` cookie (see
-[CSRF cookie and header](#csrf-names)). Render the token into the
-page instead, and tell Citry where to find it. Citry templates do not
+`HttpOnly`, browser code cannot read the cookie. Render the token into
+the page instead, and tell Citry where to find it. Citry templates do not
 understand Django's `{% csrf_token %}` tag, so pass the value of Django's
 `get_token(request)` to the component as a `csrf_token` input:
 
@@ -403,45 +401,51 @@ Without it, event calls send no token and Django refuses them with a 403.
 
 ### CSRF cookie and header { #csrf-names }
 
-When your CSRF cookie or header has another name than Django's defaults,
-set the names once in Python. Citry writes them into the data of every
-interactive page and fragment it serializes, and its browser code uses
-them, so the page needs no script of its own:
+When your CSRF cookie or header has a name other than Django's default,
+set the names once in Python:
 
 ```python
 citry = Citry(
     extensions_defaults={
-        "events": {
-            "_csrf_cookie": "__Host-csrftoken",
-            "_csrf_header": "X-CSRFToken",
-        },
+        "events": {"_csrf_cookie": "__Host-csrftoken"},
     },
 )
 ```
 
+Citry writes the names into the JSON block it adds to each page and
+fragment that has Vue or server events, and its browser code uses them.
+The page needs no script of its own.
+
 | Setting | Meaning |
 | --- | --- |
-| `_csrf_cookie` | The cookie that holds the token. The default is `csrftoken`. `None` means the token is not in a cookie: Citry reads no cookie, and the page gives the token with [`Citry.configure`](/reference/browser-apis/#citry-configure). |
+| `_csrf_cookie` | The cookie that holds the token. The default is `csrftoken`. `None` means the token is not in a cookie: Citry reads no cookie and sends no token until the page gives one with [`Citry.configure`](/reference/browser-apis/#citry-configure). |
 | `_csrf_header` | The request header that carries the token. The default is `X-CSRFToken`. |
 
-Both settings are Experimental, and both apply to the whole app: setting
-one on a component's `Events` class fails when the class is defined.
-`Citry(...)` raises a `ValueError` for a name a browser cannot use: a
-cookie name or header name with a space, a quote, `;`, or another
-character outside an HTTP token, and a header that Citry or the browser
+Both settings are Experimental, and both apply to the whole `Citry`
+instance: setting one on a component's `Events` class fails when the
+class is defined. `Citry(...)` raises a `ValueError` for a name a browser
+cannot use: a name with a space, a double quote, `;`, or another
+character outside an HTTP token, or a header that Citry or the browser
 sets itself (`Content-Type`, `Cookie`, `Origin`, and names that start
 with `X-Citry-`, `Sec-` or `Proxy-`).
 
 A [`Citry.configure`](/reference/browser-apis/#citry-configure) call
 still works, and it wins: each name the call sets replaces the one from
 these settings, and a name the call leaves out keeps the setting's value.
-The order of the call and the page's first app does not matter.
+You can call it before or after the page starts, with the same result.
 
-On a page without a CSP nonce, Citry ignores the names in a fragment that
-it finds in the page, because markup injected into the page could have
-written them, and uses the names of the page's own apps instead. If two
-apps on one page name different cookies or headers, the first one wins
-and Citry writes a warning to the browser console.
+!!! warning "A page without a CSP nonce that has only fragments"
+
+    On a page whose Citry script tag has no CSP nonce, Citry ignores the
+    names in a fragment it finds in the page, because markup injected
+    into the page could have written them. Such a fragment uses the names
+    of an app the page itself rendered. When the page has no such app,
+    and only gets interactive components from fragments, call
+    `Citry.configure({csrf})` on the page, or serve it with a nonce-based
+    CSP.
+
+When two apps on one page name different cookies or headers, the first
+one wins and Citry writes a warning to the browser console.
 
 ### Tokens inside forms { #csrf-tokens-in-forms }
 
@@ -514,9 +518,11 @@ citry = Citry(
 )
 ```
 
-When the token is not in a cookie, set `_csrf_cookie` to `None` and give
-the token with [`Citry.configure`][Citry.configure] before the page makes
-its first event call or switches language:
+When the token is not in a cookie, give it with
+[`Citry.configure`][Citry.configure] before the page makes its first event
+call or switches language. Citry uses a token you give before any cookie.
+Set `_csrf_cookie` to `None` as well when the page should send no token
+until that call has run:
 
 ```javascript
 Citry.configure({
@@ -1440,11 +1446,11 @@ html = card.render().serialize(
 ```
 
 The fragment request is a new response, so your server must know the
-nonce of the page that sent it. The page can tell it. In the browser,
+nonce of the page that sent it. The page can send it. In the browser,
 [`Citry.pageNonce()`](/reference/browser-apis/#citry-page-nonce) returns
 the page's nonce. Send it in the `X-Citry-Page-Nonce` header with the
 request that loads the fragment. On the server, read it with
-`page_nonce_from_headers()` and pass it on. This is right even when the
+`page_nonce_from_headers()` and pass it on. This works even when the
 visitor has the app open in several tabs, because each tab sends its own
 nonce:
 
@@ -1462,19 +1468,23 @@ def card_view(request):
         csp_nonce=nonce,
     )
     response = HttpResponse(html)
+    # The HTML depends on the header: a cache must not give
+    # it to a request that sent another nonce, or none.
+    patch_vary_headers(response, ["X-Citry-Page-Nonce"])
     if nonce is not None:
-        # The HTML holds one tab's nonce: no cache may
-        # give it to anyone else.
         response["Cache-Control"] = "no-store"
-        patch_vary_headers(response, ["X-Citry-Page-Nonce"])
     return response
 ```
 
 `page_nonce_from_headers()` returns `None` when the header is missing, or
 when its value does not look like a nonce: letters, digits, `+`, `/`,
 `-` and `_`, then at most two `=`, and no more than 256 characters. The
-fragment then has no nonce, and the page refuses to start it. With htmx,
-add the header to every request htmx sends to the page's own origin:
+fragment then has no nonce, and a page with a nonce-based CSP refuses to
+start it.
+
+With htmx, add the header to every request htmx sends to the page's own
+origin. Another site has no use for the nonce, so the snippet sends it
+nowhere else:
 
 ```js
 document.addEventListener("htmx:configRequest", (event) => {
@@ -1486,30 +1496,47 @@ document.addEventListener("htmx:configRequest", (event) => {
 });
 ```
 
-Send the header only to your own origin, as this snippet does. The nonce
-is not a password, but another site has no use for it.
+With this snippet, markup injected into the page that holds `hx-get` or
+another htmx attribute also sends the nonce, to a URL on your own site.
+It still gets back only what your view writes for that URL.
 
-A request can put any value in the header, but the value only reaches
-the answer to that same request. A visitor who sends a wrong nonce gets
-back a fragment that their own page refuses. Another site cannot make
-the visitor's browser send the header to your server: a request with a
-custom header from another origin needs a CORS preflight, and the
-browser stops it unless your CORS policy allows the header. Even then,
-the other site would only read its own answer. That is why the answer
-must not be cached: a shared cache is the one place where one request's
-answer reaches another visitor.
-Both API names are Experimental.
+Do not cache an answer that carries a nonce from the header:
+
+- A request can put any value in the header, but the value only reaches
+  the answer to that same request. A wrong nonce gives back a fragment
+  that the sender's own page refuses.
+- Another site cannot make a visitor's browser send the header to your
+  server. The browser first asks your server whether another site may
+  send that header (a CORS preflight), and stops the request unless your
+  CORS policy allows it.
+- A shared cache is the one place where the answer to one request
+  reaches another visitor.
+
+`Citry.pageNonce()`, the `X-Citry-Page-Nonce` header and
+`page_nonce_from_headers()` are Experimental.
 
 A server event can return a [`Render`](/events/actions/) as an HTML
 fragment, to a client of your own that posts the event call and inserts
 the HTML it gets back. Citry serializes that fragment itself, so it needs
-the nonce of the page that sent the call. Set `_csp_nonce` to a function
+the nonce of the page that sent the call. When the client sends
+[`Citry.pageNonce()`](/reference/browser-apis/#citry-page-nonce) in the
+`X-Citry-Page-Nonce` header, Citry uses that nonce, read as
+`page_nonce_from_headers()` reads it, and you need no setting. Citry
+lists the header in the `Vary` header of every event answer, and answers
+a call that sends it with `Cache-Control: no-store`, unless the handler
+returned its own response with a cache policy.
+
+If your client cannot send the header, set `_csp_nonce` to a function
 that takes the call's [`EventRequest`][citry.ext.events.EventRequest] and
-returns that nonce, or `None` when the page has none:
+returns that nonce, or `None` when the page has none. When it is set,
+Citry uses its answer and does not read the header, but still marks the
+answer as above:
 
 ```python
 def page_nonce(request):
-    # On Django: the nonce your app kept when it rendered the page.
+    # On Django: the nonce your app kept when it rendered
+    # the page. A session keeps one nonce, so with several
+    # tabs open, older tabs get a newer tab's nonce.
     return request.native.session.get("csp_nonce")
 
 
@@ -1518,15 +1545,10 @@ citry = Citry(
 )
 ```
 
-Without `_csp_nonce`, Citry uses the nonce from the call's
-`X-Citry-Page-Nonce` header, read as `page_nonce_from_headers()` reads
-it, so a client that sends
-[`Citry.pageNonce()`](/reference/browser-apis/#citry-page-nonce) in the
-header needs no setting. Citry answers every call that sends the header
-with `Cache-Control: no-store`, unless the handler returned its own
-response with a cache policy, and adds the header to `Vary`. When the
-app sets `_csp_nonce`, the function's answer wins and the header is not
-read.
+Code that runs event calls itself, through
+[`EventsDispatcher`][citry.ext.events.EventsDispatcher] instead of Citry's
+HTTP routes, must mark its answers the same way when it passes the
+request's headers on.
 
 Citry calls the function once for each call it answers with such a
 fragment. `Citry(...)` raises `ValueError` when the setting is not a plain

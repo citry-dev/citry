@@ -1199,7 +1199,7 @@ Citry's HTTP routes read these request headers:
 | `X-Citry-Vue-Occurrence` | The ID the browser keeps for the calling component across renders. It is not the component's `renderId`. |
 | `X-Citry-Vue-Revision` | The revision of the Vue app that the browser has applied, in ASCII digits, at most 2^53 - 1. |
 | CSRF token header | `X-CSRFToken` unless the app's `_csrf_header` setting or the page names another. Read by a host framework that checks a token, such as Django, or by a component's own `_csrf` check. |
-| `X-Citry-Page-Nonce` | Optional. The CSP nonce of the page that sends the call, as `Citry.pageNonce()` returns it. When the app sets no `_csp_nonce`, an `html-fragment/1` render carries this nonce if it has the shape of one. Experimental. |
+| `X-Citry-Page-Nonce` | Optional. The CSP nonce of the page that sends the call, as `Citry.pageNonce()` returns it. When the app sets no `_csp_nonce`, an `html-fragment/1` render carries this nonce if it has the shape of one (CSP base64, at most 256 characters). Experimental. |
 
 A `vue-prepared/1` render needs all three `X-Citry-Vue-*` headers; without
 them the call fails with `handler_error`. A client that asks only for
@@ -1208,10 +1208,11 @@ must also come from the page's own origin: the server rejects one whose
 `Origin` header names another host or port, or whose `Sec-Fetch-Site` header is
 not `same-origin` or `none`, with `csrf_failed`.
 
-The answer to a call that sends `X-Citry-Page-Nonce` depends on the
-nonce of one page, so the server sends it with `Cache-Control: no-store`
-(unless a handler's own response sets a cache policy) and adds
-`X-Citry-Page-Nonce` to its `Vary` header. Citry's own browser code does
+Whether a call sends `X-Citry-Page-Nonce` changes its answer, so every
+answer lists `X-Citry-Page-Nonce` in its `Vary` header. The answer to a
+call that sends it holds the nonce of one page, so the server also sends
+it with `Cache-Control: no-store`, unless a handler's own response sets a
+cache policy. Citry's own browser code does
 not send the header: its `vue-prepared/1` renders take the nonce from
 the page itself.
 

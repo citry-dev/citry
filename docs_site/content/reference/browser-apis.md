@@ -365,16 +365,18 @@ Citry.configure({
 | `csrf` option | Meaning |
 | --- | --- |
 | `token` | The token: a string, or a function that returns one. Citry calls the function before each request. |
-| `cookie` | The name of the cookie to read the token from when `token` is not set. The default is `csrftoken`. |
-| `header` | The request header that carries the token. The default is `X-CSRFToken`. |
+| `cookie` | The name of the cookie to read the token from when `token` is not set. The default is the server's [`_csrf_cookie`](/security/#csrf-names), or `csrftoken`. |
+| `header` | The request header that carries the token. The default is the server's [`_csrf_header`](/security/#csrf-names), or `X-CSRFToken`. |
 
 With no `Citry.configure` call, Citry uses the names from the server's
 [`_csrf_cookie` and `_csrf_header` settings](/security/#csrf-names), and
 without those it reads the `csrftoken` cookie and sends it as
 `X-CSRFToken`, which is what Django expects. Each name the call sets
-wins over the server's setting, whichever comes first, and a name it
-leaves out keeps the server's value. Each `csrf` value replaces the
-earlier one as a whole, and requests sent afterwards use it.
+wins over the server's setting, whether the call runs before or after
+the page's first app starts. A later call replaces the earlier call's
+names as a whole, and a name it leaves out falls back to the server's
+setting. An option given as `undefined` counts as left out. Requests
+sent afterwards use the new values.
 When the token is empty, or the cookie is missing, Citry sends no token
 header.
 
@@ -405,10 +407,11 @@ that loads messages keeps using the `Citry.configure` token.
 <h3 class="doc-heading" id="citry-page-nonce"><code>Citry.pageNonce</code></h3>
 
 Get the page's CSP nonce, so that a request your own code sends (htmx,
-`fetch()`) can tell the server which page it comes from:
+`fetch()`) can tell the server which page it comes from. Call it after
+Citry's runtime has loaded:
 
 ```js
-const nonce = Citry.pageNonce();
+const nonce = window.Citry?.pageNonce?.();
 const response = await fetch("/cards/42", {
   headers: nonce ? {"X-Citry-Page-Nonce": nonce} : {},
 });
@@ -417,15 +420,18 @@ const response = await fetch("/cards/42", {
 It returns the nonce on the tag that loaded Citry's runtime, or `null`
 when that tag has none. The server reads the header with
 `page_nonce_from_headers()` and serializes the fragment with that nonce,
-so the fragment starts in the tab that asked for it. See
-[Nonces in fragments](/security/#html-fragments), which also has an htmx
-snippet. Send the header only to your own origin.
+so the fragment starts in the tab that asked for it. Send the header only
+to your own origin. See [Nonces in fragments](/security/#html-fragments),
+which also has an htmx snippet.
 
-Citry never adds the nonce to a fragment by itself: a fragment starts only
-when the server wrote the page's nonce into it. Any script already running
-on the page can read a nonce from a script tag, so this function gives
-running code nothing new, and injected markup that does not run cannot
-call it. `Citry.pageNonce` is Experimental.
+Citry never adds the nonce to a fragment itself. A fragment starts only
+when the server wrote the page's nonce into it.
+
+!!! warning "Experimental"
+
+    `Citry.pageNonce` and the `X-Citry-Page-Nonce` header are
+    experimental. They may change in a minor release without a
+    deprecation period.
 
 ## Page-wide events API
 

@@ -2451,13 +2451,14 @@ class TestPageNonceHeader:
         assert "nonce=" not in action["html"]
         assert response.headers["vary"] == "X-Citry-Page-Nonce"
 
-    def test_a_call_without_the_header_is_answered_as_before(self):
+    def test_a_call_without_the_header_varies_on_it_but_may_be_stored(self):
         c = _citry()
         greeter = _greeter(c)
         response = self._save(_mounted(c), greeter)
         [action] = response.json()["results"][0]["actions"]
         assert "nonce=" not in action["html"]
-        assert "vary" not in response.headers
+        # A cache must not give this answer, made without a nonce, to a call that sends one.
+        assert response.headers["vary"] == "X-Citry-Page-Nonce"
         assert "cache-control" not in response.headers
 
     def test_an_escape_hatch_response_keeps_its_cache_policy_and_extends_its_vary(self):

@@ -488,6 +488,9 @@
       throw new TypeError("Citry.configure csrf.header names a header Citry or the browser reserves");
     if (csrf.token !== undefined && typeof csrf.token !== "string" && typeof csrf.token !== "function")
       throw new TypeError("Citry.configure csrf.token must be a string or a function that returns one");
+    // A key given as `undefined` counts as not given, as it always has: the lookups below ask which
+    // keys the setting has, and `{token: window.maybeToken}` must still fall back to the cookie.
+    for (const key of Object.keys(csrf)) if (csrf[key] === undefined) delete csrf[key];
     // Frozen, and a copy, so a later change to the caller's object does not change the setting.
     pageCsrf = Object.freeze(csrf);
   };

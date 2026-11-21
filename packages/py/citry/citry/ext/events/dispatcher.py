@@ -174,7 +174,11 @@ class TransportContext:
             ``HttpRequest``, the ASGI scope, or a custom transport's own
             object); ``None`` when the transport has none.
         headers: A case-insensitive view of the request headers; empty when
-            the transport carries none.
+            the transport carries none. When they hold `X-Citry-Page-Nonce`
+            and the app sets no `_csp_nonce`, an HTML `Render` carries that
+            nonce, so send the answer with `Cache-Control: no-store` and
+            list `X-Citry-Page-Nonce` in its `Vary` header, as Citry's HTTP
+            routes do.
         response_mode: ``"wire"`` for an ordinary result envelope, or
             ``"compat"`` when the HTTP transport will turn one call into a
             browser-native HTML, redirect, JSON, or empty response.
@@ -394,10 +398,10 @@ def _page_csp_nonce(ctx: TransportContext, plan: _CallPlan) -> str | None:
     An HTML fragment from a Render starts on a nonce-protected page only when
     it carries that page's nonce. The app's ``_csp_nonce`` function answers
     when the app set one. Otherwise the ``X-Citry-Page-Nonce`` header that
-    page code sends (from ``Citry.pageNonce()``) does, which is right even
-    with several tabs open. A forged header
-    only changes the answer to the forger's own call, and the HTTP routes
-    mark every answer to a call that sent it as not storable.
+    page code sends (from ``Citry.pageNonce()``) does, which works even with
+    several tabs open. A made-up header only changes the answer to its own
+    call. The HTTP routes mark every answer so that no cache passes it on;
+    a custom transport must do the same (see ``TransportContext``).
     """
     nonce_for = ctx.citry.settings.extensions_defaults.get("events", {}).get("_csp_nonce")
     if nonce_for is None:

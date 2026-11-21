@@ -449,7 +449,7 @@ def _respond(
     if isinstance(outcome, RouteResponse):
         # The RouteResponse escape hatch (per-event route only).
         response = _with_no_store(outcome) if request.method == "GET" else outcome
-        return _with_page_nonce_marks(response) if PAGE_NONCE_HEADER in request.headers else response
+        return _with_page_nonce_marks(response, sent=PAGE_NONCE_HEADER in request.headers)
 
     if compat:
         response = _compat_response(outcome, request)
@@ -466,7 +466,7 @@ def _respond(
     response = _with_no_store(response) if request.method == "GET" else response
     # A Render in this answer may carry the nonce the call sent, which belongs
     # to one tab of one visitor, so no cache may keep the answer for another.
-    return _with_page_nonce_marks(response) if PAGE_NONCE_HEADER in request.headers else response
+    return _with_page_nonce_marks(response, sent=PAGE_NONCE_HEADER in request.headers)
 
 
 def _encode_envelope(envelope: Mapping[str, Any]) -> tuple[str, Mapping[str, Any]]:
@@ -840,27 +840,29 @@ def _encode_location(url: str) -> str:
     return quote(url, safe=_LOCATION_SAFE)
 
 
-def _with_page_nonce_marks(response: RouteResponse) -> RouteResponse:
+def _with_page_nonce_marks(response: RouteResponse, *, sent: bool) -> RouteResponse:
     """
-    Mark an answer to a call that sent ``X-Citry-Page-Nonce`` so that no cache reuses it.
+    Mark an answer so that no cache gives the nonce of one page to another.
 
-    ``no-store`` keeps every cache from storing the answer, unless the handler
-    set its own cache policy. ``Vary`` also names the header, so a cache that
-    stores it anyway keys it by the nonce. Any ``Vary`` the handler set is
-    extended rather than repeated, because the Django adapter refuses a repeated
-    header name.
+    Every answer lists ``X-Citry-Page-Nonce`` in ``Vary``: whether the call
+    sent the header changes the answer, so a cache must not give an answer
+    made without it to a call that sent one, or the other way round. When the
+    call ``sent`` the header, ``no-store`` also keeps every cache from storing
+    the answer, unless the handler set its own cache policy. Any ``Vary`` the
+    handler set is extended rather than repeated, because the Django adapter
+    refuses a repeated header name.
     """
-    with_no_store = _with_no_store(response)
+    with_no_store = _with_no_store(response) if sent else response
     headers: list[tuple[str, str]] = []
     varied = False
     for name, value in with_no_store.headers:
-        sent = value
+        merged = value
         if name.lower() == "vary":
             varied = True
             listed = {item.strip().lower() for item in value.split(",")}
             if "*" not in listed and PAGE_NONCE_HEADER.lower() not in listed:
-                sent = f"{value}, {PAGE_NONCE_HEADER}"
-        headers.append((name, sent))
+                merged = f"{value}, {PAGE_NONCE_HEADER}"
+        headers.append((name, merged))
     if not varied:
         headers.append(("Vary", PAGE_NONCE_HEADER))
     return RouteResponse(

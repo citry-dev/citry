@@ -6,23 +6,18 @@
 
 - Experimental: you can now name your CSRF cookie and header in Python,
   with `_csrf_cookie` and `_csrf_header` in
-  `extensions_defaults["events"]`, and Citry's browser code uses them on
-  event calls and on `$i18n` message requests. Set `_csrf_cookie` to
-  `None` when the token is not in a cookie, as with Django's
-  `CSRF_USE_SESSIONS` or `CSRF_COOKIE_HTTPONLY`. Host integrations such as
-  citry-django no longer need a script that calls `Citry.configure()`
-  for this. An explicit `Citry.configure({csrf})` call still wins for
-  each name it sets. See
+  `extensions_defaults["events"]`, and Citry's browser code uses them.
+  Integrations that embed Citry in another framework, such as
+  citry-django, no longer need a script that calls `Citry.configure()`
+  for this. See
   [CSRF cookie and header](https://citry.dev/security/#csrf-names).
 - Experimental: a fragment that your own code loads, with htmx or
   `fetch()`, can now carry the CSP nonce of the tab that asked for it,
   even with several tabs open. Send `Citry.pageNonce()` in the
   `X-Citry-Page-Nonce` header and pass
-  `page_nonce_from_headers(request.headers)` as `csp_nonce`. An Events
-  `Render` answered as HTML uses the header on its own when you set no
-  `_csp_nonce`, and Citry marks such answers `Cache-Control: no-store`
-  with `Vary: X-Citry-Page-Nonce`. This replaces the session-kept nonce
-  that host integrations such as citry-django used. See
+  `page_nonce_from_headers(request.headers)` as `csp_nonce`; an Events
+  `Render` uses the header on its own. Integrations such as citry-django
+  can stop keeping the nonce in the session. See
   [Nonces in fragments](https://citry.dev/security/#html-fragments).
 
 ## v1.1.1

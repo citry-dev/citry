@@ -39,6 +39,7 @@ from citry import _output_policy
 from citry._csp_validation import _CspRenderValidator
 from citry._javascript_policy import _JavascriptPolicy
 from citry._page_ids import PageIdCheck
+from citry._page_nonce import CSP_NONCE_SHAPE
 from citry._serialization_security import _ScriptSecurityMaterializer
 from citry.attrs import format_attrs
 from citry.citry_render import (
@@ -96,7 +97,6 @@ _VALUED_MARKER_RE = re.compile(r'^[^\s"\'=<>/]+="[^"<>]*"$')
 # runs once per page).
 _DEPS_STRATEGIES = get_args(DepsStrategy)
 _DEPS_POSITIONS = get_args(DepsPosition)
-_CSP_NONCE_RE = re.compile(r"^[A-Za-z0-9+/_-]+={0,2}$")
 # Matches HTML that starts like a whole document: optional whitespace and a
 # byte order mark, optional leading comments, then a doctype or `<html>`.
 # The leading comments are read as one span, from the first `<!--` to a
@@ -1226,7 +1226,7 @@ def _validate_csp_nonce(value: str | None) -> str | None:
     """Validate the CSP Level 3 base64-value syntax used by nonce sources."""
     if value is None:
         return None
-    if type(value) is not str or _CSP_NONCE_RE.fullmatch(value) is None:
+    if type(value) is not str or CSP_NONCE_SHAPE.fullmatch(value) is None:
         raise ValueError(
             "Invalid csp_nonce: expected a non-empty CSP base64 value using letters, digits, '+', '/', '-', '_', "
             "and at most two trailing '=' characters."

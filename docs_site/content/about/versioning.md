@@ -328,7 +328,7 @@ The release notes say when this list changes. Experimental now:
 - the `_csrf_cookie` and `_csrf_header` options in
   `extensions_defaults["events"]` (the CSRF names the browser runtime
   reads from each page)
-- the page's CSP nonce for requests that page code sends:
+- sending the page's CSP nonce with a request that page code makes:
   `Citry.pageNonce()` in the browser, the `X-Citry-Page-Nonce` request
   header, `page_nonce_from_headers()` and `PAGE_NONCE_HEADER`, and the
   nonce an Events `Render` takes from that header
