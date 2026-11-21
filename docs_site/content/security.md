@@ -1484,17 +1484,34 @@ start it.
 
 With htmx, add the header to every request htmx sends to the page's own
 origin. Another site has no use for the nonce, so the snippet sends it
-nowhere else:
+nowhere else. htmx resolves a relative path against the page's base URL,
+which a `<base>` tag can change, so the snippet checks the path against
+both the base URL and the page's own address:
 
 ```js
 document.addEventListener("htmx:configRequest", (event) => {
   const nonce = window.Citry?.pageNonce?.();
-  const url = new URL(event.detail.path, location.href);
-  if (nonce && url.origin === location.origin) {
-    event.detail.headers["X-Citry-Page-Nonce"] = nonce;
+  if (!nonce) return;
+  const path = event.detail.path;
+  const own = location.origin;
+  try {
+    if (
+      new URL(path, document.baseURI).origin === own &&
+      new URL(path, location.href).origin === own
+    ) {
+      event.detail.headers["X-Citry-Page-Nonce"] = nonce;
+    }
+  } catch {
+    // A path that is not a valid URL gets no nonce.
   }
 });
 ```
+
+A browser passes the header on when a URL on your origin redirects to
+another site, and htmx cannot stop that. If your site has a URL that
+redirects to an address taken from the request, also check
+`new URL(path, location.href).pathname` in the snippet, so it sends the
+nonce only to the paths that return fragments.
 
 With this snippet, markup injected into the page that holds `hx-get` or
 another htmx attribute also sends the nonce, to a URL on your own site.
