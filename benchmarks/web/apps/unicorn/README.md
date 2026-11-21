@@ -1,7 +1,7 @@
 # Django Unicorn project board
 
 This app renders the shared project board through django-unicorn 0.67.0,
-Django 6.1.1 and Uvicorn 0.52.4 on Python 3.12.13. Unicorn renders a normal
+Django 6.1.3 and Uvicorn 0.52.4 on Python 3.12.13. Unicorn renders a normal
 Django component template and uses its native JSON action protocol, state
 checksum, request queue and bundled morphdom implementation for updates.
 All runtime assets are served locally from the pinned wheel or the licensed

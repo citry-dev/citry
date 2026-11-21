@@ -5,7 +5,7 @@ requires-python = ">=3.12,<3.13"
 # Tetra 0.8.5 imports channels when Django starts, even when no component
 # uses WebSockets, so channels is pinned at the version the performance
 # benchmark's Tetra app uses.
-dependencies = ["django==6.1.1", "tetra==0.8.5", "channels==4.3.2"]
+dependencies = ["django==6.1.3", "tetra==0.8.5", "channels==4.3.2"]
 
 [dependency-groups]
 # The tools most Django projects add, which Django's own starter does
