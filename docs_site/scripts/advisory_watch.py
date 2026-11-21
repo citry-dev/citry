@@ -109,10 +109,14 @@ FILE_COLORS = {
         "accent": "#3eb4b4", "halo": "#1c1f2b", "ring": "#353a52", "muted": "#b3aa9a",
     },
 }  # fmt: skip
+# The landing page defines the --landing-* colours. Every other page that shows
+# the graphic, such as a blog post, falls back to the site-wide colour of the
+# same role, so the text and circles keep their contrast in both themes.
 INLINE_COLORS = {
-    "card": "none", "edge": "none", "ink": "var(--landing-ink)",
-    "accent": "var(--c-accent)", "halo": "var(--landing-panel)", "ring": "var(--landing-line)",
-    "muted": "var(--landing-muted)",
+    "card": "none", "edge": "none", "ink": "var(--landing-ink, var(--c-fg))",
+    "accent": "var(--c-accent)", "halo": "var(--landing-panel, var(--c-bg))",
+    "ring": "var(--landing-line, var(--c-border))",
+    "muted": "var(--landing-muted, var(--c-fg-muted))",
 }  # fmt: skip
 _FONT = "Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif"
 
