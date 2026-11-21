@@ -520,7 +520,7 @@ citry = Citry(
 
 When the token is not in a cookie, give it with
 [`Citry.configure`][Citry.configure] before the page makes its first event
-call or switches language. Citry uses a token you give before any cookie.
+call or switches language. A token you give wins over any cookie.
 Set `_csrf_cookie` to `None` as well when the page should send no token
 until that call has run:
 

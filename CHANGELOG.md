@@ -9,7 +9,8 @@
   `extensions_defaults["events"]`, and Citry's browser code uses them.
   Integrations that embed Citry in another framework, such as
   citry-django, no longer need a script that calls `Citry.configure()`
-  for this. See
+  for this, except on a page without a CSP nonce that only gets
+  fragments. See
   [CSRF cookie and header](https://citry.dev/security/#csrf-names).
 - Experimental: a fragment that your own code loads, with htmx or
   `fetch()`, can now carry the CSP nonce of the tab that asked for it,
