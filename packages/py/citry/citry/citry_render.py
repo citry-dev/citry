@@ -803,6 +803,130 @@ class CitryRender:
         # app, minus the call-local security policy, which is not known here.
         return self.render_target == "prepared" and bool(analyze_vue_serialization(self).runtime_requirements)
 
+    def has_server_events(self) -> bool:
+        """
+        Whether this render has a component with server events.
+
+        It returns ``True`` when a component in this render declares
+        ``class Events``. Then ``serialize()`` gives the browser what it
+        needs to call that component's event handlers. It returns
+        ``False`` when no event call can come from this render. It answers
+        from what Citry recorded while rendering, so you can call it before
+        ``serialize()``, and it does not change the render.
+
+        To decide whether a page needs the CSRF cookie, use
+        [`needs_csrf_token()`][citry.CitryRender.needs_csrf_token], which
+        also covers the other browser requests that send the token.
+
+        Like [`needs_browser_runtime()`][citry.CitryRender.needs_browser_runtime],
+        the answer depends only on what was rendered, not on the
+        ``serialize()`` arguments. It can return ``True`` even when
+        ``security_javascript="omit"`` or ``"forbid"`` makes
+        ``serialize()`` leave the event handlers out or refuse the render.
+        A child component's render answers for that child alone, which is
+        what serializing it on its own gives.
+
+        Returns:
+            Whether serializing this render lets the browser call a server
+            event handler.
+
+        Experimental:
+            This method may change in a minor release without a deprecation
+            period.
+
+        Example:
+            ```python
+            rendered = Page().render()
+            if rendered.has_server_events():
+                ...  # the page can call server event handlers
+            ```
+
+        """
+        # Imported here, not at module load, to avoid an import cycle:
+        # the Vue serialization module imports CitryRender from this module.
+        from citry._vue.serialization import has_selected_event_instances  # noqa: PLC0415
+
+        # Serialize writes an occurrence's event context only on the Vue
+        # path, and only for Events records of the selected tree, so this
+        # asks the same two questions without building the manifest.
+        return self.render_target == "prepared" and has_selected_event_instances(self)
+
+    def needs_csrf_token(self) -> bool:
+        """
+        Whether the browser may send Citry's CSRF token from this render.
+
+        It returns ``True`` when serializing this render lets the browser
+        send a request that carries the page's CSRF token, which the
+        host's CSRF check, such as Django's ``CsrfViewMiddleware``, then
+        verifies.
+        Citry's browser code sends the token on these requests:
+
+        - an Events call to a component's event handlers, a ``POST`` to
+          the events route, when
+          [`has_server_events()`][citry.CitryRender.has_server_events]
+          returns ``True``;
+        - a request for translated messages, a ``POST`` to
+          ``ext/i18n/messages``, which the browser sends when it needs a
+          locale the page did not include, such as on
+          ``$i18n.switchLocale()``. Citry sends it only when its routes are
+          mounted, from a render that has a ``<c-i18n client>`` provider or
+          that is rendered into one.
+
+        It returns ``False`` when neither can come from this render.
+
+        Host integrations such as citry-django use it to set the CSRF
+        cookie only on pages that need it, because the cookie keeps shared
+        caches from storing the page. It answers from what Citry recorded
+        while rendering, so you can call it before ``serialize()``, and it
+        does not change the render.
+
+        It does not cover requests that your own code sends. A form you
+        write that posts to an event URL needs your framework's CSRF
+        field, and a browser plugin from a third-party extension that adds
+        ``csrfHeaders()`` to its own requests needs the cookie too.
+
+        Like [`has_server_events()`][citry.CitryRender.has_server_events],
+        the answer depends only on what was rendered, not on the
+        ``serialize()`` arguments, and a child component's render answers
+        for that child alone. It may return ``True`` when serialization
+        writes no such request, which only costs a cookie the page did not
+        need.
+
+        Returns:
+            Whether serializing this render lets the browser send Citry's
+            CSRF token.
+
+        Experimental:
+            This method may change in a minor release without a deprecation
+            period.
+
+        Example:
+            ```python
+            rendered = Page().render()
+            if rendered.needs_csrf_token():
+                get_token(request)  # Django sets the CSRF cookie
+            html = rendered.serialize()
+            ```
+
+        """
+        if self.has_server_events():
+            return True
+        # Imported here, not at module load, to avoid an import cycle: the
+        # i18n extension imports this module.
+        from citry.ext.i18n.emission import render_may_request_messages  # noqa: PLC0415
+        from citry.ext.i18n.extension import I18nExtension  # noqa: PLC0415
+
+        citry = self.owner_citry
+        if citry is None:
+            return False
+        # An app may run without the i18n extension or replace it with its
+        # own class, and then Citry's messages route is not its to answer for.
+        try:
+            extension = citry.extensions.get_extension("i18n")
+        except ValueError:
+            return False
+        return isinstance(extension, I18nExtension) and render_may_request_messages(extension, self)
+
     def serialize(
         self,
         deps_strategy: DepsStrategy = "document",
