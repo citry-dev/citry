@@ -790,6 +790,45 @@ def check() -> list[str]:
 
 The runner prints `PASS`/`FAIL` per validator and exits non-zero if any returns problems (or raises). There is no registration, argparse, or logging boilerplate to write: keep the module to the check logic and let `validate.py` (and `check.py`) handle running and reporting. If a validator needs an extra Python dependency, add it to the root `[dependency-groups].dev`.
 
+#### Pinning GitHub Actions
+
+Every `uses:` line in `.github/workflows/` and `.github/actions/` that names
+a third-party action pins it to a full 40-character commit SHA, with the tag
+it came from in a trailing comment:
+
+```yaml
+- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+```
+
+A tag can be moved to other code by whoever controls the action's
+repository, and the next run would execute that code with this repository's
+secrets; a SHA always names the same code.
+
+Dependabot's `github-actions` entry reads the comment and opens a pull
+request that moves the SHA and the comment together. Two cases need a
+manual step:
+
+- The `toolchain` validator
+  ([`scripts/validators/toolchain.py`](../scripts/validators/toolchain.py))
+  names the SHAs of the maturin, rust-toolchain, PyPI publish, setup-uv,
+  sccache, rust-cache and pnpm setup actions. When a Dependabot pull request
+  moves one of them, update that constant in the same pull request.
+- `dtolnay/rust-toolchain` carries a date comment rather than a tag, so
+  Dependabot does not update it.
+
+To add an action, reuse the SHA other files already pin for the same tag.
+For a new tag, look up its commit with
+`gh api repos/<owner>/<repo>/git/ref/tags/<tag>`; for an annotated tag,
+follow the returned tag object with
+`gh api repos/<owner>/<repo>/git/tags/<sha>`.
+
+The `workflow_action_pins` validator
+([`scripts/validators/workflow_action_pins.py`](../scripts/validators/workflow_action_pins.py))
+fails the gate on a tag or branch reference, or on a SHA without its
+comment. Local actions (`./...`) and `docker://` images are not checked,
+and neither are the example projects' own workflows under `examples/`,
+which users copy into their own repositories.
+
 #### CI integration
 
 The gate runs in CI via the [`repo--check.yml`](../.github/workflows/repo--check.yml)
@@ -3398,8 +3437,9 @@ filename and SHA-256 match is accepted, and a partial upload whose files all
 match is finished by uploading the rest. Any different or unknown public file
 stops the worker. It turns on skip-existing only when this check found the
 public files with the qualified SHA-256, and the check after the upload proves
-every file again. It never overwrites a GitHub Release asset. Release-critical
-third-party actions are pinned to reviewed commits.
+every file again. It never overwrites a GitHub Release asset. Every
+third-party action under `.github/` is pinned to a full commit SHA (see
+[Pinning GitHub Actions](#pinning-github-actions)).
 
 The permanent browser build tuple lives in
 `packages/py/citry_core/pyodide-build.json`. Its Pyodide and Python versions

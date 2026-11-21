@@ -57,7 +57,7 @@ jobs:
     outputs:
       version: ${{ steps.package-version.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.release_commit }}
       - name: Read the qualified package version
@@ -79,13 +79,13 @@ jobs:
     needs: verify-version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # CodeQL treats a checkout of the release_commit input as untrusted
           # code. In a qualify run, verify-version requires release_commit to
           # equal github.sha, so checking out github.sha gives the same commit.
           ref: ${{ github.sha }}
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: "3.14"
       - name: Install uv
@@ -118,14 +118,14 @@ jobs:
           if [[ "$selected" == *,citry,* ]]; then
             uv build --package citry --wheel --out-dir candidate-dependencies
           fi
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: raw-citry-lsp-distributions
           path: |
             dist/*.whl
             dist/*.tar.gz
           if-no-files-found: error
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: inputs.workspace_dependencies != ''
         with:
           name: candidate-citry-lsp-dependencies
@@ -141,22 +141,22 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # CodeQL treats a checkout of the release_commit input as untrusted
           # code. In a qualify run, verify-version requires release_commit to
           # equal github.sha, so checking out github.sha gives the same commit.
           ref: ${{ github.sha }}
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: raw-citry-lsp-distributions
           path: dist
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         if: inputs.workspace_dependencies != ''
         with:
           name: candidate-citry-lsp-dependencies
           path: candidate-dependencies
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install uv
@@ -186,17 +186,17 @@ jobs:
     needs: [verify-version, build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # CodeQL treats a checkout of the release_commit input as untrusted
           # code. In a qualify run, verify-version requires release_commit to
           # equal github.sha, so checking out github.sha gives the same commit.
           ref: ${{ github.sha }}
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: raw-citry-lsp-distributions
           path: dist
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: "3.13"
       - name: Install uv
@@ -225,14 +225,14 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.release_commit }}
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: raw-citry-lsp-distributions
           path: dist
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: "3.14"
       - name: Install uv
@@ -250,14 +250,14 @@ jobs:
       - name: Check package-index rendering metadata
         run: uvx --from twine==6.2.0 twine check verified/*.whl verified/*.tar.gz
       - name: Attest the qualified build outputs
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-path: |
             verified/*.whl
             verified/*.tar.gz
             verified/release-inventory.json
       - name: Upload the only bundle the release controller may promote
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: verified-citry-lsp-distributions
           path: verified
@@ -279,7 +279,7 @@ jobs:
       artifact_digest: ${{ inputs.qualification_artifact_digest }}
       head_sha: ${{ inputs.release_commit }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: main
       - name: Require the trusted qualification for these exact bytes
@@ -319,7 +319,7 @@ jobs:
       closeout_id: ${{ steps.closeout.outputs.artifact-id }}
       closeout_digest: ${{ steps.closeout.outputs.artifact-digest }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           ref: ${{ inputs.release_commit }}
@@ -376,7 +376,7 @@ jobs:
             *) echo "::error::could not read GitHub Release $RELEASE_TAG; HTTP $release_status"; exit 1 ;;
           esac
       - name: Attest the promotion of the qualified bytes
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-path: |
             dist/*
@@ -409,7 +409,7 @@ jobs:
           cp dist/*.whl dist/*.tar.gz verified/release-inventory.json verified/qualification-provenance.json release-closeout/
       - name: Retain the verified release files for closeout
         id: closeout
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-closeout-${{ github.run_attempt }}
           path: release-closeout/*
@@ -428,7 +428,7 @@ jobs:
       RELEASE_COMMIT: ${{ inputs.release_commit }}
       RELEASE_TAG: citry-lsp@${{ needs.verify-version.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -440,7 +440,7 @@ jobs:
           --release-tag "$RELEASE_TAG"
       - name: Mint the dedicated release App token
         id: app
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ vars.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
@@ -467,7 +467,7 @@ jobs:
       RELEASE_COMMIT: ${{ inputs.release_commit }}
       RELEASE_VERSION: ${{ needs.verify-version.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.sha }}
           persist-credentials: false

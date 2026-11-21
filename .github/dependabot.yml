@@ -136,10 +136,18 @@ updates:
   # moves the playground's Pyodide, together with pyodide-build.json.
 
   # GitHub Actions
+  #
+  # Every action is pinned to a full commit SHA with its tag in a trailing
+  # comment (`@<sha> # v7`). Dependabot reads that comment, so its pull request
+  # moves the SHA and the comment together; the `workflow_action_pins`
+  # validator rejects a `uses:` line that names a tag or branch instead.
   - package-ecosystem: github-actions
-    # This actually targets ./.github/workflows/
+    # "/" covers .github/workflows/ and a root action.yml, but not the
+    # composite actions under .github/actions/, so those are listed too.
     # See https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference#directories-or-directory--
-    directory: "/"
+    directories:
+      - "/"
+      - "/.github/actions/*"
     schedule:
       interval: monthly
     open-pull-requests-limit: 10

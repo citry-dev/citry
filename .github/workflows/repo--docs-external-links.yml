@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Initialize the vendored Ruff submodule (a build/runtime dependency
           # of the citry_core extension the docs import).
@@ -40,7 +40,7 @@ jobs:
           version: "0.13.5"
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: "3.14"
 
@@ -70,7 +70,7 @@ jobs:
         run: uv run --no-sync python -m docs_site build --no-search --no-social-cards --no-minify -o "$GITHUB_WORKSPACE/link-check-site"
 
       - name: Check external links (lychee)
-        uses: lycheeverse/lychee-action@v2
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
         with:
           # --root-dir lets lychee resolve root-absolute internal links
           # (`/reference/...`, `/static/...`) against the build output instead of

@@ -21,13 +21,13 @@ jobs:
   publish:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: main
       - name: Require the controller workflow from main
         run: test "$GITHUB_REF" = "refs/heads/main"
       - name: Download the exact candidate bundle
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: release-candidate
           path: candidate

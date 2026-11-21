@@ -59,7 +59,7 @@ jobs:
     outputs:
       version: ${{ steps.package-version.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.release_commit }}
       - name: Read the qualified package version
@@ -88,7 +88,7 @@ jobs:
       matrix:
         target: [x86_64, x86, aarch64, armv7, s390x, ppc64le]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # CodeQL treats a checkout of the release_commit input as untrusted
           # code. In a qualify run, verify-version requires release_commit to
@@ -128,42 +128,42 @@ jobs:
           prune-cache: true
           enable-cache: false
           version: "0.13.5"
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         if: ${{ matrix.target == 'x86_64' }}
         id: python311
         with:
           python-version: "3.11"
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         if: ${{ matrix.target == 'x86_64' }}
         id: python312
         with:
           python-version: "3.12"
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         if: ${{ matrix.target == 'x86_64' }}
         id: python313
         with:
           python-version: "3.13"
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         if: ${{ matrix.target == 'x86_64' }}
         id: python314
         with:
           python-version: "3.14"
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         if: ${{ matrix.target == 'x86_64' }}
         id: python315
         with:
           python-version: "3.15"
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         if: ${{ matrix.target == 'x86_64' }}
         id: python314t
         with:
           python-version: "3.14t"
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         if: ${{ matrix.target == 'x86_64' }}
         id: python315t
         with:
           python-version: "3.15t"
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         if: ${{ matrix.target == 'x86_64' }}
         id: pypy311
         with:
@@ -195,7 +195,7 @@ jobs:
           "${{ steps.pypy311.outputs.python-path }}" scripts/verify_citry_core_distribution.py smoke-wheel \
             --wheel "$PROJECT_DIR/dist/citry_core-${CITRY_CORE_VERSION}-pp311-pypy311_pp73-manylinux*x86_64.whl" \
             --python "${{ steps.pypy311.outputs.python-path }}"
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: wheels-linux-${{ matrix.target }}
           path: ${{ env.PROJECT_DIR }}/dist
@@ -210,7 +210,7 @@ jobs:
       matrix:
         target: [x86_64, x86, aarch64, armv7]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # CodeQL treats a checkout of the release_commit input as untrusted
           # code. In a qualify run, verify-version requires release_commit to
@@ -244,7 +244,7 @@ jobs:
           maturin-version: ${{ env.MATURIN_VERSION }}
           manylinux: musllinux_1_2
           working-directory: ${{ env.PROJECT_DIR }}
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: wheels-musllinux-${{ matrix.target }}
           path: ${{ env.PROJECT_DIR }}/dist
@@ -259,7 +259,7 @@ jobs:
       matrix:
         target: [x64, x86]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # CodeQL treats a checkout of the release_commit input as untrusted
           # code. In a qualify run, verify-version requires release_commit to
@@ -271,27 +271,27 @@ jobs:
           prune-cache: true
           enable-cache: false
           version: "0.13.5"
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         id: python311
         with:
           python-version: "3.11"
           architecture: ${{ matrix.target }}
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         id: python312
         with:
           python-version: "3.12"
           architecture: ${{ matrix.target }}
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         id: python313
         with:
           python-version: "3.13"
           architecture: ${{ matrix.target }}
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         id: python314
         with:
           python-version: "3.14"
           architecture: ${{ matrix.target }}
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         id: python315
         with:
           python-version: "3.15"
@@ -329,7 +329,7 @@ jobs:
             & $python scripts/verify_citry_core_distribution.py smoke-wheel --wheel $wheel --python $python
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: wheels-windows-${{ matrix.target }}
           path: ${{ env.PROJECT_DIR }}/dist
@@ -348,7 +348,7 @@ jobs:
           - runner: macos-latest
             target: aarch64
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # CodeQL treats a checkout of the release_commit input as untrusted
           # code. In a qualify run, verify-version requires release_commit to
@@ -360,11 +360,11 @@ jobs:
           prune-cache: true
           enable-cache: false
           version: "0.13.5"
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         id: python311
         with:
           python-version: "3.11"
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         id: python315
         with:
           python-version: "3.15"
@@ -395,7 +395,7 @@ jobs:
             "$python" scripts/verify_citry_core_distribution.py smoke-wheel \
               --wheel "$wheel" --python "$python"
           done
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: wheels-macos-${{ matrix.target }}
           path: ${{ env.PROJECT_DIR }}/dist
@@ -412,14 +412,14 @@ jobs:
       # checks that this equals CITRY_CORE_RUST_TOOLCHAIN.
       RUSTUP_TOOLCHAIN: "1.97.0"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # CodeQL treats a checkout of the release_commit input as untrusted
           # code. In a qualify run, verify-version requires release_commit to
           # equal github.sha, so checking out github.sha gives the same commit.
           ref: ${{ github.sha }}
           submodules: recursive
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: "3.14"
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
@@ -448,7 +448,7 @@ jobs:
           python scripts/verify_citry_core_distribution.py smoke-sdist
           --sdist '${{ env.PROJECT_DIR }}/dist/*.tar.gz'
           --rust-toolchain '${{ env.CITRY_CORE_RUST_TOOLCHAIN }}'
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: wheels-sdist
           path: ${{ env.PROJECT_DIR }}/dist
@@ -471,17 +471,17 @@ jobs:
       # checks that this equals CITRY_CORE_RUST_TOOLCHAIN.
       RUSTUP_TOOLCHAIN: "1.97.0"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # CodeQL treats a checkout of the release_commit input as untrusted
           # code. In a qualify run, verify-version requires release_commit to
           # equal github.sha, so checking out github.sha gives the same commit.
           ref: ${{ github.sha }}
           submodules: recursive
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: "3.14.2"
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         if: ${{ matrix.copy == 'a' }}
         with:
           node-version: "24"
@@ -543,7 +543,7 @@ jobs:
               pyodide venv "${{ runner.temp }}/citry-pyodide-venv"
           "${{ runner.temp }}/citry-pyodide-venv/bin/pip" install --no-deps --no-index "$wheel"
           "${{ runner.temp }}/citry-pyodide-venv/bin/python" -I scripts/smoke_citry_core.py
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: pyemscripten-repro-${{ matrix.copy }}
           path: ${{ runner.temp }}/pyemscripten-${{ matrix.copy }}/*.whl
@@ -557,7 +557,7 @@ jobs:
     env:
       CITRY_CORE_VERSION: ${{ needs.verify-version.outputs.version }}
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: pyemscripten-repro-*
           path: reproducibility-builds
@@ -569,7 +569,7 @@ jobs:
             "reproducibility-builds/pyemscripten-repro-b/$wheel"
           mkdir verified-pyemscripten
           cp "reproducibility-builds/pyemscripten-repro-a/$wheel" verified-pyemscripten/
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: wheels-pyemscripten-wasm32
           path: verified-pyemscripten/*.whl
@@ -585,11 +585,11 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.release_commit }}
           submodules: recursive
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: wheels-*
           path: raw-artifacts
@@ -606,14 +606,14 @@ jobs:
           --package-name citry-core
           --wheel-pattern '*pyemscripten*.whl'
       - name: Attest the qualified build outputs
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-path: |
             verified/*.whl
             verified/*.tar.gz
             verified/release-inventory.json
       - name: Upload the only bundle the release controller may promote
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: verified-citry-core-distributions
           path: verified
@@ -635,7 +635,7 @@ jobs:
       artifact_digest: ${{ inputs.qualification_artifact_digest }}
       head_sha: ${{ inputs.release_commit }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: main
       - name: Require the trusted qualification for these exact bytes
@@ -673,7 +673,7 @@ jobs:
       closeout_id: ${{ steps.closeout.outputs.artifact-id }}
       closeout_digest: ${{ steps.closeout.outputs.artifact-digest }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           ref: ${{ inputs.release_commit }}
@@ -731,7 +731,7 @@ jobs:
             *) echo "::error::could not read GitHub Release $RELEASE_TAG; HTTP $release_status"; exit 1 ;;
           esac
       - name: Attest the promotion of the qualified bytes
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-path: |
             dist/*
@@ -764,7 +764,7 @@ jobs:
           cp dist/*.whl dist/*.tar.gz verified/release-inventory.json verified/qualification-provenance.json release-closeout/
       - name: Retain the verified release files for closeout
         id: closeout
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-closeout-${{ github.run_attempt }}
           path: release-closeout/*
@@ -783,7 +783,7 @@ jobs:
       RELEASE_COMMIT: ${{ inputs.release_commit }}
       RELEASE_TAG: citry-core@${{ needs.verify-version.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -795,7 +795,7 @@ jobs:
           --release-tag "$RELEASE_TAG"
       - name: Mint the dedicated release App token
         id: app
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ vars.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
@@ -822,7 +822,7 @@ jobs:
       RELEASE_COMMIT: ${{ inputs.release_commit }}
       RELEASE_VERSION: ${{ needs.verify-version.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.sha }}
           persist-credentials: false

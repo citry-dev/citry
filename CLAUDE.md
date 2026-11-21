@@ -706,6 +706,12 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   or composite action contains one of the three values above. It does not
   follow a value through a step or job output, and nothing checks the
   Dependabot rule, so both rest on review.
+- **Pin a third-party action to a full commit SHA** with its tag in a
+  comment, such as `actions/checkout@<40-hex sha> # v7`. Dependabot
+  proposes updates from that comment, and the `workflow_action_pins`
+  validator fails the gate on a tag or branch reference. A few SHAs are also
+  named in `scripts/validators/toolchain.py` and move with it. See
+  [Pinning GitHub Actions](docs/codebase.md#pinning-github-actions).
 - **Version numbers use full major.minor.patch format.** Write `1.3.0`, not
   `1.3`, in changelogs, commit messages, and anywhere a version is
   referenced.

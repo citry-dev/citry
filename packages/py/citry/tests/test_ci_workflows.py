@@ -618,7 +618,9 @@ def test_python_diagnostic_constrains_setup_and_passes_one_literal_target() -> N
     assert job["runs-on"] == "${{ inputs.runner_os }}"
     assert job["timeout-minutes"] == 45
     steps = {step.get("name", step.get("uses")): step for step in job["steps"]}
-    assert "with" not in steps["actions/checkout@v7"]
+    # Actions are pinned by commit SHA, so match the checkout step by its action name.
+    checkout = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@"))
+    assert "with" not in checkout
     assert steps["Set up Python"]["with"]["python-version"] == "${{ inputs.python_version }}"
 
     validate_step = steps["Validate the selected pytest target"]
@@ -631,7 +633,7 @@ def test_python_diagnostic_constrains_setup_and_passes_one_literal_target() -> N
     assert 'validate-target --profile "$INSTALL_PROFILE" --target "$PYTEST_TARGET"' in validate_step["run"]
 
     restore = steps["Restore exact Citry Core wheel"]
-    assert restore["uses"] == "actions/cache/restore@v6"
+    assert restore["uses"].split("@", 1)[0] == "actions/cache/restore"
     assert restore["with"] == {
         "path": ".diagnostic-cache/citry-core",
         "key": "${{ steps.core-identity.outputs.cache_key }}",
@@ -680,7 +682,7 @@ def test_python_diagnostic_constrains_setup_and_passes_one_literal_target() -> N
     assert core_pyproject["tool"]["maturin"]["locked"] is True
 
     save = steps["Save exact Citry Core wheel"]
-    assert save["uses"] == "actions/cache/save@v6"
+    assert save["uses"].split("@", 1)[0] == "actions/cache/save"
     assert save["with"] == restore["with"]
     assert "core_wheel_mode == 'reuse'" in save["if"]
     assert "cache-hit != 'true'" in save["if"]

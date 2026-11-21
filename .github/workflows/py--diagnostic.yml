@@ -58,10 +58,10 @@ jobs:
     runs-on: ${{ inputs.runner_os }}
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: ${{ inputs.python_version }}
 
@@ -105,7 +105,7 @@ jobs:
       - name: Restore exact Citry Core wheel
         if: ${{ inputs.install_profile != 'pygments-citry' && inputs.core_wheel_mode == 'reuse' }}
         id: core-wheel
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .diagnostic-cache/citry-core
           key: ${{ steps.core-identity.outputs.cache_key }}
@@ -181,7 +181,7 @@ jobs:
           ${{ inputs.install_profile != 'pygments-citry' &&
               inputs.core_wheel_mode == 'reuse' &&
               steps.core-wheel.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .diagnostic-cache/citry-core
           key: ${{ steps.core-identity.outputs.cache_key }}
