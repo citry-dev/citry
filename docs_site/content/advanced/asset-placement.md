@@ -273,30 +273,38 @@ child_results = [
 ]
 ```
 
-### Find renders with server events
+### Check for the CSRF token { #find-renders-that-need-the-csrf-token }
 
-[`has_server_events()`][citry.CitryRender.has_server_events]
-(Experimental) returns whether a render has a component with server
-events (`class Events`). The browser sends Citry's CSRF token with
-every event call, so a host that sets the CSRF cookie only when a page
-needs it can ask before it serializes:
+[`needs_csrf_token()`][citry.CitryRender.needs_csrf_token]
+(Experimental) returns whether the browser may send Citry's CSRF token
+from a render. A host that sets the CSRF cookie only on pages that need
+it can ask before it serializes:
 
 ```python
 rendered = Page().render()
-if rendered.has_server_events():
+if rendered.needs_csrf_token():
     get_token(request)  # Django sets the CSRF cookie
 html = rendered.serialize()
 ```
 
 A page without the cookie can be stored by shared caches, which a
-page with it usually cannot. Called on a child render, it answers for
-that child alone, as serializing it on its own would.
+page with it usually cannot. Citry's browser code sends the token on
+two kinds of request:
 
-It covers server events only. A locale switch with
-`$i18n.switchLocale()` also sends the CSRF token, and a form you write
-that posts to an event URL needs your framework's CSRF field, so such
-a page needs the cookie even when `has_server_events()` returns
-`False`.
+- an Events call, when a component in the render has `class Events`;
+- a request for translated messages, when a `<c-i18n client>`
+  provider switches to a locale the page did not include, such as with
+  `$i18n.switchLocale()`.
+
+[`has_server_events()`][citry.CitryRender.has_server_events]
+(Experimental) answers for the first kind alone. Called on a child
+render, both methods answer for that child alone, as serializing it on
+its own would.
+
+Requests your own code sends are not covered. A form you write that
+posts to an event URL needs your framework's CSRF field, and a browser
+plugin from another extension that sends the token needs the cookie
+too.
 
 ## Next steps
 

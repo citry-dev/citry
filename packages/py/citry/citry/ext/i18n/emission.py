@@ -24,6 +24,7 @@ from .usage import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from citry.citry_render import CitryRender
     from citry.ext.dependencies.emission import OnDependenciesContext
 
     from .extension import I18nExtension
@@ -53,6 +54,46 @@ def client_runtime_js() -> str:
 def vue_plugin_js() -> str:
     """Return the native Vue plugin source, which is the same bundle."""
     return I18N_RUNTIME.content
+
+
+def render_may_request_messages(extension: I18nExtension, render: CitryRender) -> bool:
+    """
+    Whether serializing this render lets the browser post to the messages route.
+
+    The browser posts there, with the page's CSRF token, when it needs a
+    locale the page did not ship, such as on ``$i18n.switchLocale()``. The
+    browser i18n data names that route only when Citry's routes are
+    mounted, and serialize writes it only when the render's own tree holds
+    a client provider, or holds client i18n content for a provider given
+    through ``render(provides=...)``. This asks the same questions of the
+    render's records, without building the message artifacts. It may answer
+    ``True`` when serialization writes no message request, such as for
+    content a client barrier keeps from its provider, which only costs the
+    host a spare cookie.
+    """
+    if not extension.configured or extension.citry.mounted_prefix is None:
+        return False
+    records = cast("dict[str, I18nRenderRecord]", render.context.extra.get(EXTRA_KEY, {}))
+    # Most renders hold no i18n record, so they skip the tree walk.
+    if not records:
+        return False
+    selected_ids = selected_render_ids(render)
+    selected = [record for render_id, record in records.items() if render_id in selected_ids]
+    # A client provider lets the browser switch its locale.
+    if any(record.provider is not None for record in selected):
+        return True
+    # Without one, client content still becomes a requirement when it has
+    # an owner. A ``$c-tr`` binding names its own. Other content uses the
+    # owner on its record, or the provider the render was given, which is
+    # all a record replayed from the cache has, as serialize does.
+    outside_provider = render.context.provides.get(CLIENT_CONTEXT_KEY) is not None
+    return any(
+        record.bindings.records
+        or (
+            (record.client_owner is not None or outside_provider) and (record.client_messages or record.client_outputs)
+        )
+        for record in selected
+    )
 
 
 def emit_i18n_dependencies(extension: I18nExtension, ctx: OnDependenciesContext) -> None:
@@ -435,4 +476,11 @@ def _policy_to_wire(policy: ProviderFieldPolicy) -> dict[str, object]:
     return result
 
 
-__all__ = ["I18N_RUNTIME", "MESSAGES_PATH", "RUNTIME_PATH", "client_runtime_js", "emit_i18n_dependencies"]
+__all__ = [
+    "I18N_RUNTIME",
+    "MESSAGES_PATH",
+    "RUNTIME_PATH",
+    "client_runtime_js",
+    "emit_i18n_dependencies",
+    "render_may_request_messages",
+]

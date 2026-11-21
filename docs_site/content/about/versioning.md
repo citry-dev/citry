@@ -332,4 +332,4 @@ The release notes say when this list changes. Experimental now:
   `CitryRender.needs_browser_runtime()`, `combine_assets()`,
   `SerializedAssetEntry` with the `css_entries` and `js_entries`
   fields of `SerializedAssets`, and `OutsideSlotContentError`
-- `CitryRender.has_server_events()`
+- `CitryRender.needs_csrf_token()` and `CitryRender.has_server_events()`

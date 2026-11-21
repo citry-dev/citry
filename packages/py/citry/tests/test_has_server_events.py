@@ -1,12 +1,15 @@
 """
-Tests for ``CitryRender.has_server_events()``.
+Tests for ``CitryRender.has_server_events()`` and ``needs_csrf_token()``.
 
-The method answers before serialization, so each test compares its
-answer with what serialization then writes: whether any occurrence in the
-Vue manifest carries an ``eventContext``, the record the browser uses to
-call a component's event handlers. A host that trusted a wrong ``False``
-would skip the CSRF cookie and every event call would fail, so the cases
-cover each way an Events component can reach the page.
+Both methods answer before serialization, so each test compares their
+answers with what serialization then writes. ``has_server_events()``
+must match whether any occurrence in the Vue manifest carries an
+``eventContext``, the record the browser uses to call a component's event
+handlers. ``needs_csrf_token()`` must also match whether the browser i18n
+data names the messages route, which the browser posts to with the CSRF
+token when it switches locale. A host that trusted a wrong ``False`` would
+skip the CSRF cookie and those requests would fail, so the cases cover
+each way an Events component or a client i18n provider can reach the page.
 """
 
 import json
@@ -23,6 +26,8 @@ _SIGNING_KEY = "test-secret-key"
 _DATA_BLOCK = re.compile(
     r'<script type="application/json" data-citry-vue-(document|fragment)\b[^>]*>(.*?)</script>', re.DOTALL
 )
+# The browser i18n data of a page without Vue.
+_I18N_BLOCK = re.compile(r'<script type="application/json" data-citry-i18n\b[^>]*>(.*?)</script>', re.DOTALL)
 
 
 # The Events records each serialization prepared, newest last.
@@ -69,20 +74,44 @@ def _serialized_events(html: str) -> bool:
     )
 
 
-def _assert_agrees(rendered: CitryRender, *, expected: bool) -> None:
-    """Check the answer before serialization against both serialize strategies."""
+def _serialized_message_requests(html: str) -> bool:
+    """Whether the serialized browser i18n data lets the browser post to the messages route."""
+    payloads = [json.loads(body) for body in _I18N_BLOCK.findall(html)]
+    for manifest in _manifests(html):
+        extension = manifest.get("extensions", {}).get("i18n")  # type: ignore[attr-defined]
+        if extension is not None:
+            payloads.append(extension["payload"])
+    # The runtime posts only to the route the data names, and only for a
+    # provider or a requirement it holds.
+    return any(
+        payload.get("messages_url") and (payload["providers"] or payload["requirements"]) for payload in payloads
+    )
+
+
+def _assert_agrees(
+    rendered: CitryRender,
+    *,
+    expected: bool,
+    csrf: bool | None = None,
+    strategies: tuple[str, ...] = ("document", "fragment"),
+) -> None:
+    """Check both answers before serialization against both serialize strategies."""
+    csrf = expected if csrf is None else csrf
     answer = rendered.has_server_events()
     assert answer is expected
-    for strategy in ("document", "fragment"):
-        html = rendered.serialize(deps_strategy=strategy)
+    assert rendered.needs_csrf_token() is csrf
+    for strategy in strategies:
+        html = rendered.serialize(deps_strategy=strategy)  # type: ignore[arg-type]
         # A "no" is only evidence when a Vue manifest was written to check.
         assert _manifests(html) if rendered.needs_browser_runtime() else not _manifests(html)
         assert _serialized_events(html) is expected
+        assert (_serialized_events(html) or _serialized_message_requests(html)) is csrf
         if rendered.needs_browser_runtime():
             # Preparation picked Events records exactly when the answer was yes.
             assert bool(_prepared_entries[-1]) is expected
-    # Asking does not change the render, so the answer stays the same.
+    # Asking does not change the render, so the answers stay the same.
     assert rendered.has_server_events() is answer
+    assert rendered.needs_csrf_token() is csrf
 
 
 def _components(engine: Citry) -> dict[str, type[Component]]:
@@ -364,3 +393,152 @@ def test_a_render_action_answers_for_the_fragment_it_sends() -> None:
         [action] = item["actions"]
         assert answers == [events]
         assert _serialized_events(action["html"]) is events
+
+
+def _i18n_engine(*, mounted: bool = True, **settings: object) -> Citry:
+    engine = Citry(
+        autodiscover=False,
+        secret=_SIGNING_KEY,
+        extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US", "cs-CZ")}},
+        **settings,  # type: ignore[arg-type]
+    )
+    # Without mounted routes the page carries every locale and the browser
+    # has no messages route to post to.
+    if mounted:
+        engine.set_mounted_prefix("/citry")
+    return engine
+
+
+def _locale_switch_page(engine: Citry) -> type[Component]:
+    class Page(Component):
+        citry = engine
+        template = """
+<c-i18n c-client="True" tag="main">
+  <output v-text="$i18n.tr('title')"></output>
+  <button @click="$i18n.switchLocale('cs-CZ')">cs</button>
+</c-i18n>
+"""
+        messages = """
+title = Title
+"""
+
+    return Page
+
+
+@pytest.mark.parametrize("mounted", [True, False])
+def test_a_locale_switch_needs_the_token_only_with_the_messages_route(mounted: bool) -> None:
+    page = _locale_switch_page(_i18n_engine(mounted=mounted))
+    # A fragment references its files by URL, so it needs mounted routes.
+    strategies = ("document", "fragment") if mounted else ("document",)
+    _assert_agrees(page().render(), expected=False, csrf=mounted, strategies=strategies)
+
+
+def test_a_locale_switch_and_server_events_both_count() -> None:
+    engine = _i18n_engine()
+    _components(engine)
+    _locale_switch_page(engine)
+
+    class Shell(Component):
+        citry = engine
+        template = """
+<div><c-Page /><c-Counter /></div>
+"""
+
+    _assert_agrees(Shell().render(), expected=True, csrf=True)
+
+
+def test_server_translations_alone_need_no_token() -> None:
+    engine = _i18n_engine()
+    _components(engine)
+
+    class Page(Component):
+        citry = engine
+        template = """
+<main><h1>{{ tr("title") }}</h1><c-Slider /></main>
+"""
+        messages = """
+title = Title
+"""
+
+    _assert_agrees(Page().render(), expected=False, csrf=False)
+
+
+def test_client_content_for_an_outside_provider_needs_the_token() -> None:
+    engine = _i18n_engine()
+    page = _locale_switch_page(engine)
+
+    class ClientCopy(Component):
+        citry = engine
+        template = """
+<output v-text="$i18n.tr('copy')"></output>
+"""
+        messages = """
+copy = Copy
+"""
+
+    rendered_page = page().render()
+    provider = next(record for record in rendered_page.context.extra["i18n"].values() if record.provider is not None)
+    # A host renders a fragment into the page's provider by passing it in,
+    # and that provider may already have switched to a locale the fragment
+    # did not include.
+    provides = {"citry_i18n": provider.provider.context, "citry_i18n_client": provider.render_id}
+    _assert_agrees(ClientCopy().render(provides=provides), expected=False, csrf=True)
+    # The same component on its own has no provider and asks for nothing.
+    _assert_agrees(ClientCopy().render(), expected=False, csrf=False)
+
+
+def _page_provider(page: type[Component]) -> dict[str, object]:
+    """Return the provides that render a fragment into the page's client provider."""
+    rendered_page = page().render()
+    provider = next(record for record in rendered_page.context.extra["i18n"].values() if record.provider is not None)
+    return {"citry_i18n": provider.provider.context, "citry_i18n_client": provider.render_id}
+
+
+def test_a_cached_replay_into_a_provider_needs_the_token() -> None:
+    engine = _i18n_engine(cache=InMemoryCache())
+    page = _locale_switch_page(engine)
+    calls: list[str] = []
+
+    class CachedCopy(Component):
+        citry = engine
+
+        class Cache:
+            enabled = True
+
+        def template_data(self, kwargs, slots):  # type: ignore[no-untyped-def]
+            calls.append("data")
+            return {}
+
+        template = """
+<output v-text="$i18n.tr('copy')"></output>
+"""
+        messages = """
+copy = Copy
+"""
+
+    # Stored with no provider, then replayed into one: the replayed record
+    # does not say who owns it, only the render's provides do.
+    _assert_agrees(CachedCopy().render(), expected=False, csrf=False)
+    replayed = CachedCopy().render(provides=_page_provider(page))
+    assert calls == ["data"]
+    _assert_agrees(replayed, expected=False, csrf=True)
+
+
+def test_a_binding_for_an_outside_provider_needs_the_token() -> None:
+    engine = _i18n_engine()
+    page = _locale_switch_page(engine)
+
+    class Bound(Component):
+        # A $c-tr binding alone, with no other client i18n content.
+        citry = engine
+        template = """
+<span $c-tr:copy @click="n++">{{ tr("copy") }}</span>
+"""
+        js = """
+$component({ data() { return { n: 0 }; } });
+"""
+        messages = """
+copy = Copy
+"""
+
+    _assert_agrees(Bound().render(provides=_page_provider(page)), expected=False, csrf=True)
