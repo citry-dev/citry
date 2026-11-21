@@ -11,6 +11,7 @@ isolation.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any
 
@@ -97,6 +98,16 @@ def _wait_for_style_property(locator: Any, name: str, value: str) -> None:
         })""",
         {"name": name, "value": value},
     )
+
+
+def _wait_for_held_routes(page: Any, held: list[Any], count: int) -> None:
+    """Wait until a route handler that appends to `held` has run `count` times."""
+    # Playwright runs route handlers only while the test calls into it, so a
+    # short page wait gives a handler that is already queued its turn.
+    deadline = time.monotonic() + 5
+    while len(held) < count and time.monotonic() < deadline:
+        page.wait_for_timeout(25)
+    assert len(held) == count
 
 
 def _wait_for_text(locator: Any, value: str) -> None:
@@ -2560,7 +2571,10 @@ def test_fragment_loads_its_deps_on_demand(page: Any, docs_site_url: str) -> Non
             }"""
         )
     assert immediate == {"disabled": True, "requests": 1}
-    assert len(pending) == 1
+    # The browser can report the request before Playwright has called the
+    # route handler, so wait for the handler to hold it rather than read the
+    # list straight away.
+    _wait_for_held_routes(page, pending, 1)
     assert reset.is_hidden()
     assert page.locator(".frag-widget").count() == 0
     pending[0].continue_()
