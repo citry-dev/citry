@@ -190,7 +190,7 @@ async function startWith({
   }
   // The manager reports a refused block from a rejected promise, one turn later.
   await new Promise((resolve) => setTimeout(resolve, 0));
-  return { errors, prompts, warnings, events };
+  return { errors, prompts, warnings, events, citry: context.Citry };
 }
 
 const DOCUMENT_SELECTOR = 'script[type="application/json"][data-citry-vue-document]';
@@ -334,6 +334,27 @@ test("a page without a nonce refuses a fragment that names another script or add
     assert.equal(errors.length, 1, errors.join("\n"));
     assert.match(errors[0], WITHOUT_NONCE_REFUSAL);
   }
+});
+
+test("a page without a nonce starts a fragment that names CSRF names, without taking them", async () => {
+  // The server writes `csrfNames` from the Events settings, so the fragment is not refused; the
+  // runtime drops them (checkBlockWithoutNonce), so injected markup cannot choose the cookie.
+  const { errors } = await withoutNonce(
+    { definitions: [], scripts: [] },
+    { csrfNames: { cookie: "sessionid", header: "X-Stolen" } },
+  );
+  assert.equal(errors.length, 1, errors.join("\n"));
+  assert.match(errors[0], HOST_REFUSAL);
+});
+
+test("Citry.pageNonce() returns the nonce of the runtime's own tag, or null without one", async () => {
+  const withNonce = await startWith({ blockNonce: PAGE_NONCE });
+  assert.equal(withNonce.citry.pageNonce(), PAGE_NONCE);
+  const without = await startWith({ blockNonce: "", pageNonce: "" });
+  assert.equal(without.citry.pageNonce(), null);
+  // A named element that hides document.currentScript cannot hand page code an empty nonce.
+  const clobbered = await startWith({ blockNonce: PAGE_NONCE, clobberCurrentScript: true });
+  assert.equal(clobbered.citry.pageNonce(), PAGE_NONCE);
 });
 
 test("a runtime with no address of its own holds fragments to the page's origin", async () => {

@@ -43,7 +43,10 @@ INJECTABLE_PARAMS = ("data", "state", "context", "request", "event")
 # settings-only and a component declaring one fails at class definition.
 # ``_csp_nonce`` (a function that returns the CSP nonce of the page that sent
 # a call) is engine-wide too, because a page's nonce is one fact for every
-# component on it. ``_render_inputs`` (a function that returns the keyword
+# component on it. ``_csrf_cookie`` and ``_csrf_header`` (the names of the
+# host's CSRF cookie and header, which the browser runtime reads from each
+# app's configuration block) are engine-wide for the same reason: a site has
+# one CSRF scheme. ``_render_inputs`` (a function that returns the keyword
 # arguments Citry passes to ``render()`` for every Render a call performs) is
 # an ordinary per-component name: the calling component's value wins over
 # ``extensions_defaults["events"]``.
@@ -58,12 +61,16 @@ CONFIG_NAMES = (
     "_max_form_fields",
     "_csrf_field_names",
     "_csp_nonce",
+    "_csrf_cookie",
+    "_csrf_header",
     "_render_inputs",
 )
 
 # The engine-wide config names, which only ``extensions_defaults["events"]``
 # may set.
-ENGINE_CONFIG_NAMES = frozenset({"_max_body_bytes", "_max_form_fields", "_csrf_field_names", "_csp_nonce"})
+ENGINE_CONFIG_NAMES = frozenset(
+    {"_max_body_bytes", "_max_form_fields", "_csrf_field_names", "_csp_nonce", "_csrf_cookie", "_csrf_header"}
+)
 
 # The hidden field Django's ``{% csrf_token %}`` and its own forms write. A
 # page that keeps it inside a form sending a server event would otherwise

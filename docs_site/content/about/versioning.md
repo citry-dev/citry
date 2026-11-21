@@ -325,6 +325,13 @@ The release notes say when this list changes. Experimental now:
 - the `_render_inputs` option, in `class Events` or
   `extensions_defaults["events"]`, and its `RenderInputs` type
   (request values for `Render` actions)
+- the `_csrf_cookie` and `_csrf_header` options in
+  `extensions_defaults["events"]` (the CSRF names the browser runtime
+  reads from each page)
+- sending the page's CSP nonce with a request that page code makes:
+  `Citry.pageNonce()` in the browser, the `X-Citry-Page-Nonce` request
+  header, `page_nonce_from_headers()` and `PAGE_NONCE_HEADER`, and the
+  nonce an Events `Render` takes from that header
 - `RenderFrame` and `CitryRender.frame`
 - returning asset tags apart from the HTML: the `"separate"` value of
   `DepsPosition`, `SerializedAssets`, the `runtime_assets`,

@@ -1209,6 +1209,21 @@ def _loads_own_json(text: str) -> object:
         return deep_json.loads(text)
 
 
+def _csrf_names(events_defaults: Mapping[str, Any]) -> dict[str, str | None]:
+    """
+    Return the CSRF names the app set in ``extensions_defaults["events"]``, keyed as the runtime reads them.
+
+    ``_csrf_cookie`` may be ``None``, which tells the runtime not to read a
+    cookie at all. The values were checked when the engine started.
+    """
+    names: dict[str, str | None] = {}
+    if "_csrf_cookie" in events_defaults:
+        names["cookie"] = events_defaults["_csrf_cookie"]
+    if "_csrf_header" in events_defaults:
+        names["header"] = events_defaults["_csrf_header"]
+    return names
+
+
 def _script_json(value: object) -> str:
     """Serialize prepared data for the configuration data block, with sorted keys so the output is repeatable."""
     return script_json(value, sort_keys=True)
@@ -1422,6 +1437,13 @@ def prepare_vue_serialization(
     if mounted:
         configuration["endpoint"] = ctx.citry.build_url("ext/events/call")
         configuration["eventBaseUrl"] = ctx.citry.build_url("ext/events/e/")
+        # The host's CSRF cookie and header names, when the app set them, so
+        # the runtime sends the token the host checks without a script of the
+        # host's own. Only the names the app set are written: a page on the
+        # defaults keeps its bytes, and the runtime fills in the rest.
+        csrf_names = _csrf_names(ctx.citry.settings.extensions_defaults.get("events", {}))
+        if csrf_names:
+            configuration["csrfNames"] = csrf_names
     serialized = _script_json(configuration)
     manifest_slot = json.dumps(_MANIFEST_SLOT)
     if serialized.count(manifest_slot) != 1:
