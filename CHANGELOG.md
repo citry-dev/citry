@@ -1,5 +1,26 @@
 # Release notes
 
+## Unreleased
+
+### Added
+
+- Experimental: you can now name your CSRF cookie and header in Python,
+  with `_csrf_cookie` and `_csrf_header` in
+  `extensions_defaults["events"]`, and Citry's browser code uses them.
+  Integrations that embed Citry in another framework, such as
+  citry-django, no longer need a script that calls `Citry.configure()`
+  for this, except on a page without a CSP nonce that only gets
+  fragments. See
+  [CSRF cookie and header](https://citry.dev/security/#csrf-names).
+- Experimental: a fragment that your own code loads, with htmx or
+  `fetch()`, can now carry the CSP nonce of the tab that asked for it,
+  even with several tabs open. Send `Citry.pageNonce()` in the
+  `X-Citry-Page-Nonce` header and pass
+  `page_nonce_from_headers(request.headers)` as `csp_nonce`; an Events
+  `Render` uses the header on its own. Integrations such as citry-django
+  can stop keeping the nonce in the session. See
+  [Nonces in fragments](https://citry.dev/security/#html-fragments).
+
 ## v1.1.1
 
 Citry 1.1.1 changes only the package's PyPI metadata, with no code

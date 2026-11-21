@@ -31,6 +31,7 @@ from citry.ext.events._introspection import capture_handler_introspection, inspe
 from citry.ext.events.bindings import compile_template_bindings, rewrite_resolved_attrs
 from citry.ext.events.cache import export_events_cache, stage_events_cache
 from citry.ext.events.config import Events
+from citry.ext.events.csrf import csrf_name_problem
 from citry.ext.events.emission import capture_instance, merge_instance_entries
 from citry.ext.events.handlers import (
     CONFIG_NAMES,
@@ -125,6 +126,19 @@ def _validate_engine_config_value(name: str, value: Any) -> None:
                 " and returns the CSP nonce of the page that sent it (None when that page has no"
                 f" nonce); got {value!r}."
             )
+            raise ValueError(msg)
+    elif name == "_csrf_cookie":
+        # None says the token does not come from a cookie (Django's
+        # CSRF_USE_SESSIONS or CSRF_COOKIE_HTTPONLY): the page then gives it
+        # with Citry.configure({csrf: {token}}).
+        problem = None if value is None else csrf_name_problem("cookie", value)
+        if problem is not None:
+            msg = f"'_csrf_cookie' {problem}, or None when the token is not in a cookie; got {value!r}."
+            raise ValueError(msg)
+    elif name == "_csrf_header":
+        problem = csrf_name_problem("header", value)
+        if problem is not None:
+            msg = f"'_csrf_header' {problem}; got {value!r}."
             raise ValueError(msg)
     else:
         # Each engine-wide name needs its own rule here.
@@ -321,7 +335,8 @@ class EventsExtension(Extension):
         Underscore names are configuration and must be one of the recognized
         config attributes (``_guard``, ``_context``, ``_csrf``, ``_methods``,
         ``_debounce``, ``_throttle``, plus the engine-wide
-        ``_max_body_bytes``, ``_max_form_fields``, ``_csrf_field_names``, and ``_csp_nonce``,
+        ``_max_body_bytes``, ``_max_form_fields``, ``_csrf_field_names``, ``_csp_nonce``,
+        ``_csrf_cookie``, and ``_csrf_header``,
         which only ``extensions_defaults`` may set);
         on a component's ``Events`` class an underscore ``def`` is a private
         helper and is exempt.

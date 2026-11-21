@@ -87,6 +87,63 @@ def test_events_calls_read_the_page_csrf_setting(page: Any, serve_live: Any, ope
     ]
 
 
+def test_events_calls_use_the_csrf_names_the_server_wrote(page: Any, serve_live: Any, open_citry_page: Any) -> None:
+    # The Events `_csrf_cookie` and `_csrf_header` settings reach the runtime in the
+    # configuration block, so the page needs no Citry.configure script of its own.
+    engine = Citry(
+        secret="page-csrf-names-secret",  # noqa: S106
+        autodiscover=False,
+        extensions_defaults={"events": {"_csrf_cookie": "site_csrf", "_csrf_header": "X-Site-CSRF"}},
+    )
+    engine.set_mounted_prefix("/citry")
+
+    class Page(Component):
+        citry = engine
+        template = '<main><button id="ping" @c-click="ping">{{ count }}</button></main>'
+
+        class Kwargs:
+            count: int = 0
+
+        def template_data(self, kwargs, slots):
+            return {"count": kwargs.count}
+
+        class Events:
+            def ping(self):
+                return None
+
+    dispatcher_for(engine)
+    open_citry_page(serve_live(engine, Page().render().serialize(), "") + "/")
+    page.evaluate(
+        """() => {
+          document.cookie = 'csrftoken=django-default; path=/';
+          document.cookie = 'site_csrf=from-site-cookie; path=/';
+          window.__sent = [];
+          Citry.events.registerTransport('record', {
+            async send(envelope, request) {
+              window.__sent.push(Object.fromEntries(
+                Object.entries(request.headers).filter(([name]) => !name.startsWith('X-Citry')),
+              ));
+              const response = await fetch(request.url, {
+                method: request.method, headers: request.headers, body: JSON.stringify(envelope),
+              });
+              return response.json();
+            },
+          });
+          Citry.events.configure({transport: 'record'});
+        }"""
+    )
+    page.locator("#ping").click()
+    page.wait_for_function("window.__sent.length === 1")
+    # An explicit call wins for the name it sets; the header stays the server's.
+    page.evaluate("Citry.configure({csrf: {cookie: 'csrftoken'}})")
+    page.locator("#ping").click()
+    page.wait_for_function("window.__sent.length === 2")
+    assert page.evaluate("window.__sent") == [
+        {"Content-Type": "application/citry-events+json", "X-Site-CSRF": "from-site-cookie"},
+        {"Content-Type": "application/citry-events+json", "X-Site-CSRF": "django-default"},
+    ]
+
+
 def test_plugin_host_gives_the_token_only_for_the_page_origin(page: Any) -> None:
     # A probe browser plugin keeps the host object the core passes every
     # plugin, so the test can ask it for headers directly.

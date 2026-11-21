@@ -40,6 +40,7 @@ event's data class (design 3.5, ``security_csrf.md`` 4.4).
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
@@ -54,13 +55,81 @@ if TYPE_CHECKING:
     from citry.ext.events.extension import EventHandler
     from citry.util.routing import RouteRequest
 
-__all__ = ["X_CITRY_EVENTS_HEADER", "build_csrf_check", "csrf_field_names", "enforce_floor"]
+__all__ = [
+    "X_CITRY_EVENTS_HEADER",
+    "build_csrf_check",
+    "csrf_field_names",
+    "csrf_name_problem",
+    "enforce_floor",
+]
 
 # The custom header the client runtime sends on every call. Its presence is
 # the floor's proof that the request came from same-origin JS (or a caller
 # like curl that deliberately added it), never from a bare HTML form.
 X_CITRY_EVENTS_HEADER = "X-Citry-Events"
 """Header required on JSON Events calls as part of the same-origin CSRF check."""
+
+# An HTTP header name and a cookie name are both an RFC 9110 token: the
+# characters a browser accepts in a ``Set-Cookie`` name and in a ``fetch()``
+# header name. Anything else would make every request fail in the browser,
+# far from the setting, so the setting is refused when Citry starts.
+_HTTP_TOKEN = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+")
+
+# The header names the token cannot travel in, the same list as
+# ``FORBIDDEN_CSRF_HEADERS`` in ``citry/_vue/client.js`` (keep the two in
+# step). Citry sends ``Content-Type`` and the ``X-Citry-`` headers itself,
+# and the browser drops the rest from a ``fetch()`` without an error.
+_RESERVED_CSRF_HEADERS = frozenset(
+    {
+        "accept-charset",
+        "accept-encoding",
+        "access-control-request-headers",
+        "access-control-request-method",
+        "connection",
+        "content-length",
+        "content-type",
+        "cookie",
+        "cookie2",
+        "date",
+        "dnt",
+        "expect",
+        "host",
+        "keep-alive",
+        "origin",
+        "referer",
+        "set-cookie",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+        "via",
+    }
+)
+_RESERVED_CSRF_HEADER_PREFIXES = ("x-citry-", "sec-", "proxy-")
+
+
+def csrf_name_problem(kind: str, value: object) -> str | None:
+    """
+    Say what is wrong with a CSRF cookie or header name, or return ``None`` when it is usable.
+
+    The browser runtime applies the same rules to the names it reads from
+    the configuration block, so a name that passes here also passes there.
+
+    Args:
+        kind: ``"cookie"`` or ``"header"``.
+        value: The configured name.
+
+    Returns:
+        A short reason, or ``None`` for a usable name.
+
+    """
+    if type(value) is not str or _HTTP_TOKEN.fullmatch(value) is None:
+        return f"must be a {kind} name (letters, digits, and !#$%&'*+.^_`|~-)"
+    lower = value.lower()
+    if kind == "header" and (lower in _RESERVED_CSRF_HEADERS or lower.startswith(_RESERVED_CSRF_HEADER_PREFIXES)):
+        return "names a header that Citry or the browser sets itself"
+    return None
+
 
 # The rejection message is contract (the protocol examples lock it); the
 # specific reason goes to the debug log for operators.

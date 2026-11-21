@@ -48,6 +48,7 @@ from urllib.parse import quote, urlsplit
 
 from citry._hashed_runtime import is_content_digest, not_found
 from citry._owned_resource import CSS_CONTENT_TYPE, JAVASCRIPT_CONTENT_TYPE, _OwnedResource
+from citry._page_nonce import PAGE_NONCE_HEADER
 from citry._protocol.events import (
     ProtocolValueError,
     add_route_identity,
@@ -447,7 +448,8 @@ def _respond(
     """Translate the dispatcher's outcome (a result envelope or the escape hatch) into the HTTP response."""
     if isinstance(outcome, RouteResponse):
         # The RouteResponse escape hatch (per-event route only).
-        return _with_no_store(outcome) if request.method == "GET" else outcome
+        response = _with_no_store(outcome) if request.method == "GET" else outcome
+        return _with_page_nonce_marks(response, sent=PAGE_NONCE_HEADER in request.headers)
 
     if compat:
         response = _compat_response(outcome, request)
@@ -461,7 +463,10 @@ def _respond(
         )
     # GET handlers are cacheable in principle but served no-store until GET
     # caching lands (design 3.5 and section 16).
-    return _with_no_store(response) if request.method == "GET" else response
+    response = _with_no_store(response) if request.method == "GET" else response
+    # A Render in this answer may carry the nonce the call sent, which belongs
+    # to one tab of one visitor, so no cache may keep the answer for another.
+    return _with_page_nonce_marks(response, sent=PAGE_NONCE_HEADER in request.headers)
 
 
 def _encode_envelope(envelope: Mapping[str, Any]) -> tuple[str, Mapping[str, Any]]:
@@ -833,6 +838,39 @@ def _encode_location(url: str) -> str:
     url = url.strip(_URL_LEADING_STRIP).translate({9: None, 10: None, 13: None})
     url = _LONE_SURROGATE.sub("\ufffd", url)
     return quote(url, safe=_LOCATION_SAFE)
+
+
+def _with_page_nonce_marks(response: RouteResponse, *, sent: bool) -> RouteResponse:
+    """
+    Mark an answer so that no cache gives the nonce of one page to another.
+
+    Every answer lists ``X-Citry-Page-Nonce`` in ``Vary``: whether the call
+    sent the header changes the answer, so a cache must not give an answer
+    made without it to a call that sent one, or the other way round. When the
+    call ``sent`` the header, ``no-store`` also keeps every cache from storing
+    the answer, unless the handler set its own cache policy. Any ``Vary`` the
+    handler set is extended rather than repeated, because the Django adapter
+    refuses a repeated header name.
+    """
+    with_no_store = _with_no_store(response) if sent else response
+    headers: list[tuple[str, str]] = []
+    varied = False
+    for name, value in with_no_store.headers:
+        merged = value
+        if name.lower() == "vary":
+            varied = True
+            listed = {item.strip().lower() for item in value.split(",")}
+            if "*" not in listed and PAGE_NONCE_HEADER.lower() not in listed:
+                merged = f"{value}, {PAGE_NONCE_HEADER}"
+        headers.append((name, merged))
+    if not varied:
+        headers.append(("Vary", PAGE_NONCE_HEADER))
+    return RouteResponse(
+        content=with_no_store.content,
+        content_type=with_no_store.content_type,
+        status=with_no_store.status,
+        headers=tuple(headers),
+    )
 
 
 def _with_no_store(response: RouteResponse) -> RouteResponse:
