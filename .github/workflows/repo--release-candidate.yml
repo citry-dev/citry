@@ -36,7 +36,7 @@ jobs:
     outputs:
       package_count: ${{ steps.plan.outputs.package_count }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
       - name: Require candidate preparation from main
@@ -55,7 +55,7 @@ jobs:
             --output release-plan.json
           echo "package_count=$(jq '.packages | length' release-plan.json)" >> "$GITHUB_OUTPUT"
       - name: Retain the plan used by qualification
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-plan
           path: release-plan.json
@@ -67,8 +67,8 @@ jobs:
     needs: plan
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: release-plan
       - name: Qualify every selected package concurrently
@@ -81,7 +81,7 @@ jobs:
           --candidate-id "$GITHUB_RUN_ID"
           --output release-candidate.json
       - name: Retain the complete candidate bundle
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-candidate
           path: release-candidate.json

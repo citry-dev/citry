@@ -32,7 +32,7 @@ def test_multi_version_cpython_smokes_build_selected_core_as_abi3() -> None:
         build_pythons = [
             step["with"]["python-version"]
             for step in jobs["build"]["steps"]
-            if step.get("uses") == "actions/setup-python@v7"
+            if step.get("uses", "").startswith("actions/setup-python@")
         ]
         assert versions == ["3.11", "3.12", "3.13", "3.14", "3.15"], path.name
         assert build_pythons == ["3.14"], path.name
