@@ -958,9 +958,8 @@ def _record_component_has_js(record: DependencyRecord, render: CitryRender) -> b
     return has_component_asset("js", component_class)
 
 
-def analyze_vue_serialization(render: CitryRender) -> VueSerializationAnalysis:
-    """Inspect selected typed metadata without invoking Assembly or the native compiler."""
-    renders = _selected_renders(render)
+def _selected_render_ids(renders: list[CitryRender]) -> frozenset[str]:
+    """Return the render ids of the components that become occurrences of the selected tree."""
     selected_ids = frozenset(
         current.frame.render_id
         for current in renders
@@ -976,6 +975,28 @@ def analyze_vue_serialization(render: CitryRender) -> VueSerializationAnalysis:
     }
     if called_ids:
         selected_ids |= called_ids
+    return selected_ids
+
+
+def has_selected_event_instances(render: CitryRender) -> bool:
+    """
+    Whether an Events instance recorded for this render belongs to its selected tree.
+
+    Preparation writes an occurrence's ``eventContext`` for exactly these
+    records, so this answers the same question without building the manifest.
+    """
+    event_records = cast("dict[EventInstanceEntry, object]", render.context.extra.get("events", {}))
+    # Most renders have no Events component, so they skip the tree walk.
+    if not event_records:
+        return False
+    selected_ids = _selected_render_ids(_selected_renders(render))
+    return any(record.render_id in selected_ids for record in event_records)
+
+
+def analyze_vue_serialization(render: CitryRender) -> VueSerializationAnalysis:
+    """Inspect selected typed metadata without invoking Assembly or the native compiler."""
+    renders = _selected_renders(render)
+    selected_ids = _selected_render_ids(renders)
     requirements: set[str] = set()
     active_policy: set[str] = set()
     if any(current.frame.is_component_root and current.context.js_data for current in renders):

@@ -86,7 +86,7 @@ From the repository root:
 
 ```bash
 # 1. Install the baseline engines (not part of the default dev install)
-uv pip install django==6.0.6 django-components==0.152.0 jinja2==3.1.6
+uv pip install django==6.0.10 django-components==0.152.0 jinja2==3.1.6
 
 # 2. REQUIRED: build the Rust extension in release mode. The default debug
 #    build makes citry's Rust-backed paths many times slower and invalidates
