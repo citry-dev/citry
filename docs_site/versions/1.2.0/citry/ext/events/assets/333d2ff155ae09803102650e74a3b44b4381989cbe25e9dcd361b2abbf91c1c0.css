@@ -1,0 +1,8 @@
+
+.brand-select {
+  --cui-multi-select-radius: 1rem;
+  --cui-multi-select-selected-background: #53389e;
+  --cui-multi-select-selected-foreground: white;
+  --cui-multi-select-focus-color: #7f56d9;
+  inline-size: min(100%, 22rem);
+}
