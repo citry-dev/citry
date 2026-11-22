@@ -17,7 +17,7 @@ keywords = [
     "frontend",
     "ui",
 ]
-authors = [{ name = "Juro Oravec", email = "juraj.oravec.josefson@gmail.com" }]
+authors = [{ name = "Juro Oravec", email = "juro@citry.dev" }]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Python",

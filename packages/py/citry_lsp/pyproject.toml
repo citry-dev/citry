@@ -12,7 +12,7 @@ requires-python = ">=3.11, <4.0"
 description = "Language server for Citry component templates"
 readme = "README.md"
 keywords = ["citry", "language server", "lsp", "templates", "html"]
-authors = [{ name = "Juro Oravec", email = "juraj.oravec.josefson@gmail.com" }]
+authors = [{ name = "Juro Oravec", email = "juro@citry.dev" }]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Environment :: Plugins",

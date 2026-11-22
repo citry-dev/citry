@@ -30,7 +30,7 @@ keywords = [
     "server events",
     "typed",
 ]
-authors = [{ name = "Juro Oravec", email = "juraj.oravec.josefson@gmail.com" }]
+authors = [{ name = "Juro Oravec", email = "juro@citry.dev" }]
 # The license is only the SPDX expression in `license` below (PEP 639). A
 # `License ::` classifier beside it makes setuptools fail the build.
 # The `Framework :: Django :: X.Y` lines name the Django versions CI tests:
