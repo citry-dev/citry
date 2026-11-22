@@ -14,7 +14,7 @@ resolver = "2"
 [workspace.package]
 edition = "2024"
 rust-version = "1.97"
-authors = ["Juro Oravec <juraj.oravec.josefson@gmail.com>"]
+authors = ["Juro Oravec <juro@citry.dev>"]
 license = "MIT"
 homepage = "https://citry.dev"
 documentation = "https://citry.dev"
