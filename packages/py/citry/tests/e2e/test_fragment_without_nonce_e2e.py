@@ -143,7 +143,9 @@ def _open(page: Any, url: str, html: str, policy: str | None = None, *, other_is
     other = _other(url)
     other_requests: list[str] = []
     headers = {} if policy is None else {"Content-Security-Policy": policy}
-    page.route(url + "/", lambda route: route.fulfill(body=html, content_type="text/html", headers=headers))
+    page.route(
+        url + "/", lambda route: route.fulfill(body=html, content_type="text/html; charset=utf-8", headers=headers)
+    )
     # Anything with "evil" in its path, on either host, is the forged script.
     page.route(re.compile(r".*evil.*"), _evil)
     page.route(re.compile(r"^https://127\.0\.0\.1.*"), _evil)
@@ -184,7 +186,9 @@ def _start_genuine(page: Any) -> None:
 
 
 def _route_fragment(page: Any, url: str, fragment: str) -> None:
-    page.route(url + "/genuine-fragment", lambda route: route.fulfill(body=fragment, content_type="text/html"))
+    page.route(
+        url + "/genuine-fragment", lambda route: route.fulfill(body=fragment, content_type="text/html; charset=utf-8")
+    )
 
 
 def _wait_mounted_or_refused(page: Any) -> None:
@@ -737,7 +741,9 @@ def test_injected_base_does_not_move_a_script_url_dependency(
     page.route(
         url + "/",
         lambda route: route.fulfill(
-            body=html, content_type="text/html", headers={"Content-Security-Policy": NONCE_POLICY_WITHOUT_BASE_URI}
+            body=html,
+            content_type="text/html; charset=utf-8",
+            headers={"Content-Security-Policy": NONCE_POLICY_WITHOUT_BASE_URI},
         ),
     )
     page.goto(url + "/")
@@ -874,7 +880,9 @@ def _other_site_copies_citry(page: Any, url: str) -> list[str]:
 def _route_html(page: Any, url: str, html: str, policy: str) -> None:
     page.route(
         url + "/",
-        lambda route: route.fulfill(body=html, content_type="text/html", headers={"Content-Security-Policy": policy}),
+        lambda route: route.fulfill(
+            body=html, content_type="text/html; charset=utf-8", headers={"Content-Security-Policy": policy}
+        ),
     )
 
 
@@ -969,7 +977,9 @@ def _record_other(page: Any, url: str) -> list[str]:
 def _serve_page(page: Any, url: str, body: str, policy: str | None = None) -> None:
     headers = {} if policy is None else {"Content-Security-Policy": policy}
     html = f"<!doctype html><html><head></head><body>{body}</body></html>"
-    page.route(url + "/", lambda route: route.fulfill(body=html, content_type="text/html", headers=headers))
+    page.route(
+        url + "/", lambda route: route.fulfill(body=html, content_type="text/html; charset=utf-8", headers=headers)
+    )
 
 
 def test_base_before_start_up_moves_no_document_file(page: Any, serve_live: Any, wait_for_citry_ready: Any) -> None:

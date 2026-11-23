@@ -153,7 +153,9 @@ def _serve_with_policy(page: Any, serve_document: Any, html: str, policy: str) -
     url = serve_document(html)
     page.route(
         url,
-        lambda route: route.fulfill(body=html, content_type="text/html", headers={"Content-Security-Policy": policy}),
+        lambda route: route.fulfill(
+            body=html, content_type="text/html; charset=utf-8", headers={"Content-Security-Policy": policy}
+        ),
     )
     return url
 

@@ -271,7 +271,7 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(
         url,
         lambda route: route.fulfill(
             body=document,
-            content_type="text/html",
+            content_type="text/html; charset=utf-8",
             headers={
                 "Content-Security-Policy": (
                     "default-src 'self'; script-src 'nonce-base-token'; "

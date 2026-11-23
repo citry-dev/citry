@@ -29,7 +29,7 @@ def _serve_host_page(page: Any) -> None:
     # so the host element would never exist.
     page.route(
         "http://citry.test/",
-        lambda route: route.fulfill(body='<div id="host"></div>', content_type="text/html"),
+        lambda route: route.fulfill(body='<div id="host"></div>', content_type="text/html; charset=utf-8"),
     )
 
 
@@ -1568,7 +1568,7 @@ def test_external_prepared_asset_integrity_is_optional_and_identity_is_app_scope
             '<body><div id="a"></div><div id="b"></div><div id="c"></div>'
             '<div id="collision"></div><div id="nonce"></div><div id="d"></div>'
             '<div id="e"></div></body></html>',
-            content_type="text/html",
+            content_type="text/html; charset=utf-8",
         ),
     )
     page.route(
@@ -1863,7 +1863,7 @@ def test_terminal_app_releases_only_its_shared_stylesheet_reference(page: Any) -
         'data-citry-vue-style-app="second-app">.shared{color:green}</style>'
         '<div id="first"></div><div id="second"></div>'
     )
-    page.route("http://citry.test/", lambda route: route.fulfill(body=html, content_type="text/html"))
+    page.route("http://citry.test/", lambda route: route.fulfill(body=html, content_type="text/html; charset=utf-8"))
     page.goto("http://citry.test/")
     result = page.evaluate(
         """async ({vueSource, clientSource}) => {

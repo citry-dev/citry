@@ -242,7 +242,7 @@ def test_component_cache_replays_i18n_bindings_with_fresh_occurrences(page: Any)
     assert renders == 1
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.route("http://citry.test/", lambda route: route.fulfill(body=html, content_type="text/html"))
+    page.route("http://citry.test/", lambda route: route.fulfill(body=html, content_type="text/html; charset=utf-8"))
     page.goto("http://citry.test/", wait_until="commit")
     try:
         page.wait_for_function(
@@ -335,7 +335,7 @@ def test_fragment_cache_replays_i18n_bindings_allocated_outside_it(
 
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.route("http://citry.test/", lambda route: route.fulfill(body=html, content_type="text/html"))
+    page.route("http://citry.test/", lambda route: route.fulfill(body=html, content_type="text/html; charset=utf-8"))
     page.goto("http://citry.test/", wait_until="commit")
     texts = "[...document.querySelectorAll('.own-text, .cached-text, .panel-text')].map(x => x.textContent).join('|')"
     try:

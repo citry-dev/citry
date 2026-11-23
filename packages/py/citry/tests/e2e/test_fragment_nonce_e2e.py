@@ -96,7 +96,7 @@ def _open(page: Any, serve_live: Any, app: Citry, page_html: str, fragment_html:
     page.route(
         url + "/",
         lambda route: route.fulfill(
-            body=page_html, content_type="text/html", headers={"Content-Security-Policy": policy}
+            body=page_html, content_type="text/html; charset=utf-8", headers={"Content-Security-Policy": policy}
         ),
     )
     page.route(url + "/evil.js", lambda route: route.fulfill(body=EVIL_JS, content_type="text/javascript"))

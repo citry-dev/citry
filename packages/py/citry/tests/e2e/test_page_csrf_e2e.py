@@ -148,7 +148,9 @@ def test_plugin_host_gives_the_token_only_for_the_page_origin(page: Any) -> None
     # A probe browser plugin keeps the host object the core passes every
     # plugin, so the test can ask it for headers directly.
     root = Path(__file__).parents[2] / "citry" / "_vue"
-    page.route("http://citry.test/", lambda route: route.fulfill(body=_PROBE_PAGE, content_type="text/html"))
+    page.route(
+        "http://citry.test/", lambda route: route.fulfill(body=_PROBE_PAGE, content_type="text/html; charset=utf-8")
+    )
     page.goto("http://citry.test/")
     page.add_script_tag(content=(root / "runtime.js").read_text(encoding="utf-8"))
     result = page.evaluate(

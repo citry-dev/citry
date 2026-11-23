@@ -135,7 +135,9 @@ def _open_tab(context: Any, url: str, nonce: str) -> Any:
     tab.route(
         url + "/",
         lambda route: route.fulfill(
-            body=_page(nonce), content_type="text/html", headers={"Content-Security-Policy": _policy(nonce)}
+            body=_page(nonce),
+            content_type="text/html; charset=utf-8",
+            headers={"Content-Security-Policy": _policy(nonce)},
         ),
     )
     tab.goto(url + "/")
