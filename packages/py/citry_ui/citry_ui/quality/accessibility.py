@@ -133,12 +133,13 @@ def exclusion_manifest() -> list[dict[str, str]]:
 # properties, such as `ariaLabelledByElements`. Axe reads them in the page,
 # and Playwright reads them when a test finds an element by role and name,
 # so any test that runs axe and then calls `get_by_role(..., name=...)` on
-# the same element, or the other way round, loses the page. The script
+# the same element, or the other way round, crashes the page. This script
 # removes these properties from the page's copy of `Element.prototype` in
 # Firefox only. Axe then reads the `aria-labelledby` and other attributes
 # instead, which give the same answer because Citry UI never sets these
 # references from JavaScript. Playwright runs in its own copy of the DOM
-# classes, so its role queries still see the properties.
+# classes, so its role queries still see the properties. Remove the guard
+# once Playwright's Firefox build no longer crashes (see issue #843).
 FIREFOX_ARIA_REFERENCE_GUARD_SCRIPT = (
     "() => {"
     " if (!navigator.userAgent.includes('Firefox/')) return;"
@@ -174,8 +175,9 @@ def axe_rule_exclusions_script() -> str:
     ]
     return (
         "() => {"
-        # Every axe test in Citry UI runs this script before `axe.run`, so
-        # the Firefox guard rides along here instead of at each call site.
+        # Nearly every axe test in Citry UI runs this script before
+        # `axe.run`, so the Firefox guard runs here and the call sites need
+        # no change.
         f" ({FIREFOX_ARIA_REFERENCE_GUARD_SCRIPT})();"
         f" const rules = {json.dumps(rules)};"
         " for (const rule of rules) {"

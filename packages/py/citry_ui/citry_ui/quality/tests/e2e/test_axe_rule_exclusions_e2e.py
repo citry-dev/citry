@@ -200,7 +200,7 @@ def test_axe_and_playwright_role_queries_share_a_dialog_name_without_crashing_fi
     page.add_script_tag(path=str(axe_path))
     page.evaluate(axe_rule_exclusions_script())
 
-    # Before the guard in the script, Playwright's Firefox crashed the page
+    # Without the guard in the script, Playwright's Firefox crashes the page
     # here. In every browser, axe must still follow `aria-labelledby` and
     # report only the dialog whose reference points nowhere.
     unnamed = page.evaluate(

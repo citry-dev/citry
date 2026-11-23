@@ -66,14 +66,16 @@ def axe_high_impact_findings(page: Any) -> list[dict[str, object]]:
         raise RuntimeError("Run `pnpm install` before checking examples for accessibility problems.")
     if not page.evaluate("Boolean(window.axe)"):
         page.add_script_tag(path=str(AXE_PATH))
-    # Playwright's Firefox 159 build crashes the page when both axe and a
-    # later `get_by_label` or `get_by_role(..., name=...)` read an element's
-    # ARIA reference properties, such as `ariaLabelledByElements`. Removing
+    # Playwright's Firefox 159 build crashes the page when axe and
+    # Playwright's `get_by_label` or `get_by_role(..., name=...)` both read,
+    # in either order, an element's ARIA reference properties, such as
+    # `ariaLabelledByElements`. Removing
     # them from the page's `Element.prototype` makes axe read the
     # `aria-labelledby` attributes instead, while Playwright, which works in
-    # its own copy of the DOM classes, still sees them. The citry-ui axe
-    # helper (`FIREFOX_ARIA_REFERENCE_GUARD_SCRIPT` in
-    # `citry_ui/quality/accessibility.py`) explains the crash in full.
+    # its own copy of the DOM classes, still sees them. The same script is
+    # `FIREFOX_ARIA_REFERENCE_GUARD_SCRIPT` in
+    # `citry_ui/quality/accessibility.py`; keep the two in step, and remove
+    # both once Playwright's Firefox build no longer crashes (see #843).
     page.evaluate(
         """() => {
           if (!navigator.userAgent.includes("Firefox/")) return;
