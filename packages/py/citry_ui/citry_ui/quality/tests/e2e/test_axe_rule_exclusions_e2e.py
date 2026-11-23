@@ -174,3 +174,42 @@ def test_the_script_refuses_a_rule_that_does_not_check_every_element(
 
     with pytest.raises(PlaywrightError, match="does not check every element"):
         page.evaluate(axe_rule_exclusions_script())
+
+
+def test_axe_and_playwright_role_queries_share_a_dialog_name_without_crashing_firefox(page: Any) -> None:
+    axe_path = _repository_root() / "node_modules" / "axe-core" / "axe.min.js"
+    assert axe_path.is_file(), "run `pnpm install` before Citry UI axe tests"
+    # One dialog is named by the element its `aria-labelledby` points at, and
+    # the other points at an id that does not exist, so it has no name.
+    page.set_content(
+        """
+        <!doctype html>
+        <html lang="en">
+          <body>
+            <main>
+              <div id="named" role="dialog" aria-labelledby="named-title"><h2 id="named-title">Archive</h2></div>
+              <div id="unnamed" role="dialog" aria-labelledby="missing-title"><p>No title</p></div>
+            </main>
+          </body>
+        </html>
+        """
+    )
+    # Playwright reads the dialog's name before axe runs, as a test does when
+    # it opens a dialog by its role and name.
+    page.get_by_role("dialog", name="Archive").wait_for()
+    page.add_script_tag(path=str(axe_path))
+    page.evaluate(axe_rule_exclusions_script())
+
+    # Without the guard in the script, Playwright's Firefox crashes the page
+    # here. In every browser, axe must still follow `aria-labelledby` and
+    # report only the dialog whose reference points nowhere.
+    unnamed = page.evaluate(
+        """async () => {
+          const results = await axe.run(document, {runOnly: ['aria-dialog-name']});
+          return results.violations.flatMap((finding) => finding.nodes.map((node) => node.target.join(' ')));
+        }"""
+    )
+    assert unnamed == ["#unnamed"]
+
+    # The page is still alive, and Playwright still finds the dialog by name.
+    assert page.get_by_role("dialog", name="Archive").get_attribute("id") == "named"

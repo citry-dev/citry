@@ -128,6 +128,28 @@ def exclusion_manifest() -> list[dict[str, str]]:
     return [asdict(exclusion) for exclusion in AXE_RULE_EXCLUSIONS]
 
 
+# Playwright's Firefox 159 build (Playwright 1.65) crashes the page when the
+# page's own scripts and Playwright both read an element's ARIA reference
+# properties, such as `ariaLabelledByElements`. Axe reads them in the page,
+# and Playwright reads them when a test finds an element by role and name,
+# so any test that runs axe and then calls `get_by_role(..., name=...)` on
+# the same element, or the other way round, crashes the page. This script
+# removes these properties from the page's copy of `Element.prototype` in
+# Firefox only. Axe then reads the `aria-labelledby` and other attributes
+# instead, which give the same answer because Citry UI never sets these
+# references from JavaScript. Playwright runs in its own copy of the DOM
+# classes, so its role queries still see the properties. Remove the guard
+# once Playwright's Firefox build no longer crashes (see issue #843).
+FIREFOX_ARIA_REFERENCE_GUARD_SCRIPT = (
+    "() => {"
+    " if (!navigator.userAgent.includes('Firefox/')) return;"
+    " for (const name of Object.getOwnPropertyNames(Element.prototype)) {"
+    "  if (/^aria[A-Z]\\w*Elements?$/.test(name)) delete Element.prototype[name];"
+    " }"
+    " }"
+)
+
+
 def axe_rule_exclusions_script() -> str:
     """
     Return JavaScript that makes the axe already loaded on a page skip the excluded elements.
@@ -139,6 +161,10 @@ def axe_rule_exclusions_script() -> str:
     does nothing for a rule it has already narrowed on this page. It reads
     each rule's selector from ``axe._audit``, a private object, because
     axe's public ``getRules()`` does not return selectors.
+
+    In Firefox the script first runs ``FIREFOX_ARIA_REFERENCE_GUARD_SCRIPT``,
+    which keeps axe from reading the ARIA reference properties that crash
+    Playwright's Firefox build.
     """
     selectors: dict[str, list[str]] = {}
     for exclusion in AXE_RULE_EXCLUSIONS:
@@ -149,6 +175,10 @@ def axe_rule_exclusions_script() -> str:
     ]
     return (
         "() => {"
+        # Nearly every axe test in Citry UI runs this script before
+        # `axe.run`, so the Firefox guard runs here and the call sites need
+        # no change.
+        f" ({FIREFOX_ARIA_REFERENCE_GUARD_SCRIPT})();"
         f" const rules = {json.dumps(rules)};"
         " for (const rule of rules) {"
         "  const current = axe._audit.rules.find((candidate) => candidate.id === rule.id);"
