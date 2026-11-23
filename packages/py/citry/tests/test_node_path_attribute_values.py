@@ -109,9 +109,10 @@ def _render(route, template, data, *, setup=None, messages=None, citry_kwargs=No
         def template_data(self, kwargs, slots):
             if route == "worker-thread":
                 # The slot renders in an empty context, as on a thread that did
-                # not copy the render's context variables. An executor's worker
-                # copies them on free-threaded Python 3.14, which would take
-                # the ordinary path instead of the node path.
+                # not copy the render's context variables. On free-threaded
+                # Python 3.14 (`sys.flags.thread_inherit_context`) the
+                # executor's worker copies them, and the slot would then
+                # render on the ordinary path, not the node path.
                 with concurrent.futures.ThreadPoolExecutor(1) as pool:
                     printed = pool.submit(contextvars.Context().run, str, slots["default"]).result()
                 return {"printed": Markup(printed)}  # noqa: S704 - Citry rendered and escaped it

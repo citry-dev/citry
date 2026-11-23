@@ -14,6 +14,7 @@ read the clock. Outside its validations, ``pydantic.v1`` runs its own
 functions.
 """
 
+import contextvars
 import functools
 import json
 import logging
@@ -1162,7 +1163,10 @@ def test_a_v1_check_that_a_validator_calls_gets_the_same_answer_while_another_th
         got.append(validate_args(HiddenV1, payload).fields)
 
     with bounded.validation_scope({}):
-        worker = threading.Thread(target=other_thread)
+        # The other thread runs in an empty context, so it opens its own
+        # validation scope. On free-threaded Python 3.14 a new thread copies
+        # this one's context and would check inside this scope instead.
+        worker = threading.Thread(target=contextvars.Context().run, args=(other_thread,))
         worker.start()
         worker.join()
 

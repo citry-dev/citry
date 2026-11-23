@@ -476,8 +476,9 @@ def _render_on_node_route(route: str, body: str, data: dict[str, Any], fill: str
         def template_data(self, kwargs, slots):
             if route.endswith("worker-thread"):
                 # The slot renders in an empty context, without the page render's
-                # context variables. An executor's worker copies them on
-                # free-threaded Python 3.14, which would take the ordinary path.
+                # context variables. On free-threaded Python 3.14 the
+                # executor's worker copies them, and the slot would then
+                # render as part of the page render, not on the node path.
                 with concurrent.futures.ThreadPoolExecutor(1) as pool:
                     printed = pool.submit(contextvars.Context().run, str, slots["default"]).result()
                 return {"printed": Markup(printed)}  # noqa: S704 - the slot's own rendered HTML

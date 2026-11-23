@@ -843,8 +843,10 @@ def test_a_check_that_raises_lets_go_of_the_request_data_without_the_cycle_colle
     # With the GIL off, an object the check thread made (the error, its
     # traceback and the check's frame, which holds the data) is freed only
     # once that thread runs Python code again after the caller lets go of
-    # it. An idle check thread does so when its wait times out, so a short
-    # wait lets the thread wake while it still holds its last job.
+    # it. An idle check thread runs Python code only when its wait times
+    # out, so a short wait frees them during the test. The thread stays
+    # alive and keeps its last job, so the test still fails if the job
+    # keeps the data.
     monkeypatch.setattr(bounded, "_CHECK_THREAD_IDLE_SECONDS", 0.01)
     payload = Payload()
     gone = ref(payload)
