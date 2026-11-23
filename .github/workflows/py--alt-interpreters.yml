@@ -31,6 +31,12 @@ jobs:
       fail-fast: false
       matrix:
         python: ["pypy3.11", "3.14t"]
+        # How many pytest runs the suite is split into (see "Run Python tests").
+        include:
+          - python: "pypy3.11"
+            batches: 8
+          - python: "3.14t"
+            batches: 1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -74,17 +80,69 @@ jobs:
           import citry; print('GIL enabled after import citry:', getattr(sys, '_is_gil_enabled', lambda: True)())"
 
       # pytest's settings in pyproject.toml already print the failure summary
-      # and the stack of any test still running after 5 minutes. Keep comments
-      # out of the folded command below: YAML joins its lines into one shell
-      # line, so a `#` line there turns every option after it into a comment.
+      # and the stack of any test still running after 5 minutes.
+      #
+      # On PyPy a pytest-xdist worker process rarely gives memory back to
+      # the system, so each worker keeps growing as it runs more test files.
+      # Much of that memory is outside PyPy's garbage collector: C memory
+      # behind PyPy's support for C extensions such as citry_core and
+      # pydantic-core, and, most likely, glibc's malloc, which keeps a
+      # separate pool for each thread (Citry's Events checks run on their
+      # own threads). Four workers that live for the whole suite filled the
+      # runner's 16 GB before the end, the runner stopped answering, and
+      # GitHub cancelled the job without a test report. So the PyPy job runs
+      # the test files in batches, each with its own pytest and new workers,
+      # which frees that memory between batches. In a test run capped at
+      # 13 GB, one pytest over the whole suite reached the cap 25 to 38
+      # percent of the way through. A batch holds an eighth of the files,
+      # and the largest batch held under a fifth of the tests when this was
+      # measured.
       - name: Run Python tests
-        run: >-
-          uv run --no-sync pytest
-          -m "not e2e and not qualification"
-          --ignore packages/py/citry/tests/test_server_reload.py
-          -n 4
-          --dist loadfile
-          --durations 30
+        env:
+          BATCHES: ${{ matrix.batches }}
+        run: |
+          # A missing or zero batch count would skip every test and pass.
+          if ! [[ $BATCHES =~ ^[1-9][0-9]*$ ]]; then
+            echo "The batch count must be a positive whole number, not '$BATCHES'"
+            exit 1
+          fi
+          options=(-m "not e2e and not qualification" --ignore packages/py/citry/tests/test_server_reload.py)
+          if [ "$BATCHES" -eq 1 ]; then
+            exec uv run --no-sync pytest "${options[@]}" -n 4 --dist loadfile --durations 30
+          fi
+          # pytest lists the tests it would run, so the conftest files and
+          # the `-m` marker filter still decide what runs. pytest collects a
+          # file named on the command line even when a conftest's
+          # `collect_ignore_glob` leaves it out, so the batches may only name
+          # files from this list.
+          listing=$(uv run --no-sync pytest "${options[@]}" -p no:xdist --collect-only -q) || {
+            echo "$listing" | tail -n 60
+            exit 1
+          }
+          # Only lines that start with a test id name a file; a warning in the
+          # summary can also contain `::`.
+          mapfile -t files < <(grep -E '^[^ ]+::' <<<"$listing" | sed 's/::.*//' | sort -u)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "pytest listed no test files"
+            exit 1
+          fi
+          echo "${#files[@]} test files in $BATCHES batches"
+          # Every batch runs even after one fails, so a failure does not
+          # hide the results of the files after it.
+          status=0
+          for ((batch = 0; batch < BATCHES; batch++)); do
+            # Neighbouring files often test the same area and use similar
+            # amounts of memory, so taking every BATCHES-th file spreads
+            # them across the batches.
+            mine=()
+            for i in "${!files[@]}"; do
+              if ((i % BATCHES == batch)); then mine+=("${files[i]}"); fi
+            done
+            if [ "${#mine[@]}" -eq 0 ]; then continue; fi
+            echo "Batch $((batch + 1)) of $BATCHES: ${#mine[@]} files"
+            uv run --no-sync pytest -m "not e2e and not qualification" -n 4 --dist loadfile --durations 30 "${mine[@]}" || status=1
+          done
+          exit "$status"
 
       # A free-threaded build keeps the GIL on once citry_core loads, so this
       # step turns it off to run the render, serialize, Events and thread tests
