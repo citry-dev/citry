@@ -14,8 +14,8 @@ that both write the same attribute:
 - an extension that claims part of the template as another template language
   (a foreign span), as an extension that embeds Django template syntax does;
 - `str(slot)` on a fill slot that a component kept after its render;
-- a fill slot rendered in a worker thread, which does not carry the render's
-  context variables;
+- a fill slot rendered in a worker thread without the render's context
+  variables;
 - a kept slot whose classes already rendered once, when the element sits inside
   a nested template that a component receives as an input.
 """
@@ -23,6 +23,7 @@ that both write the same attribute:
 from __future__ import annotations
 
 import concurrent.futures
+import contextvars
 from html.parser import HTMLParser
 
 import pytest
@@ -107,9 +108,12 @@ def _render(route, template, data, *, setup=None, messages=None, citry_kwargs=No
 
         def template_data(self, kwargs, slots):
             if route == "worker-thread":
-                # A plain executor does not copy context variables into the worker.
+                # The slot renders in an empty context, as on a thread that did
+                # not copy the render's context variables. An executor's worker
+                # copies them on free-threaded Python 3.14, which would take
+                # the ordinary path instead of the node path.
                 with concurrent.futures.ThreadPoolExecutor(1) as pool:
-                    printed = pool.submit(str, slots["default"]).result()
+                    printed = pool.submit(contextvars.Context().run, str, slots["default"]).result()
                 return {"printed": Markup(printed)}  # noqa: S704 - Citry rendered and escaped it
             kept.append(slots["default"])
             return {"printed": ""}

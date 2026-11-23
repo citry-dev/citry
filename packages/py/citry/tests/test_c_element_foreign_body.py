@@ -14,6 +14,7 @@ Vue writer (a component with `js`).
 from __future__ import annotations
 
 import concurrent.futures
+import contextvars
 import functools
 import itertools
 import re
@@ -474,9 +475,11 @@ def _render_on_node_route(route: str, body: str, data: dict[str, Any], fill: str
 
         def template_data(self, kwargs, slots):
             if route.endswith("worker-thread"):
-                # The worker does not inherit the page render's context.
+                # The slot renders in an empty context, without the page render's
+                # context variables. An executor's worker copies them on
+                # free-threaded Python 3.14, which would take the ordinary path.
                 with concurrent.futures.ThreadPoolExecutor(1) as pool:
-                    printed = pool.submit(str, slots["default"]).result()
+                    printed = pool.submit(contextvars.Context().run, str, slots["default"]).result()
                 return {"printed": Markup(printed)}  # noqa: S704 - the slot's own rendered HTML
             kept.append(slots["default"])
             return {"printed": ""}
