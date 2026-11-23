@@ -455,13 +455,17 @@ def test_failed_other_origin_file_listed_by_two_components_is_requested_once(
     page.wait_for_timeout(200)
 
     # The app started without the file, and the browser asked for it once and the page warned once.
+    # At startup only microtasks run between the runtime's preload hint and its script tag, so the
+    # hint is still loading when the tag reuses it, even in Firefox and WebKit. Awaiting network work
+    # in between would let those browsers ask a second time (see the server-render test below).
     assert len(skips) == 1
     assert len(requests) == 1
     assert _error_messages(page) == []
 
 
-# Records the URL of every script tag and preload hint added to the page. The runtime removes a
-# script tag once it has loaded or failed, so the page cannot be read for them afterwards.
+# Records the URL of every script tag and `<link rel="preload">` hint the page adds. The runtime
+# removes a script tag once it has loaded or failed, so the test cannot find the tags by reading
+# the page afterwards.
 _RECORD_SCRIPT_FETCHES = """
 (() => {
   window.__scriptTags = [];
@@ -598,7 +602,9 @@ def test_failed_other_origin_file_listed_twice_in_a_server_render_is_requested_o
     assert page.evaluate("url => window.__preloads.filter(href => href === url)", url) == [url]
     # Chromium hands the hint's result to the script tag, failed or not. Firefox and WebKit reuse a
     # hint only while it is still loading, so when the hint has already failed they ask again for the
-    # tag. Either way the browser asks at most once for the hint and once for the tag.
+    # tag. In a server render the runtime loads the definition files before it adds the tag, so the
+    # hint has usually failed by then. Either way the browser asks at most once for the hint and once
+    # for the tag.
     if browser_name == "chromium":
         assert len(requests) == 1
     else:

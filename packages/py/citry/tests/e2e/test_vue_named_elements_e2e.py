@@ -226,7 +226,10 @@ def _check_page_works(
         page.mouse.click(box["x"], box["y"])
         page.wait_for_function(f"() => {_FIND}('#probe-n')?.textContent === '1'", timeout=5000)
     except Exception as error:  # noqa: BLE001 - report the page's errors with the timeout
-        pytest.fail(f"the runtime did not start or the Events call did not finish: {error}; page errors: {errors}")
+        pytest.fail(
+            "the runtime did not start, the test could not click the button, or the Events call did not "
+            f"finish: {error}; page errors: {errors}"
+        )
     assert errors == []
     # Citry's own globals are own properties of `window` holding Citry's objects.
     assert page.evaluate(
