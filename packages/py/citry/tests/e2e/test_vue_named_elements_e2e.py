@@ -210,7 +210,20 @@ def _check_page_works(
     page.goto(base + "/")
     try:
         wait_for_citry_ready()
-        page.click("#probe-btn")
+        # In WebKit, Playwright's own click code runs in the page and calls `document` members that
+        # this page hides, such as `querySelectorAll` and `dispatchEvent`. So the test reads the
+        # button's position through the prototype and sends a plain mouse click there, which goes
+        # through no page script and still reaches the button as a real click.
+        box = page.evaluate(
+            f"""() => {{
+              const button = {_FIND}('#probe-btn');
+              // The named elements come first and can push the button below the window.
+              Element.prototype.scrollIntoView.call(button, {{block: 'center'}});
+              const rect = Element.prototype.getBoundingClientRect.call(button);
+              return {{x: rect.x + rect.width / 2, y: rect.y + rect.height / 2}};
+            }}"""
+        )
+        page.mouse.click(box["x"], box["y"])
         page.wait_for_function(f"() => {_FIND}('#probe-n')?.textContent === '1'", timeout=5000)
     except Exception as error:  # noqa: BLE001 - report the page's errors with the timeout
         pytest.fail(f"the runtime did not start or the Events call did not finish: {error}; page errors: {errors}")

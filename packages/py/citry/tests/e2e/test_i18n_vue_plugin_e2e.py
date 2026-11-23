@@ -46,7 +46,7 @@ def test_two_serialized_i18n_apps_keep_independent_locales(page: Any, wait_for_c
     body = EnglishPage().render().serialize() + CzechPage().render().serialize()
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.route("http://citry.test/", lambda route: route.fulfill(body=body, content_type="text/html"))
+    page.route("http://citry.test/", lambda route: route.fulfill(body=body, content_type="text/html; charset=utf-8"))
     page.goto("http://citry.test/", wait_until="commit")
     # Vue writes the locale text while each app mounts, so wait for both
     # mounts instead of guessing how long they take.
@@ -105,7 +105,7 @@ def test_simple_spread_preserves_plain_output_between_caller_i18n_bindings(
     page.route(
         "http://citry.test/",
         lambda route: route.fulfill(
-            body=Page(attrs={"title": "ordinary"}).render().serialize(), content_type="text/html"
+            body=Page(attrs={"title": "ordinary"}).render().serialize(), content_type="text/html; charset=utf-8"
         ),
     )
     page.goto("http://citry.test/", wait_until="commit")
@@ -276,7 +276,7 @@ def test_i18n_plugin_mounts_through_start_prepared(page: Any, wait_for_citry_rea
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
     html = Page().render().serialize()
-    page.route("http://citry.test/", lambda route: route.fulfill(body=html, content_type="text/html"))
+    page.route("http://citry.test/", lambda route: route.fulfill(body=html, content_type="text/html; charset=utf-8"))
     page.goto("http://citry.test/", wait_until="commit")
     # The locale text is written by Vue, so read it only after the mount.
     wait_for_citry_ready()
@@ -335,7 +335,7 @@ def test_declarative_binding_keeps_last_valid_values_and_recovers(page: Any, wai
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
     html = Page().render().serialize()
-    page.route("http://citry.test/", lambda route: route.fulfill(body=html, content_type="text/html"))
+    page.route("http://citry.test/", lambda route: route.fulfill(body=html, content_type="text/html; charset=utf-8"))
     page.goto("http://citry.test/", wait_until="commit")
     # The server wrote "Server" into the greeting; the bound "Ada" appears
     # only once the app has mounted.
@@ -1187,7 +1187,7 @@ def test_null_values_keep_the_server_text_through_runtime_transitions(
     page.on("pageerror", lambda error: faults.append(str(error)))
     page.on("console", lambda message: faults.append(message.text) if message.type == "error" else None)
     html = Page().render().serialize()
-    page.route("http://citry.test/", lambda route: route.fulfill(body=html, content_type="text/html"))
+    page.route("http://citry.test/", lambda route: route.fulfill(body=html, content_type="text/html; charset=utf-8"))
     page.goto("http://citry.test/", wait_until="commit")
     # The server text, with the isolation marks Fluent puts around a
     # variable, is what `null` must keep.
@@ -1253,7 +1253,7 @@ def test_only_null_is_a_deliberate_way_to_keep_the_server_text(
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
     html = Page().render().serialize()
-    page.route("http://citry.test/", lambda route: route.fulfill(body=html, content_type="text/html"))
+    page.route("http://citry.test/", lambda route: route.fulfill(body=html, content_type="text/html; charset=utf-8"))
     page.goto("http://citry.test/", wait_until="commit")
     wait_for_citry_ready()
 

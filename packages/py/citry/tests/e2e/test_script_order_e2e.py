@@ -460,11 +460,28 @@ def test_failed_other_origin_file_listed_by_two_components_is_requested_once(
     assert _error_messages(page) == []
 
 
+# Records the URL of every script tag and preload hint added to the page. The runtime removes a
+# script tag once it has loaded or failed, so the page cannot be read for them afterwards.
+_RECORD_SCRIPT_FETCHES = """
+(() => {
+  window.__scriptTags = [];
+  window.__preloads = [];
+  new MutationObserver(records => {
+    for (const record of records) for (const node of record.addedNodes) {
+      if (node.localName === 'script' && node.src) window.__scriptTags.push(node.src);
+      if (node.localName === 'link' && node.rel === 'preload') window.__preloads.push(node.href);
+    }
+  }).observe(document, {childList: true, subtree: true});
+})();
+"""
+
+
 def test_failed_other_origin_file_listed_twice_in_a_server_render_is_requested_once(
-    page: Any, open_page: Any, wait_for_citry_ready: Any, wait_for_count: Any, send_event: Any
+    page: Any, open_page: Any, wait_for_citry_ready: Any, wait_for_count: Any, send_event: Any, browser_name: str
 ) -> None:
     engine = _engine(mounted=True)
     url = "http://third-party.test/analytics.js"
+    page.add_init_script(_RECORD_SCRIPT_FETCHES)
     skips: list[str] = []
     page.on(
         "console",
@@ -567,8 +584,8 @@ def test_failed_other_origin_file_listed_twice_in_a_server_render_is_requested_o
     send_event(lambda: page.locator("#show").click())
     assert listed == [2]
 
-    # The server render went on without the file: both components are on the page. The browser
-    # asked for the file once and the page warned once.
+    # The server render went on without the file: both components are on the page. The runtime
+    # added one script tag for the file and the page warned once.
     assert page.locator("b").count() == 1
     assert page.locator("i").count() == 1
     wait_for_count(skips, 1)
@@ -576,7 +593,16 @@ def test_failed_other_origin_file_listed_twice_in_a_server_render_is_requested_o
     # that no late second request or warning follows.
     page.wait_for_timeout(200)
     assert len(skips) == 1
-    assert len(requests) == 1
+    assert page.evaluate("url => window.__scriptTags.filter(src => src === url)", url) == [url]
+    # Before the tag, the runtime adds one preload hint so the file downloads while earlier files load.
+    assert page.evaluate("url => window.__preloads.filter(href => href === url)", url) == [url]
+    # Chromium hands the hint's result to the script tag, failed or not. Firefox and WebKit reuse a
+    # hint only while it is still loading, so when the hint has already failed they ask again for the
+    # tag. Either way the browser asks at most once for the hint and once for the tag.
+    if browser_name == "chromium":
+        assert len(requests) == 1
+    else:
+        assert 1 <= len(requests) <= 2
     # The two component scripts ran, so the page works without the file.
     assert page.evaluate("() => [window.__pageRan, window.__alphaRan, window.__betaRan]") == [True, True, True]
     assert _error_messages(page) == []

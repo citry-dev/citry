@@ -133,7 +133,10 @@ def test_link_attribute_text_reads_as_the_reader_reads_the_decoded_text(page: An
 def test_a_link_with_a_non_ascii_javascript_letter_runs_nothing(page: Any, href: str) -> None:
     # The browser reads the link as a relative URL and loads it from the
     # base, which this route answers, so a click shows where it went.
-    page.route(f"{_BASE}**", lambda route: route.fulfill(content_type="text/html", body="<title>landed</title>"))
+    page.route(
+        f"{_BASE}**",
+        lambda route: route.fulfill(content_type="text/html; charset=utf-8", body="<title>landed</title>"),
+    )
     page.set_content(_PAGE)
     page.evaluate(
         "(href) => { const a = document.createElement('a'); a.href = href; a.id = 'go';"

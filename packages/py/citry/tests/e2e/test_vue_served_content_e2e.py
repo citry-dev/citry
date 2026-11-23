@@ -165,7 +165,7 @@ def test_app_starts_after_the_browser_has_parsed_the_served_page(
         page.route(
             url,
             lambda route: route.fulfill(
-                body=html, content_type="text/html", headers={"Content-Security-Policy": policy}
+                body=html, content_type="text/html; charset=utf-8", headers={"Content-Security-Policy": policy}
             ),
         )
 
@@ -319,7 +319,7 @@ def test_csp_page_serves_its_content_and_works_under_a_nonce_policy(page: Any, s
         url,
         lambda route: route.fulfill(
             body=watched,
-            content_type="text/html",
+            content_type="text/html; charset=utf-8",
             headers={"Content-Security-Policy": policy},
         ),
     )
@@ -362,7 +362,9 @@ $component({data(){return {shown: false};}});
     policy = f"default-src 'self'; script-src 'nonce-{nonce}'; style-src 'self' 'nonce-{nonce}'"
     page.route(
         url,
-        lambda route: route.fulfill(body=html, content_type="text/html", headers={"Content-Security-Policy": policy}),
+        lambda route: route.fulfill(
+            body=html, content_type="text/html; charset=utf-8", headers={"Content-Security-Policy": policy}
+        ),
     )
     faults, console = _open(page, url)
     # A policy without 'unsafe-inline' blocks the style attribute the browser
@@ -546,7 +548,9 @@ $component({data(){return {shown: false};}});
     policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self'"
     page.route(
         url,
-        lambda route: route.fulfill(body=html, content_type="text/html", headers={"Content-Security-Policy": policy}),
+        lambda route: route.fulfill(
+            body=html, content_type="text/html; charset=utf-8", headers={"Content-Security-Policy": policy}
+        ),
     )
     faults, console = _open(page, url)
     # The browser blocks the style attribute it parsed from the shell's
