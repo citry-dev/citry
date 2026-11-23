@@ -9,6 +9,7 @@ An engine given a cache backend is covered by ``test_vue_asset_sharing.py``.
 
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import json
 import re
@@ -145,7 +146,10 @@ def test_a_render_in_progress_keeps_its_files_while_another_render_publishes() -
 
     with vue_events._hold_render_assets():
         producer._publish_bundle(_digest(held), held)
-        worker = threading.Thread(target=other_render)
+        # The other render runs in an empty context, as a separate render
+        # does. On free-threaded Python 3.14 a new thread copies this one's
+        # context, and its hold would join this render's hold.
+        worker = threading.Thread(target=contextvars.Context().run, args=(other_render,))
         worker.start()
         worker.join()
         assert done.is_set()

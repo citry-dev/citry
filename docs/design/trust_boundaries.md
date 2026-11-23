@@ -99,15 +99,17 @@ says which paths it covers. These are the paths:
   - A fill slot renders outside a component render: `str(slot)` (or
     `Markup(slot)`) on a slot kept after the render
     (`citry/slots.py:337-352`), or a slot rendered in a worker thread that
-    does not copy context variables, such as a plain `ThreadPoolExecutor`
-    or `threading.Thread`. Then a component class that has not rendered
-    yet compiles on the node path, and a nested template always does, even
-    when its class has rendered (`citry/nodes/__init__.py:1104-1121`), so
-    an attribute on an element inside markup passed as a component input
-    uses the node path every time. After `Component.reset_template()` or a
-    code reload, a class compiles again as if it had not rendered.
-    `asyncio.to_thread` copies context variables, so a slot rendered there
-    uses capture.
+    does not copy context variables. Then a component class that has not
+    rendered yet compiles on the node path, and a nested template always
+    does, even when its class has rendered
+    (`citry/nodes/__init__.py:1104-1121`), so an attribute on an element
+    inside markup passed as a component input uses the node path every
+    time. After `Component.reset_template()` or a code reload, a class
+    compiles again as if it had not rendered. A slot rendered in a thread
+    that copies context variables uses capture: `asyncio.to_thread` always
+    copies them, and a plain `ThreadPoolExecutor` or `threading.Thread`
+    copies them when `sys.flags.thread_inherit_context` is set, which
+    free-threaded Python 3.14 does by default and other builds do not.
 
   On the node path, `ElementAttrsNode._format` writes every attribute
   value, and `ElementKeyNode` writes the `#c-key` attribute

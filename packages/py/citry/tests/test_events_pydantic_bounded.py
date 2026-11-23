@@ -840,6 +840,14 @@ def test_a_check_that_raises_lets_go_of_the_request_data_without_the_cycle_colle
         raise Refused
 
     monkeypatch.setattr(bounded, "_CHECK_THREADS", bounded._CheckThreads())
+    # With the GIL off, an object the check thread made (the error, its
+    # traceback and the check's frame, which holds the data) is freed only
+    # once that thread runs Python code again after the caller lets go of
+    # it. An idle check thread runs Python code only when its wait times
+    # out, so a short wait frees them during the test. The thread stays
+    # alive and keeps its last job, so the test still fails if the job
+    # keeps the data.
+    monkeypatch.setattr(bounded, "_CHECK_THREAD_IDLE_SECONDS", 0.01)
     payload = Payload()
     gone = ref(payload)
     gc.disable()
@@ -848,6 +856,9 @@ def test_a_check_that_raises_lets_go_of_the_request_data_without_the_cycle_colle
             bounded.run_on_check_thread(check, payload)
         del payload
         # Without the cycle collector, only plain reference counting frees it.
+        deadline = time.monotonic() + 5
+        while gone() is not None and time.monotonic() < deadline:
+            time.sleep(0.01)
         assert gone() is None
     finally:
         gc.enable()
