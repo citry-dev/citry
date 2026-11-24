@@ -553,29 +553,39 @@ def _detached_render_message(plan: _CallPlan) -> str:
 
 def _apply_guard_result(source: str, guard: Any, result: Any) -> None:
     """
-    Refuse the call when a guard's result says to, and warn about a result Citry ignores.
+    Refuse the call when a guard's result says no, and warn about a result Citry ignores.
 
-    A guard refuses by raising ``EventError``. Returning ``False`` refuses
-    too, because an author who writes ``return user.is_staff`` means a
-    refusal, and letting that call through fails open. Returning an
-    ``EventError`` instance refuses with that error, as if the guard had
-    raised it, because building the error is just as clear a refusal.
-    ``None`` and ``True`` let the call go ahead. Any other value lets the
-    call go ahead with a warning, so a guard that returns something by
+    A guard refuses by raising ``EventError``, and also by returning
+    anything that means "no", because an author who writes
+    ``return user.is_staff`` or ``return Document.objects.filter(...)``
+    means a refusal when the value is false, and letting that call
+    through fails open:
+
+    - A returned ``EventError`` refuses with that error, as if the guard
+      had raised it.
+    - Any other returned exception (``PermissionDenied()``, say), or an
+      exception class, refuses with a 403 and the standard message. Its
+      text never reaches the browser, since it was not written for it.
+    - Any other false value (``False``, ``0``, an empty list or QuerySet)
+      refuses with a 403.
+
+    ``None`` and ``True`` let the call go ahead. Any other true value lets
+    the call go ahead with a warning, so a guard that returns something by
     mistake shows up in the server log.
 
     Args:
         source: The guard's place, such as "The guard of event 'save' on
             Editor", as the messages show it.
-        guard: The guard function, named in the warning.
+        guard: The guard function, named in the messages.
         result: What the guard returned.
 
     Raises:
         TypeError: When the result is a coroutine, another awaitable, a
             generator, or an async generator, so the guard's check did not
-            run; the dispatcher answers ``handler_error``.
-        EventError: With status 403 when the result is ``False``, or the
-            returned error itself when the result is an ``EventError``.
+            run, or when testing the result for true or false raises; the
+            dispatcher answers ``handler_error`` (500) to both.
+        EventError: The returned error itself when the result is an
+            ``EventError``, or a 403 for any other refusal above.
 
     """
     # Unrun code first: its body never ran, so whatever it would have
@@ -585,19 +595,44 @@ def _apply_guard_result(source: str, guard: Any, result: Any) -> None:
     # guard written as `return user.is_staff`, so neither needs a warning.
     if result is None or result is True:
         return
-    # Only the bool False refuses. Other false values (0, "", an empty
-    # list) are not a clear refusal, so they take the warning below.
-    if result is False:
-        raise EventError(_MSG_GUARD_REFUSED, status=403)
     # A returned EventError is a refusal the author wrote out in full, with
     # its own status and message, so it answers exactly as raising it would.
     # Clearing the traceback first stops an error kept in a module constant
     # and returned on every call from collecting one traceback per call.
     if isinstance(result, EventError):
         raise result.with_traceback(None)
+    # Any other exception, or an exception class, is a refusal too (a
+    # Django `return PermissionDenied()`, say). Its text was not written for
+    # the browser, so the answer is the standard 403. The exception is not
+    # raised, so it gains no traceback here; one it already carries (from a
+    # guard that caught it and returned it) is cleared so a shared object
+    # does not keep that call's frames alive.
+    if isinstance(result, BaseException):
+        result.__traceback__ = None
+        raise EventError(_MSG_GUARD_REFUSED, status=403)
+    if isinstance(result, type) and issubclass(result, BaseException):
+        raise EventError(_MSG_GUARD_REFUSED, status=403)
+    guard_name = getattr(guard, "__qualname__", None) or type(guard).__name__
+    # Testing the value runs app code (`__bool__` or `__len__`; a lazy
+    # QuerySet queries the database here). When that raises, the guard
+    # never gave an answer: the call is refused as a 500, the same answer a
+    # guard that raises an unexpected error gets, so a broken check shows
+    # up as an error in the log rather than as a user who is not allowed.
+    try:
+        allowed = bool(result)
+    except Exception as error:
+        msg = (
+            f"{source}: guard {guard_name!r} returned a value of type {type(result).__name__!r}, and testing it"
+            f" for true or false raised {type(error).__name__}, so the call is refused. Return True, False or"
+            " None from a guard."
+        )
+        raise TypeError(msg) from error
+    # Every false value refuses, not only the bool False: an empty QuerySet,
+    # 0 or numpy.False_ from `return <check>` means "no" just the same.
+    if not allowed:
+        raise EventError(_MSG_GUARD_REFUSED, status=403)
     # The type name, not the value: the value may hold request data, and
     # the log line should not carry text the caller chose.
-    guard_name = getattr(guard, "__qualname__", None) or type(guard).__name__
     logger.warning(
         f"{source}: guard {guard_name!r} returned a value of type {type(result).__name__!r}, which Citry ignores,"
         " so the call goes ahead. To refuse it, raise or return an EventError, or return False; return None or"
@@ -1237,8 +1272,8 @@ class EventsDispatcher:
                 # adds to the component's login check instead of replacing
                 # it. Either one refusing refuses the call. Each result goes
                 # through _apply_guard_result: a coroutine returned unrun
-                # would pass the call and False means "refuse", so both
-                # fail closed there.
+                # would pass the call, and a false value or a returned
+                # exception means "refuse", so all of them fail closed there.
                 if handler.component_guard is not None:
                     _apply_guard_result(
                         f"The component guard of event {handler.name!r} on {comp_cls.__name__}",

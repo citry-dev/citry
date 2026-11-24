@@ -1882,7 +1882,7 @@ class TestImmutableAssetRoutes:
 
 
 class TestGuardThatReturnsARefusalOnEveryRoute:
-    """A guard that returns False or an EventError refuses the call on every route that runs guards."""
+    """A guard that returns a false value or an exception refuses the call on every route that runs guards."""
 
     @staticmethod
     def _locked(c, ran, refusal):
@@ -1904,14 +1904,20 @@ class TestGuardThatReturnsARefusalOnEveryRoute:
 
         return Locked
 
-    @pytest.mark.parametrize("returned", ["false", "event-error"])
+    @pytest.mark.parametrize("returned", ["false", "empty-list", "other-exception", "event-error"])
     @pytest.mark.parametrize("adapter", ["asgi", "wsgi"])
     @pytest.mark.parametrize("route", ["batch", "per-event", "per-event-get", "form"])
     def test_refused(self, adapter, route, returned):
         c = _citry()
         ran = []
-        # Both refuse with a 403 here, so one set of checks covers both.
-        refusal = False if returned == "false" else EventError("Locked.", status=403)
+        # Each refuses with a 403 here, so one set of checks covers them all.
+        refusal = {
+            "false": False,
+            "empty-list": [],
+            # Its text is not for the browser; the standard message answers.
+            "other-exception": PermissionError("secret"),
+            "event-error": EventError("Locked.", status=403),
+        }[returned]
         locked = self._locked(c, ran, refusal)
         client = _landing_client(c, adapter)
         if route == "batch":
@@ -1929,14 +1935,16 @@ class TestGuardThatReturnsARefusalOnEveryRoute:
             # The no-JavaScript form post: no runtime header, HTML answer.
             response = client.post(_event_url(locked, "go"), data={"_citry_caller_render_id": "i1"})
         # The message tells the two apart: a returned error keeps its own.
-        message = "You are not allowed to make this call." if returned == "false" else "Locked."
+        message = "Locked." if returned == "event-error" else "You are not allowed to make this call."
         if route == "form":
             assert response.status_code == 403
             assert message in response.text
+            assert "secret" not in response.text
         else:
             error = response.json()["results"][0]["error"]
             assert error["code"] == "forbidden"
             assert error["message"] == message
+            assert "secret" not in response.text
         assert ran == []
 
 

@@ -62,7 +62,7 @@ from citry.ext.events.state import (
     resolve_state_meta,
     validate_state_class,
 )
-from citry.ext.events.view_events import view_events_routes
+from citry.ext.events.view_events import verb_handler_methods, view_events_routes
 from citry.extension import Extension
 from citry.library_component import LibraryComponent
 
@@ -826,13 +826,20 @@ class EventsExtension(Extension):
                 # top. Only an explicit component_guard=False drops it, so a
                 # handler is never more open than its component by accident.
                 skips_component_guard = options is not None and options.component_guard is False
+                # An explicit @event(methods=...) wins; a ViewEvents verb
+                # accepts its own method; any other handler takes the
+                # component's _methods.
+                if options is not None and options.methods is not None:
+                    handler_methods = options.methods
+                else:
+                    handler_methods = verb_handler_methods(raw_events, method_name, func) or methods
                 handlers[wire_name] = EventHandler(
                     name=wire_name,
                     method_name=method_name,
                     func=func,
                     params=params,
                     data_schema=data_schema,
-                    methods=options.methods if options is not None and options.methods is not None else methods,
+                    methods=handler_methods,
                     component_guard=None if skips_component_guard else guard,
                     guard=options.guard if options is not None else None,
                     csrf=options.csrf if options is not None and options.csrf is not None else csrf,

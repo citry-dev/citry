@@ -1325,7 +1325,7 @@ The component-level config surface, exhaustively:
 
 | Attribute | Type / signature | Default | What it does |
 |---|---|---|---|
-| `_guard` | `def _guard(self): ...` inline, or `_guard = my_check` assigning any plain `callable(events)`; both bind identically. It must not be `async def` (nor a generator, nor an object whose `__call__` is either): the dispatcher calls it without awaiting, so its body would never run, and `validate_callable_value` refuses one at class definition (at decoration for `@event(guard=...)`). A call whose guard still returns a coroutine, another awaitable, a generator, or an async generator answers `handler_error`; a `_context` that returns a coroutine does too. Receives the Events instance with the ambient per-call attributes populated (`self.state`, `self.context`, `self.request`, `self.event`; the unvalidated payload is `self.event.args`, with the host CSRF field names of 3.5 removed). Raise `EventError` (e.g. `status=403`), return an `EventError` instance, or return `False` to deny; a returned `EventError` answers exactly as raising it would (its own status, message and field errors), and `False` answers 403 `forbidden` with the message "You are not allowed to make this call." Return `None` or `True` to allow. Any other return value also allows the call and logs a warning naming the guard and the component (the value's type, never the value), so a stray value shows up in the server log rather than being read as a refusal or an approval; an exception instance that is not an `EventError` is such a stray value. It takes no `data` because one guard covers handlers with different schemas; payload-dependent authorization belongs in the handler body, where `data` is typed. | engine default from `extensions_defaults["events"]`, else none | Authorization for every handler of the component. The component's `_guard` replaces the engine default; a handler's `@event(guard=...)` does not replace either one but runs after it, and either refusing refuses the call. Only `@event(component_guard=False)` skips this guard for one handler (7.4). |
+| `_guard` | `def _guard(self): ...` inline, or `_guard = my_check` assigning any plain `callable(events)`; both bind identically. It must not be `async def` (nor a generator, nor an object whose `__call__` is either): the dispatcher calls it without awaiting, so its body would never run, and `validate_callable_value` refuses one at class definition (at decoration for `@event(guard=...)`). A call whose guard still returns a coroutine, another awaitable, a generator, or an async generator answers `handler_error`; a `_context` that returns a coroutine does too. Receives the Events instance with the ambient per-call attributes populated (`self.state`, `self.context`, `self.request`, `self.event`; the unvalidated payload is `self.event.args`, with the host CSRF field names of 3.5 removed). Raise `EventError` (e.g. `status=403`), or return a value that means "no", to deny: a returned `EventError` answers exactly as raising it would (its own status, message and field errors); any other returned exception instance or exception class, and any false value other than `None` (`False`, `0`, an empty list, an empty QuerySet, `numpy.False_`), answers 403 `forbidden` with the message "You are not allowed to make this call.", so the exception's own text never reaches the browser. Return `None` or `True` to allow. Any other true value also allows the call and logs a warning naming the guard and the component (the value's type, never the value), so a stray value shows up in the server log. The dispatcher tests the value for true or false once; that runs app code (`__bool__` or `__len__`, a lazy QuerySet's query), and when it raises, the call answers 500 `handler_error`, as a guard that raises an unexpected error does: the guard gave no answer, and a 403 would show a broken check as a caller who is not allowed. It takes no `data` because one guard covers handlers with different schemas; payload-dependent authorization belongs in the handler body, where `data` is typed. | engine default from `extensions_defaults["events"]`, else none | Authorization for every handler of the component. The component's `_guard` replaces the engine default; a handler's `@event(guard=...)` does not replace either one but runs after it, and either refusing refuses the call. Only `@event(component_guard=False)` skips this guard for one handler (7.4). |
 | `_context` | `def _context(self) -> Any`, plain (not `async def`, refused at class definition like `_guard`); receives the Events instance (request populated, guards not yet run) | engine default from `extensions_defaults["events"]`, else none | Builds the per-call `context` injectable (3.6). Usually configured once, engine-wide. |
 | `_csrf` | `"auto"` \| `False` \| plain `callable(request) -> None` (raise to reject; `async def` refused at class definition, and a returned coroutine answers `csrf_failed`) | `"auto"` | HTTP CSRF policy for the component's handlers (7.4). Beneath any setting sits the always-on baseline: the `X-Citry-Events` header requirement (HTML forms cannot attach custom headers, and cross-origin JS attempting it hits a CORS preflight the browser blocks) plus `Origin` / `Sec-Fetch-Site` same-origin checks (browser-set, unforgeable by page JS). `"auto"` adds the host token where the host has one (Django); `False` drops only citry's own token layer (the baseline never turns off, and a host framework's token check, like Django's `CsrfViewMiddleware`, is governed by the host and stays on, 7.4); a callable replaces citry's token check and runs on top of the baseline and any host check. |
 | `_methods` | tuple of HTTP method names | `("POST",)` | The allowed methods for handlers that do not set `@event(methods=...)`. GET opts a handler into read-only, cacheable-in-principle (served `no-store` until GET caching lands, section 16), pasteable-URL calls (7.4). |
@@ -1342,13 +1342,14 @@ copied by `functools.wraps`, or further down its `__wrapped__` chain)
 raises `ValueError` at decoration (`refuse_stacked_event`), since it
 would replace the first one's settings and drop its `guard=`. Applying
 `@event` once and assigning the result to several `Events` classes is
-fine. The `ViewEvents` verb shim fills `methods` into the stored settings
-itself and is not a second call. When the component class is defined,
-a handler that does not carry the `@event` settings of a function down
-its `__wrapped__` chain (a decorator that kept `__wrapped__` but not the
-attributes) is refused too (`refuse_hidden_event_settings`); `methods`
-is left out of that comparison because the `ViewEvents` shim sets it on
-the outer function only.
+fine. Citry itself writes nothing onto a handler function: the
+`ViewEvents` verb shim gives a verb handler its HTTP method from the
+class when the component class is created (`verb_handler_methods`), so
+one function used in several classes accepts, in each, the methods that
+class gives it. When the component class is defined, a handler that
+does not carry the `@event` settings of a function down its
+`__wrapped__` chain (a decorator that kept `__wrapped__` but not the
+attributes) is refused too (`refuse_hidden_event_settings`).
 
 | `@event(...)` key | Type | Default | What it does |
 |---|---|---|---|
@@ -5285,7 +5286,8 @@ traversal of any object graph; extra arg keys are rejected, not absorbed.
   written for one handler can never drop the component's check by
   accident. A guard is
   `callable(events)` that raises `EventError(status=403)` or returns
-  `False` to deny (any other value but `None` allows and logs a warning), reading
+  any false value other than `None` or an exception to deny (`None` and
+  `True` allow; any other true value allows and logs a warning), reading
   `self.context` (3.6) or `self.request.native`. Opt-out, not opt-in
   (livecomponents' per-method decorator is the anti-pattern: forgetting one
   method is an open endpoint). Honest limitation, documented: citry cannot

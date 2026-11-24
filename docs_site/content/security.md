@@ -177,13 +177,27 @@ Use a guard for a rule every handler shares. Put a check that depends on
 the submitted data in the handler body, where the data has already been
 validated.
 
-Return `None` (or nothing) or `True` to let the call go ahead. Any
-other value, such as `0`, a string, or an exception other than
-`EventError`, also lets the call go ahead, but
-Citry logs a warning that names the guard. Only `False` and an
-`EventError` refuse, so return `False` explicitly: an expression such
-as `user and user.is_staff` gives `None` when there is no user, and
-`None` lets the call go ahead.
+Return `None` (or nothing) or `True` to let the call go ahead. A guard
+can also refuse the call by returning a value that means "no":
+
+- A returned `EventError` refuses the call as if the guard had raised
+  it, with the error's own status and message.
+- Any other exception, such as Django's `PermissionDenied()`, refuses
+  it with a 403 and the message above. The exception's own text never
+  reaches the browser.
+- Any other false value, such as `False`, `0`, an empty list or an
+  empty QuerySet, refuses it with a 403.
+
+Any other true value lets the call go ahead, and Citry logs a warning
+that names the guard. To decide, Citry tests the value for true or
+false once, which runs a QuerySet's database query; return
+`queryset.exists()` instead of the QuerySet so the query loads no rows.
+If that test raises an error, the call fails with a 500, as when the
+guard itself raises one.
+
+`None` lets the call go ahead, so return `False` explicitly: an
+expression such as `user and user.is_staff` gives `None` when there is
+no user.
 
 A handler's own guard runs in addition to the component's `_guard`.
 Citry first builds `self.context` with `_context`, so both guards can
@@ -203,7 +217,7 @@ A component that defines its own `_guard`, even `_guard = None`,
 replaces the app-wide one, so return `require_login(self)` from the
 component's `_guard` when both must run. Return its result rather than
 only calling it: a guard that refuses by returning `False` or an
-`EventError` refuses nothing when its caller drops that value.
+error refuses nothing when its caller drops that value.
 
 Some handlers must accept callers the rest of the component refuses,
 such as a public `ping` on a component that needs a login. The

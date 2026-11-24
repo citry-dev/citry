@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any
 
 from citry.ext.events.codecs import FormCodec
 from citry.ext.events.config import Events
-from citry.ext.events.handlers import EVENT_OPTIONS_ATTR, EventOptions, event_options, framework_base
+from citry.ext.events.handlers import framework_base, user_level_classes
 
 # The transport translation is the per-event route's, unchanged; only the
 # event name comes from the HTTP method instead of the URL, so the verb
@@ -107,6 +107,10 @@ class ViewEvents(Events):
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
+        # Only the signature is checked here. Each verb's HTTP method comes
+        # from `verb_handler_methods` when the component class is created,
+        # read from this class, so a function shared with another class
+        # keeps its own settings there.
         for verb in VERB_HANDLER_NAMES:
             func = cls.__dict__.get(verb)
             if not isinstance(func, FunctionType):
@@ -119,16 +123,36 @@ class ViewEvents(Events):
                     f" Move stateful work into a named event handler (which can live on the same class)."
                 )
                 raise ValueError(msg)
-            options = event_options(func)
-            if options is None:
-                options = EventOptions(methods=(verb.upper(),))
-            elif options.methods is None:
-                options = replace(options, methods=(verb.upper(),))
-            else:
-                # An explicit @event(methods=...) is the user's call; the
-                # shim only fills the verb in when nothing else did.
-                continue
-            setattr(func, EVENT_OPTIONS_ATTR, options)
+
+
+def verb_handler_methods(raw_events_cls: type, method_name: str, func: Any) -> tuple[str, ...] | None:
+    """
+    The HTTP method a ``ViewEvents`` verb handler accepts, or ``None`` for any other handler.
+
+    A handler is a verb handler when its method name is one of
+    ``VERB_HANDLER_NAMES`` and a ``ViewEvents`` subclass the user wrote
+    defines that very function. A verb inherited from a mixin that is not a
+    ``ViewEvents`` subclass is an ordinary handler. An explicit
+    ``@event(methods=...)`` wins over this value; the caller checks that.
+
+    Args:
+        raw_events_cls: The component's ``Events`` class as the user wrote it.
+        method_name: The handler's method name on that class.
+        func: The handler function Citry collected for that name.
+
+    Returns:
+        A one-item tuple with the verb in uppercase, or ``None``.
+
+    """
+    if method_name not in VERB_HANDLER_NAMES:
+        return None
+    # Read from the classes, not from the function, so one function
+    # assigned into two classes gets the verb only where a ViewEvents
+    # subclass holds it.
+    for klass in user_level_classes(raw_events_cls):
+        if issubclass(klass, ViewEvents) and vars(klass).get(method_name) is func:
+            return (method_name.upper(),)
+    return None
 
 
 ################################################

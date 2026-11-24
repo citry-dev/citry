@@ -33,14 +33,20 @@
   setting in one `@event(...)`, and write decorators with
   `functools.wraps`. A handler now also keeps the `@event` settings it
   had when its class was created, so changing the function's `@event`
-  settings later does not change how that class's handler behaves. See
+  settings later does not change how that class's handler behaves, and
+  a function used as a `ViewEvents` verb handler in one class no longer
+  changes the HTTP methods it accepts in another class. See
   [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
-- Security: an event guard that returns `False` now refuses the call
-  with a 403, and one that returns an `EventError` refuses it with that
-  error's status and message, as if it had raised it. Before, a guard
-  written as `return user.is_staff` let every caller through. `None` and
-  `True` let the call go ahead; any other return value lets it go ahead
-  and logs a warning that names the guard and the component. See
+- Security: an event guard that returns a false value (`False`, `0`,
+  an empty list or QuerySet) or an exception other than `EventError`
+  now refuses the call with a 403, and one that returns an `EventError`
+  refuses it with that error's status and message, as if it had raised
+  it. Before, a guard written as `return user.is_staff` or
+  `return Document.objects.filter(owner=user)` let every caller
+  through. `None` and `True` let the call go ahead; any other true value
+  lets it go ahead and logs a warning that names the guard and the
+  component. A returned value whose true-or-false test raises an error
+  fails the call with a 500. See
   [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
 
 ## v1.2.0

@@ -20,7 +20,7 @@ import re
 import sys
 import textwrap
 from collections.abc import AsyncGenerator, Callable, Coroutine, Generator
-from dataclasses import dataclass, is_dataclass, replace
+from dataclasses import dataclass, is_dataclass
 from types import FunctionType
 from typing import Any, TypeVar, get_type_hints, overload
 
@@ -188,9 +188,7 @@ def refuse_hidden_event_settings(comp_name: str, method_name: str, func: Any) ->
     ``@event(...)`` under a decorator that keeps ``__wrapped__`` but does
     not copy the function's attributes leaves its settings on the inner
     function, where Citry never reads them, so an inner ``guard=`` would
-    not run. ``functools.wraps`` copies them, so its wrappers pass. The
-    ``methods`` value is left out of the comparison because ``ViewEvents``
-    fills it in on the outer function only.
+    not run. ``functools.wraps`` copies them, so its wrappers pass.
 
     Args:
         comp_name: The component's name, as the error message shows it.
@@ -203,14 +201,13 @@ def refuse_hidden_event_settings(comp_name: str, method_name: str, func: Any) ->
 
     """
     outer = event_options(func)
-    outer_without_methods = replace(outer, methods=None) if outer is not None else None
     inner_func = getattr(func, "__wrapped__", None)
     # The bound only stops a ``__wrapped__`` that points back at itself.
     for _ in range(32):
         if inner_func is None:
             return
         inner = event_options(inner_func)
-        if inner is not None and replace(inner, methods=None) != outer_without_methods:
+        if inner is not None and inner != outer:
             msg = (
                 f"Component {comp_name}: event handler {method_name!r} wraps a function that has"
                 " @event settings, but the wrapper does not carry them, so they would not apply"
@@ -327,8 +324,8 @@ def validate_csrf_value(source: str, value: Any) -> str | bool | Callable[..., A
 
 # What a guard does, for the error that refuses an async one.
 GUARD_PURPOSE = (
-    "that takes the Events instance and raises EventError, or returns False or an EventError, to refuse the call;"
-    " or None for no guard"
+    "that takes the Events instance and raises EventError, or returns False, another false value or an exception,"
+    " to refuse the call; or None for no guard"
 )
 
 # Calling one of these returns an object whose code has not run yet: a
@@ -577,9 +574,11 @@ def event(
         guard: Per-handler authorization function. It receives the
             ``Events`` instance and refuses the call by raising an
             ``EventError``, by returning one (answered as if raised), or
-            by returning ``False`` (a 403). Returning ``None`` or ``True``
-            lets the call go ahead; any other value also lets it go ahead
-            and logs a warning. It runs after the component's
+            by returning any other exception or any false value other
+            than ``None``, such as ``False`` or an empty QuerySet (a
+            403). Returning ``None`` or ``True`` lets the call go ahead;
+            any other true value also lets it go ahead and logs a
+            warning. It runs after the component's
             ``_guard`` (or the app-wide ``_guard`` in
             ``extensions_defaults["events"]`` when the component defines
             none), and either one refusing refuses the call. It must be a

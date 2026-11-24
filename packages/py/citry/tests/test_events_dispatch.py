@@ -3020,11 +3020,57 @@ class TestComponentAndHandlerGuardsBothRun:
             event(component_guard=value)
 
 
+class _FalseLikeNumpy:
+    """Stands in for numpy.False_: not the bool False, but false when tested."""
+
+    def __bool__(self):
+        return False
+
+
+class _TrueLikeNumpy:
+    """Stands in for numpy.True_: not the bool True, but true when tested."""
+
+    def __bool__(self):
+        return True
+
+
+class _EmptyLazyQuery:
+    """Stands in for an empty Django QuerySet: testing it runs the query."""
+
+    def __init__(self):
+        self.evaluations = 0
+
+    def __len__(self):
+        self.evaluations += 1
+        return 0
+
+
+class _BrokenTruth:
+    """A value whose true-or-false test raises, like a QuerySet whose database is down."""
+
+    def __bool__(self):
+        msg = "database is down"
+        raise RuntimeError(msg)
+
+
+class _AmbiguousArray:
+    """Stands in for a numpy array of several items, whose truth is ambiguous."""
+
+    def __bool__(self):
+        msg = "The truth value of an array with more than one element is ambiguous."
+        raise ValueError(msg)
+
+
+class _PermissionDenied(Exception):
+    """Stands in for django.core.exceptions.PermissionDenied."""
+
+
 class TestGuardReturnValues:
     """
-    False or an EventError instance refuses the call.
+    Any false value or a returned exception refuses the call.
 
-    None and True go ahead silently; any other value goes ahead with a warning.
+    None and True go ahead silently; any other true value goes ahead with a
+    warning.
     """
 
     @staticmethod
@@ -3218,10 +3264,128 @@ class TestGuardReturnValues:
         assert "which Citry ignores" not in caplog.text
         assert log == [level, "go"]
 
+    @pytest.mark.parametrize("use_async_dispatch", [False, True], ids=["sync", "async"])
+    @pytest.mark.parametrize("level", ["component", "engine", "handler"])
     @pytest.mark.parametrize(
         "value",
-        [1, 0, "", [], "no", ValueError("not an EventError")],
-        ids=["one", "zero", "empty-str", "empty-list", "str", "other-exception"],
+        [0, 0.0, "", [], _FalseLikeNumpy(), _EmptyLazyQuery()],
+        ids=["zero", "zero-float", "empty-str", "empty-list", "numpy-false", "empty-queryset"],
+    )
+    def test_every_false_value_refuses_like_false(self, value, level, use_async_dispatch):
+        # `return <check>` that comes out false means "no" whatever its
+        # type: an empty QuerySet from `.filter(...)`, numpy.False_, 0.
+        log = []
+        guard = self._returning(log, level, value=value)
+        c = _citry(extensions_defaults={"events": {"_guard": guard}}) if level == "engine" else _citry()
+        comp = self._component(
+            c,
+            log,
+            component_guard=guard if level == "component" else None,
+            handler_guard=guard if level == "handler" else None,
+        )
+        item = self._call(comp, "go", use_async_dispatch=use_async_dispatch)
+        assert item["error"] == {
+            "status": 403,
+            "code": "forbidden",
+            "message": "You are not allowed to make this call.",
+        }
+        assert log == [level]
+
+    def test_an_empty_value_from_the_handler_guard_refuses_after_the_component_guard_allows(self):
+        log = []
+        comp = self._component(
+            _citry(),
+            log,
+            component_guard=self._returning(log, "component", value=True),
+            handler_guard=self._returning(log, "handler", value=_EmptyLazyQuery()),
+        )
+        assert self._call(comp, "go")["error"]["status"] == 403
+        assert log == ["component", "handler"]
+
+    @pytest.mark.parametrize("use_async_dispatch", [False, True], ids=["sync", "async"])
+    @pytest.mark.parametrize("level", ["component", "engine", "handler"])
+    @pytest.mark.parametrize(
+        "value",
+        [
+            _PermissionDenied("secret <b>text</b>"),
+            ValueError("secret <b>text</b>"),
+            BaseException("secret <b>text</b>"),
+            _PermissionDenied,
+        ],
+        ids=["permission-denied", "value-error", "base-exception", "exception-class"],
+    )
+    def test_a_returned_exception_refuses_with_the_standard_403(self, value, level, use_async_dispatch):
+        log = []
+        guard = self._returning(log, level, value=value)
+        c = _citry(extensions_defaults={"events": {"_guard": guard}}) if level == "engine" else _citry()
+        comp = self._component(
+            c,
+            log,
+            component_guard=guard if level == "component" else None,
+            handler_guard=guard if level == "handler" else None,
+        )
+        item = self._call(comp, "go", use_async_dispatch=use_async_dispatch)
+        # The exception's own text was not written for the browser, so the
+        # answer is the standard one and never carries it.
+        assert item["error"] == {
+            "status": 403,
+            "code": "forbidden",
+            "message": "You are not allowed to make this call.",
+        }
+        assert "secret" not in json.dumps(item)
+        assert log == [level]
+
+    def test_a_returned_exception_does_not_keep_the_call_s_frames(self):
+        # A guard that catches an exception and returns it hands back an
+        # object whose traceback holds the guard's frame (and through it
+        # the request and the State). Citry clears it, so an exception kept
+        # beyond the call does not keep those alive.
+        log = []
+        kept = []
+
+        def guard(events):
+            log.append("guard")
+            try:
+                raise _PermissionDenied
+            except _PermissionDenied as error:
+                kept.append(error)
+                return error
+
+        comp = self._component(_citry(), log, handler_guard=guard)
+        assert self._call(comp, "go")["error"]["status"] == 403
+        assert kept[0].__traceback__ is None
+        assert log == ["guard"]
+
+    @pytest.mark.parametrize("use_async_dispatch", [False, True], ids=["sync", "async"])
+    @pytest.mark.parametrize("value", [_BrokenTruth(), _AmbiguousArray()], ids=["raises", "ambiguous-array"])
+    def test_a_value_whose_true_or_false_test_raises_refuses_as_handler_error(self, value, use_async_dispatch, caplog):
+        log = []
+        comp = self._component(_citry(), log, handler_guard=self._returning(log, "handler", value=value))
+        with caplog.at_level(logging.ERROR, logger="citry"):
+            item = self._call(comp, "go", use_async_dispatch=use_async_dispatch)
+        # The guard gave no answer, so this is the 500 a guard that raises
+        # an unexpected error gets, not a 403; the handler never runs.
+        assert item["error"]["status"] == 500
+        assert item["error"]["code"] == "handler_error"
+        assert "database is down" not in json.dumps(item)
+        assert log == ["handler"]
+        # The server log names the guard and what went wrong.
+        assert "testing it for true or false raised" in caplog.text
+        assert "_returning.<locals>.guard" in caplog.text
+
+    def test_a_false_value_is_tested_once(self):
+        log = []
+        lazy = _EmptyLazyQuery()
+        comp = self._component(_citry(), log, handler_guard=self._returning(log, "handler", value=lazy))
+        assert self._call(comp, "go")["error"]["status"] == 403
+        # Testing the value runs app code (a database query for a QuerySet),
+        # so Citry does it once.
+        assert lazy.evaluations == 1
+
+    @pytest.mark.parametrize(
+        "value",
+        [1, "no", [0], _TrueLikeNumpy(), object()],
+        ids=["one", "str", "list", "numpy-true", "object"],
     )
     def test_other_values_go_ahead_with_a_warning(self, value, caplog):
         log = []
