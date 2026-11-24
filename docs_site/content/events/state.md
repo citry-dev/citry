@@ -269,7 +269,9 @@ the copy, and assign it back.
 
 A field the browser can change may arrive with any value, so validate it
 in the handler like any other user input. See
-[Security](/security/#treat-state-as-client-input).
+[Security](/security/#treat-state-as-client-input). Guards see the
+browser's writes too, so leave a field that a guard relies on out of
+`_model` (see [Authorize every event](/security/#authorize-every-event)).
 
 ### Choose State storage { #storage }
 
