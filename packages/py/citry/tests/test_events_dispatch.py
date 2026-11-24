@@ -2995,7 +2995,11 @@ class TestComponentAndHandlerGuardsBothRun:
 
 
 class TestGuardReturnValues:
-    """A guard that returns False refuses the call; any other value but None goes ahead with a warning."""
+    """
+    False or an EventError instance refuses the call.
+
+    None and True go ahead silently; any other value goes ahead with a warning.
+    """
 
     @staticmethod
     def _returning(log, name, *, value):
@@ -3088,10 +3092,114 @@ class TestGuardReturnValues:
         assert self._call(Page, "post")["error"]["status"] == 403
         assert log == ["guard"]
 
+    @pytest.mark.parametrize("use_async_dispatch", [False, True], ids=["sync", "async"])
+    @pytest.mark.parametrize("level", ["component", "engine", "handler"])
+    def test_a_returned_event_error_refuses_like_raising_it(self, level, use_async_dispatch):
+        log = []
+        guard = self._returning(log, level, value=EventError("Sign in first.", status=401))
+        c = _citry(extensions_defaults={"events": {"_guard": guard}}) if level == "engine" else _citry()
+        comp = self._component(
+            c,
+            log,
+            component_guard=guard if level == "component" else None,
+            handler_guard=guard if level == "handler" else None,
+        )
+        item = self._call(comp, "go", use_async_dispatch=use_async_dispatch)
+        # The error's own status and message, not the 403 that False gives.
+        assert item["error"] == {"status": 401, "code": "error", "message": "Sign in first."}
+        assert log == [level]
+
+    def test_a_returned_event_error_keeps_its_field_errors(self):
+        log = []
+        error = EventError("Not yours.", status=403, fields={"owner": "Someone else owns this."})
+        comp = self._component(_citry(), log, handler_guard=self._returning(log, "handler", value=error))
+        assert self._call(comp, "go")["error"] == {
+            "status": 403,
+            "code": "forbidden",
+            "message": "Not yours.",
+            "fieldErrors": {"owner": "Someone else owns this."},
+        }
+
+    def test_a_returned_event_error_subclass_refuses(self):
+        class NotOwner(EventError):
+            pass
+
+        log = []
+        comp = self._component(
+            _citry(),
+            log,
+            component_guard=self._returning(log, "component", value=NotOwner("Not yours.", status=404)),
+            handler_guard=self._returning(log, "handler", value=None),
+        )
+        assert self._call(comp, "go")["error"]["status"] == 404
+        # The component guard refused, so the handler guard never ran.
+        assert log == ["component"]
+
+    def test_an_event_error_from_the_handler_guard_refuses_after_the_component_guard_allows(self):
+        log = []
+        comp = self._component(
+            _citry(),
+            log,
+            component_guard=self._returning(log, "component", value=True),
+            handler_guard=self._returning(log, "handler", value=EventError("No.", status=403)),
+        )
+        assert self._call(comp, "go")["error"]["message"] == "No."
+        assert log == ["component", "handler"]
+
+    def test_an_event_error_returned_on_every_call_does_not_collect_tracebacks(self):
+        # An app may keep one error in a module constant and return it from
+        # each call; raising it must not chain one traceback per call onto it.
+        log = []
+        error = EventError("No.", status=403)
+        comp = self._component(_citry(), log, handler_guard=self._returning(log, "handler", value=error))
+        for _ in range(3):
+            assert self._call(comp, "go")["error"]["message"] == "No."
+        depth = 0
+        tb = error.__traceback__
+        while tb is not None:
+            depth += 1
+            tb = tb.tb_next
+        assert depth <= 2
+
+    def test_a_returned_event_error_refuses_a_view_events_verb(self):
+        log = []
+        guard = self._returning(log, "guard", value=EventError("Closed.", status=403))
+
+        class Page(Component):
+            citry = _citry()
+            template = """
+                <div>p</div>
+            """
+
+            class Events(ViewEvents):
+                _guard = guard
+
+                def post(self):
+                    log.append("post")
+
+        assert self._call(Page, "post")["error"]["message"] == "Closed."
+        assert log == ["guard"]
+
+    @pytest.mark.parametrize("level", ["component", "engine", "handler"])
+    def test_true_goes_ahead_without_a_warning(self, level, caplog):
+        log = []
+        guard = self._returning(log, level, value=True)
+        c = _citry(extensions_defaults={"events": {"_guard": guard}}) if level == "engine" else _citry()
+        comp = self._component(
+            c,
+            log,
+            component_guard=guard if level == "component" else None,
+            handler_guard=guard if level == "handler" else None,
+        )
+        with caplog.at_level(logging.WARNING, logger="citry"):
+            assert self._call(comp, "go")["ok"] is True
+        assert "which Citry ignores" not in caplog.text
+        assert log == [level, "go"]
+
     @pytest.mark.parametrize(
         "value",
-        [True, 0, "", [], "no"],
-        ids=["true", "zero", "empty-str", "empty-list", "str"],
+        [1, 0, "", [], "no", ValueError("not an EventError")],
+        ids=["one", "zero", "empty-str", "empty-list", "str", "other-exception"],
     )
     def test_other_values_go_ahead_with_a_warning(self, value, caplog):
         log = []

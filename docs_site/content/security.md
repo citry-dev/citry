@@ -143,8 +143,9 @@ three places:
   runs after `_guard`;
 - a check inside the handler body.
 
-A guard refuses a call by raising `EventError`, or by returning `False`.
-Raising lets you choose the message and status; returning `False`
+A guard refuses a call by raising `EventError`, by returning an
+`EventError`, or by returning `False`. An `EventError`, raised or
+returned, lets you choose the message and status; returning `False`
 answers with status 403 and the message "You are not allowed to make
 this call." For example:
 
@@ -176,18 +177,17 @@ Use a guard for a rule every handler shares. Put a check that depends on
 the submitted data in the handler body, where the data has already been
 validated.
 
-Return `None` (or nothing) to let the call go ahead, not `True`. Any
-other value, such as `True`, `0` or a string, also lets the call go
-ahead, but Citry logs a warning that names the guard. Only `False`
-refuses, so return it explicitly: an expression such as
-`user and user.is_staff` gives `None` when there is no user, and `None`
-lets the call go ahead.
+Return `None` (or nothing) or `True` to let the call go ahead. Any
+other value, such as `0` or a string, also lets the call go ahead, but
+Citry logs a warning that names the guard. Only `False` and an
+`EventError` refuse, so return `False` explicitly: an expression such
+as `user and user.is_staff` gives `None` when there is no user, and
+`None` lets the call go ahead.
 
 A handler's own guard runs in addition to the component's `_guard`.
 Citry first builds `self.context` with `_context`, so both guards can
 read it. It then runs `_guard`, then the handler's guard. The first one
-that raises `EventError` or returns `False` refuses the call, and
-nothing after it runs.
+that refuses the call stops it, and nothing after it runs.
 
 To check every component the same way, set an app-wide guard once:
 
@@ -201,8 +201,8 @@ It runs wherever a component's `Events` class does not define `_guard`.
 A component that defines its own `_guard`, even `_guard = None`,
 replaces the app-wide one, so return `require_login(self)` from the
 component's `_guard` when both must run. Return its result rather than
-only calling it: a guard that refuses by returning `False` refuses
-nothing when its caller drops that value.
+only calling it: a guard that refuses by returning `False` or an
+`EventError` refuses nothing when its caller drops that value.
 
 Some handlers must accept callers the rest of the component refuses,
 such as a public `ping` on a component that needs a login. The

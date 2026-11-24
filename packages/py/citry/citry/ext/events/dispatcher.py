@@ -558,9 +558,12 @@ def _apply_guard_result(source: str, guard: Any, result: Any) -> None:
 
     A guard refuses by raising ``EventError``. Returning ``False`` refuses
     too, because an author who writes ``return user.is_staff`` means a
-    refusal, and letting that call through fails open. Any other value
-    that is not ``None`` lets the call go ahead with a warning, so a guard
-    that returns something by mistake shows up in the server log.
+    refusal, and letting that call through fails open. Returning an
+    ``EventError`` instance refuses with that error, as if the guard had
+    raised it, because building the error is just as clear a refusal.
+    ``None`` and ``True`` let the call go ahead. Any other value lets the
+    call go ahead with a warning, so a guard that returns something by
+    mistake shows up in the server log.
 
     Args:
         source: The guard's place, such as "The guard of event 'save' on
@@ -572,24 +575,34 @@ def _apply_guard_result(source: str, guard: Any, result: Any) -> None:
         TypeError: When the result is a coroutine, another awaitable, a
             generator, or an async generator, so the guard's check did not
             run; the dispatcher answers ``handler_error``.
-        EventError: With status 403 when the result is ``False``.
+        EventError: With status 403 when the result is ``False``, or the
+            returned error itself when the result is an ``EventError``.
 
     """
     # Unrun code first: its body never ran, so whatever it would have
     # returned is unknown and the call is refused as handler_error.
     refuse_deferred_result(source, result)
-    if result is None:
+    # None is the documented "go ahead", and True reads as "allowed" in a
+    # guard written as `return user.is_staff`, so neither needs a warning.
+    if result is None or result is True:
         return
     # Only the bool False refuses. Other false values (0, "", an empty
     # list) are not a clear refusal, so they take the warning below.
     if result is False:
         raise EventError(_MSG_GUARD_REFUSED, status=403)
+    # A returned EventError is a refusal the author wrote out in full, with
+    # its own status and message, so it answers exactly as raising it would.
+    # Clearing the traceback first stops an error kept in a module constant
+    # and returned on every call from collecting one traceback per call.
+    if isinstance(result, EventError):
+        raise result.with_traceback(None)
     # The type name, not the value: the value may hold request data, and
     # the log line should not carry text the caller chose.
     guard_name = getattr(guard, "__qualname__", None) or type(guard).__name__
     logger.warning(
         f"{source}: the guard {guard_name} returned a value of type {type(result).__name__!r}, which Citry ignores."
-        " A guard refuses a call by raising EventError or by returning False, so this call goes ahead."
+        " A guard refuses a call by raising or returning EventError or by returning False, and allows it by"
+        " returning None or True, so this call goes ahead."
     )
 
 

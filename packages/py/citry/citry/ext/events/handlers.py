@@ -327,7 +327,8 @@ def validate_csrf_value(source: str, value: Any) -> str | bool | Callable[..., A
 
 # What a guard does, for the error that refuses an async one.
 GUARD_PURPOSE = (
-    "that takes the Events instance and raises EventError or returns False to refuse the call; or None for no guard"
+    "that takes the Events instance and raises EventError, or returns False or an EventError, to refuse the call;"
+    " or None for no guard"
 )
 
 # Calling one of these returns an object whose code has not run yet: a
@@ -570,10 +571,11 @@ def event(
             Each must be one of GET, HEAD, POST, PUT, PATCH, DELETE, or
             OPTIONS, the methods the per-event route accepts.
         guard: Per-handler authorization function. It receives the
-            ``Events`` instance and refuses the call by raising
-            ``EventError`` or by returning ``False`` (a 403). Returning
-            ``None`` lets the call go ahead; any other value also lets it
-            go ahead and logs a warning. It runs after the component's
+            ``Events`` instance and refuses the call by raising an
+            ``EventError``, by returning one (answered as if raised), or
+            by returning ``False`` (a 403). Returning ``None`` or ``True``
+            lets the call go ahead; any other value also lets it go ahead
+            and logs a warning. It runs after the component's
             ``_guard`` (or the app-wide ``_guard`` in
             ``extensions_defaults["events"]`` when the component defines
             none), and either one refusing refuses the call. It must be a

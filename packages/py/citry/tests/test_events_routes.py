@@ -1881,13 +1881,13 @@ class TestImmutableAssetRoutes:
         assert response.headers.get("access-control-allow-origin") is None
 
 
-class TestGuardThatReturnsFalseOnEveryRoute:
-    """A guard that returns False refuses the call on every route that runs guards."""
+class TestGuardThatReturnsARefusalOnEveryRoute:
+    """A guard that returns False or an EventError refuses the call on every route that runs guards."""
 
     @staticmethod
-    def _locked(c, ran):
+    def _locked(c, ran, refusal):
         def refuse(events):
-            return False
+            return refusal
 
         class Locked(Component):
             citry = c
@@ -1904,12 +1904,15 @@ class TestGuardThatReturnsFalseOnEveryRoute:
 
         return Locked
 
+    @pytest.mark.parametrize("returned", ["false", "event-error"])
     @pytest.mark.parametrize("adapter", ["asgi", "wsgi"])
     @pytest.mark.parametrize("route", ["batch", "per-event", "per-event-get", "form"])
-    def test_refused(self, adapter, route):
+    def test_refused(self, adapter, route, returned):
         c = _citry()
         ran = []
-        locked = self._locked(c, ran)
+        # Both refuse with a 403 here, so one set of checks covers both.
+        refusal = False if returned == "false" else EventError("Locked.", status=403)
+        locked = self._locked(c, ran, refusal)
         client = _landing_client(c, adapter)
         if route == "batch":
             envelope = {
