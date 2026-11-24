@@ -1143,7 +1143,7 @@ anything when called:
 | `actions.Render(element, target=None, swap="morph")` | `render` | Render the element server-side, deliver it as a fragment, morph it into `target` (default: the calling instance). |
 | `actions.Data(value)` | `data` | Resolve an imperative client caller's promise with this JSON value. Declarative `@c-*` bindings do not expose the promise result. |
 | `actions.Dispatch(name, detail=None)` | `event` | Dispatch a named browser event (DOM CustomEvent; `onEvent` listeners and plain `addEventListener` react). |
-| `actions.Redirect(url)` | `redirect` | Navigate the page. |
+| `actions.Redirect(url)` | `redirect` | Navigate the page. A URL from the request goes through `local_url_or()` first, which keeps it on the site (`citry/ext/events/local_urls.py`). |
 | `actions.PushUrl(url)` / `actions.ReplaceUrl(url)` (v1.x) | `url` | History update without navigation, pushing onto or replacing the top of the history stack (the htmx `HX-Push-Url` / `HX-Replace-Url` sibling pair). The client preserves `history.state`; Citry does not synthesize `popstate` or restore component HTML or State on later Back/Forward navigation. |
 | `actions.Download(content, filename, content_type=...)` (v1.x) | none (escape) | A file download. Sugar over the raw-response escape below, so its handler uses `@event(bundle=False)`, runs through the per-event HTTP route, leaves State unchanged, and returns the download bare or as a list's only element. It cannot share a list or request with another result. The client accepts a successful attachment response for one call, buffers the blob, and starts the save only after the call survives timeout and supersession checks. |
 

@@ -211,68 +211,51 @@ if data.next.startswith("/"):
     return actions.Redirect(data.next)
 ```
 
-Use a check that parses the URL the way a browser does. Under Django, use
-`url_has_allowed_host_and_scheme`. In this example the login page copies
-its `next` query parameter into a hidden `<input name="next">`, so the
-handler receives it as `data.next`:
+Use [`local_url_or()`][citry.ext.events.local_url_or] instead. It reads
+the URL the way a browser does and returns it when the browser would
+load it from your site, or the fallback you pass when it would not. In
+this example the login page copies its `next` query parameter into a
+hidden `<input name="next">`, so the handler receives it as `data.next`:
 
 ```python
-from django.utils.http import (
-    url_has_allowed_host_and_scheme,
-)
+from citry.ext.events import actions, local_url_or
 
 
 class Events:
     def login(self, data: LoginIn, request):
         # log_in is your own code that checks the password
         log_in(request, data)
-        host = request.native.get_host()
-        is_safe = url_has_allowed_host_and_scheme(
-            data.next,
-            allowed_hosts={host},
-            require_https=request.native.is_secure(),
-        )
-        target = data.next if is_safe else "/"
-        return actions.Redirect(target)
+        return actions.Redirect(local_url_or(data.next, "/"))
 ```
 
-In a Flask or FastAPI app, install the `django` package and call the
-same function. It needs no Django settings. Pass the host names your
-site serves:
+By default only a relative URL such as `/orders/7` or `?page=2` passes.
+To also accept a full URL on your own site, list your host names, with
+the port when it is not the default one. On a site served over HTTPS,
+also pass `require_https=True`, so the redirect cannot drop to plain
+HTTP:
 
 ```python
-from django.utils.http import (
-    url_has_allowed_host_and_scheme,
-)
-
-is_safe = url_has_allowed_host_and_scheme(
+target = local_url_or(
     data.next,
+    "/",
     allowed_hosts={"shop.example"},
     require_https=True,
 )
-target = data.next if is_safe else "/"
 ```
 
-`actions.Redirect` raises `ValueError` for a URL with a control
-character, such as a tab, even when Django's function accepts it. The
-call then fails instead of redirecting, which is safe.
+The check refuses `//other.example/` and `/\other.example/`, any scheme
+other than `http:` and `https:` (such as `javascript:`), a URL with a
+user name before `@`, and a URL with a control character such as a tab.
+The fallback must pass the same check, or the call raises `ValueError`,
+so a mistyped fallback shows up in your first test. When you need a
+yes-or-no answer instead, for example to show an error, call
+[`is_local_url()`][citry.ext.events.is_local_url] with the same
+arguments.
 
-If you write your own check, do what Django's function does: check the
-URL twice, once as written and once with every `\` changed to `/`, and
-refuse it when either reading leaves your site. A check that only reads
-`urllib.parse.urlsplit(url).hostname`, and accepts an empty host name or
-your own, lets these through:
-
-- `https://other.example\@shop.example/`: Python sees `shop.example`,
-  browsers go to `other.example`;
-- `https:\\other.example/` and `/\/other.example/`: Python sees no host
-  name, browsers go to `other.example`;
-- `https:other.example/`, `https:/other.example/`, and
-  `///other.example/`: Python sees no host name, and browsers can go to
-  `other.example`.
-
-Citry plans a built-in check
-([#568](https://github.com/citry-dev/citry/issues/568)).
+`local_url_or()` follows the rules of Django's
+`url_has_allowed_host_and_scheme`, with a few stricter ones. For
+example, Django's function accepts a URL with a tab or a newline in it,
+which `actions.Redirect` then refuses with `ValueError`.
 
 ## Check URL attributes { #check-url-attributes }
 
