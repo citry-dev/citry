@@ -118,7 +118,7 @@ supply it (experimental). See
 
 | Data | Put it in | How long it lives |
 |---|---|---|
-| Small values a later server call needs, or values bound with `:c-*` | `State` | Kept across calls until its State token expires, 24 hours by default ([`_max_age`](#max-age)). |
+| Small values a later server call needs, or values bound with `:c-*` | `State` | Kept across calls until its State token expires, which takes 24 hours by default. A call made late in a token's life gets a new token ([`_max_age`](#max-age)). |
 | Larger or computed values the browser code reads | `js_data()` | Recomputed on each render. |
 | Browser-only UI state, such as whether a panel is open | Vue `data()` | Kept by the Vue component in the browser. |
 
@@ -366,13 +366,50 @@ class State:
   second, raises `ValueError`.
 
 The lifetime counts from the last token Citry issued, not from the
-first page load. Citry issues a new token each time it renders the
-component, and after each call from the page that changes State,
-including a change the browser wrote. A call that leaves State unchanged and does not
-render the component keeps the old token, so its expiry does not move.
+first page load. Citry issues a new token:
 
-A token can stop working up to one second early. Changing `_max_age` in a deploy does not change tokens
-Citry has already issued.
+- each time it renders the component, including a render served from
+  the [render cache](/performance/caching/);
+- after each call from the page that changes State, including a change
+  the browser wrote;
+- after a call made once the current token is past half its lifetime (a
+  renewal), even when State did not change. The new token has a full
+  lifetime.
+
+So a component that gets a call at least once every half lifetime (12
+hours by default) keeps working. Set `_max_age` to at least twice the
+longest time a page may go without a call. A component with no call in
+the second half of its token's life expires. That is half to the whole
+lifetime after its last call (12 to 24 hours by default), depending on
+the token's age at that call.
+
+Each component on a page has its own token, and only that component's
+calls renew it. These calls do not renew a token:
+
+- A call to a handler declared with
+  [`detached=True`](/events/actions/#skip-the-queue-for-a-read-only-call),
+  a read-only handler that skips the call queue. A component whose calls
+  all go to detached handlers expires on schedule.
+- A call that has no page to send the new token to, such as one from an
+  API client or from a form posted without JavaScript.
+- A call where Citry cannot make the new token, for example because
+  State is over a lowered `_max_bytes`. The call still succeeds, Citry
+  logs a warning, and the current token keeps working until it expires.
+
+A call that changes nothing and does not render the component keeps the
+old token until the token is half its lifetime old, so its expiry does
+not move. A renewal sends the public State to the page again, so Vue
+code that watches an object or list field of `$state` runs again. With
+`_storage = "server"`, each new token adds one cache entry.
+
+Anyone who holds a copy of a token can also renew it by calling at
+least once per half lifetime. [Security](/security/#treat-state-as-client-input)
+says what that means for permission checks.
+
+A token can stop working up to one second early. A token issued before a
+deploy that changes `_max_age` keeps the lifetime it was issued with. It
+is renewed at half that lifetime, and its replacement gets the lifetime
+the component declares by then.
 
 ## Pydantic State { #pydantic-state }
 

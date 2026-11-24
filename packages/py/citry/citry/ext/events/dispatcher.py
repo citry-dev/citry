@@ -95,10 +95,13 @@ from citry.ext.events.tokens import (
     StaleStateError,
     StateUpdateError,
     apply_state_updates,
+    commit_state_token,
     mint_state_token,
     oversized_state_decimals,
+    prepare_state_token,
     state_bytes,
     state_growth_error,
+    state_renewal_due,
     verify_state_token,
 )
 from citry.extension import _as_list_of_items
@@ -475,6 +478,9 @@ class _CallPlan:
     kwargs: dict[str, Any]
     state: Any
     state_fingerprint: str | None
+    # The verified token is past half its lifetime, so the call sends a new
+    # one even when State does not change (see `_resign_state`).
+    renew_state: bool
     instance_id: str | None
     send_sequence: int | None
     # The on_event hook's answer, when an extension answered the call in the
@@ -530,6 +536,45 @@ def _too_deep_to_write(state: Any) -> bool:
     except Exception:  # noqa: BLE001 - other failures are reported where the State is signed
         return False
     return False
+
+
+# The component class ids and error kinds whose failed State token renewal was
+# already logged, so each warns once rather than on every call for up to half
+# a token lifetime, while a different kind of failure still warns. Later
+# repeats log at debug level.
+_RENEWAL_FAILURES_LOGGED: set[tuple[str, str]] = set()
+
+
+def _log_failed_renewal(comp_cls: type[Component], err: Exception) -> None:
+    """Log why a State token could not be renewed: a warning once per component class and error kind, then debug."""
+    message = (
+        f"Component {comp_cls.__name__}: the State token is past half its lifetime, but a new one could not be"
+        f" made, so the page keeps its current token until it expires: {type(err).__name__}: {err}"
+    )
+    seen = (comp_cls.class_id, type(err).__name__)
+    if seen in _RENEWAL_FAILURES_LOGGED:
+        logger.debug(message)
+        return
+    _RENEWAL_FAILURES_LOGGED.add(seen)
+    # A value that cannot be signed or a cache that is down is expected and
+    # explained by the message. Anything else may be a bug in Citry, which
+    # would otherwise show only as pages expiring, so it keeps its traceback.
+    logger.warning(message, exc_info=not isinstance(err, (ValueError, OSError)))
+
+
+def _instances_given_a_token(wire_actions: list[dict[str, Any]]) -> set[str]:
+    """The render ids that these result actions give a new State token."""
+    ids: set[str] = set()
+    for action in wire_actions:
+        if action.get("action") == "state":
+            ids.add(action["targetRenderId"])
+        elif action.get("action") == "render":
+            # A render of a component carries that component's new token in
+            # the content it sends; a `mark:` region inside one carries none.
+            target = action.get("target")
+            if isinstance(target, str) and target.startswith("render:"):
+                ids.add(target.removeprefix("render:"))
+    return ids
 
 
 def _is_detached(handler: EventHandler) -> bool:
@@ -649,6 +694,9 @@ class EventsDispatcher:
             return checked
         envelope_id, calls, capabilities = checked
         results: list[dict[str, Any]] = []
+        # The caller instances that an earlier call in this request already
+        # sent a token, so a later call does not renew from older State.
+        token_sent_to: set[str] = set()
         # The calls of one request share one work budget for data that can be
         # checked more than once.
         with request_work():
@@ -657,6 +705,7 @@ class EventsDispatcher:
                     call,
                     ctx,
                     capabilities=capabilities,
+                    token_sent_to=token_sent_to,
                     request=request,
                     url_component=url_component,
                     url_event=url_event,
@@ -707,6 +756,9 @@ class EventsDispatcher:
             return checked
         envelope_id, calls, capabilities = checked
         results: list[dict[str, Any]] = []
+        # The caller instances that an earlier call in this request already
+        # sent a token, so a later call does not renew from older State.
+        token_sent_to: set[str] = set()
         # The calls of one request share one work budget for data that can be
         # checked more than once.
         with request_work():
@@ -715,6 +767,7 @@ class EventsDispatcher:
                     call,
                     ctx,
                     capabilities=capabilities,
+                    token_sent_to=token_sent_to,
                     request=request,
                     url_component=url_component,
                     url_event=url_event,
@@ -756,6 +809,7 @@ class EventsDispatcher:
         ctx: TransportContext,
         *,
         capabilities: dict[str, frozenset[str]],
+        token_sent_to: set[str],
         request: EventRequest | None,
         url_component: str | None,
         url_event: str | None,
@@ -803,7 +857,7 @@ class EventsDispatcher:
                     handler=plan.handler.name,
                 )
                 warn_unreturned_actions(plan.events, actions, plan.handler.name)
-            return self._complete_call(plan, ctx, actions, capabilities)
+            return self._complete_call(plan, ctx, actions, capabilities, token_sent_to)
         except EventError as err:
             return build_error_result(wire_error(err), plan.send_sequence)
         except Exception as err:  # noqa: BLE001 - the dispatcher answers 500, never crashes the host
@@ -815,6 +869,7 @@ class EventsDispatcher:
         ctx: TransportContext,
         *,
         capabilities: dict[str, frozenset[str]],
+        token_sent_to: set[str],
         request: EventRequest | None,
         url_component: str | None,
         url_event: str | None,
@@ -855,7 +910,7 @@ class EventsDispatcher:
                     handler=plan.handler.name,
                 )
                 warn_unreturned_actions(plan.events, actions, plan.handler.name)
-            return self._complete_call(plan, ctx, actions, capabilities)
+            return self._complete_call(plan, ctx, actions, capabilities, token_sent_to)
         except EventError as err:
             return build_error_result(wire_error(err), plan.send_sequence)
         except Exception as err:  # noqa: BLE001 - the dispatcher answers 500, never crashes the host
@@ -934,6 +989,7 @@ class EventsDispatcher:
         # Token verification and two-way binding updates (design 6.1, WP8).
         state = None
         state_fingerprint: str | None = None
+        renew_state = False
         token = call.get("stateToken")
         updates = call.get("stateUpdates")
         needs_state = "state" in handler.params
@@ -1040,6 +1096,7 @@ class EventsDispatcher:
                 )
                 return build_error_result(error, send_sequence)
             state_fingerprint = _state_fingerprint(state)
+            renew_state = state_renewal_due(verified)
             if state_fingerprint is None and _too_deep_to_write(state):
                 # Pydantic's limit on writing nested values depends on the
                 # platform, so a token signed by a server with a higher limit
@@ -1193,6 +1250,7 @@ class EventsDispatcher:
             kwargs=kwargs,
             state=state,
             state_fingerprint=state_fingerprint,
+            renew_state=renew_state,
             instance_id=instance_id,
             send_sequence=send_sequence,
             answered=answered,
@@ -1308,6 +1366,7 @@ class EventsDispatcher:
         ctx: TransportContext,
         actions: list[Any],
         capabilities: dict[str, frozenset[str]],
+        token_sent_to: set[str],
     ) -> dict[str, Any]:
         """Encode, apply capabilities, emit ``on_event_result``, re-sign state, echo send_sequence."""
         if ctx.response_mode == "compat":
@@ -1421,12 +1480,13 @@ class EventsDispatcher:
         # handler itself may not return.
         self._check_detached_result(plan, final_actions)
         try:
-            final_actions = self._resign_state(plan, ctx, final_actions, capabilities)
+            final_actions = self._resign_state(plan, ctx, final_actions, capabilities, token_sent_to)
         except ProtocolValueError:
             # A public State value the browser cannot read (such as an integer wider
             # than a browser number) is a result encoding failure, not a handler bug.
             return build_error_result(build_error(500, "handler_error", _MSG_UNENCODABLE_RESULT), plan.send_sequence)
         final_actions = self._apply_capabilities(final_actions, capabilities, handler=plan.handler.name)
+        token_sent_to.update(_instances_given_a_token(final_actions))
 
         if _debug_enabled() and plan.state is not None and self._state_changed(plan):
             kinds = {action.get("action") for action in final_actions}
@@ -1533,6 +1593,7 @@ class EventsDispatcher:
         ctx: TransportContext,
         wire_actions: list[dict[str, Any]],
         capabilities: dict[str, frozenset[str]],
+        token_sent_to: set[str],
     ) -> list[dict[str, Any]]:
         """
         Changed State means a fresh token and fresh public values in the response (design 4.3).
@@ -1543,9 +1604,18 @@ class EventsDispatcher:
         placement breaks no ordering promise: the action is server-added, and
         the client applies a result's State refresh before the actions array
         either way.
+
+        A token past half its lifetime gets the same ``state`` action with
+        unchanged State, so a component that keeps getting calls never
+        reaches the expiry (design 7.1). ``_renewal_wanted`` and ``_renew_state`` skip it
+        wherever it could do harm or nobody would store it.
         """
-        if plan.state is None or not self._state_changed(plan):
+        if plan.state is None:
             return wire_actions
+        if not self._state_changed(plan):
+            if not self._renewal_wanted(plan, token_sent_to):
+                return wire_actions
+            return self._renew_state(plan, ctx, wire_actions, capabilities)
         if plan.instance_id is not None:
             self_target = f"render:{plan.instance_id}"
             if any(
@@ -1587,6 +1657,68 @@ class EventsDispatcher:
         # The browser shows public State through `$state` and State bindings, and
         # nothing else will refresh them: the caller is not rendered again here.
         state_action = build_state_action(plan.instance_id, token, public_state_values(plan.state, meta))
+        return [state_action, *wire_actions]
+
+    @staticmethod
+    def _renewal_wanted(plan: _CallPlan, token_sent_to: set[str]) -> bool:
+        """Whether a call whose State did not change should still send a new token."""
+        if not plan.renew_state or plan.instance_id is None:
+            # A young token needs nothing, and a call without a caller
+            # instance (an API client or a plain form) has nowhere to store one.
+            return False
+        if _is_detached(plan.handler):
+            # The browser may send a detached call while queued calls are in
+            # flight, so its token could replace the newer one a queued call
+            # returns. A later call that is not detached renews instead.
+            return False
+        # An earlier call in this request may already have sent this caller a
+        # token, possibly for State it changed. Renewing from this call's
+        # older State would undo that change in the browser.
+        return plan.instance_id not in token_sent_to
+
+    def _renew_state(
+        self,
+        plan: _CallPlan,
+        ctx: TransportContext,
+        wire_actions: list[dict[str, Any]],
+        capabilities: dict[str, frozenset[str]],
+    ) -> list[dict[str, Any]]:
+        """Send unchanged State with a new token, or return the result as it is when a new token cannot help."""
+        meta = plan.info.state_meta
+        if meta is None or plan.instance_id is None:  # pragma: no cover - checked by the caller
+            return wire_actions
+        self_target = f"render:{plan.instance_id}"
+        if any(action.get("action") == "render" and action.get("target") == self_target for action in wire_actions):
+            # A render of the caller already carries a token with a full lifetime.
+            return wire_actions
+        if "state" not in capabilities["actions"] or ctx.response_mode == "compat":
+            # The client cannot store a token from a `state` action: it said
+            # so in its capabilities, or it is a form posted without
+            # JavaScript, whose answer drops the action. Its current token
+            # keeps working until it expires.
+            return wire_actions
+        try:
+            prepared = prepare_state_token(
+                plan.state,
+                class_id=plan.comp_cls.class_id,
+                secret=ctx.citry.settings.secret,
+                max_age=meta.max_age,
+                max_bytes=meta.max_bytes,
+                storage=meta.storage,
+                component_name=plan.comp_cls.__name__,
+            )
+            state_action = build_state_action(plan.instance_id, prepared.token, public_state_values(plan.state, meta))
+            # Written last, so a token dropped by the checks above leaves no
+            # server-storage entry behind.
+            commit_state_token(prepared, ctx.citry.cache)
+        except Exception as err:  # noqa: BLE001 - a renewal is optional and must not fail the call
+            # The handler did not change State, so the call itself succeeded.
+            # A State that cannot be signed again (one over a `_max_bytes`
+            # lowered since the token was made, a public value the browser
+            # cannot read, or a cache that refuses the write) keeps its
+            # current token until it expires rather than failing the call.
+            _log_failed_renewal(plan.comp_cls, err)
+            return wire_actions
         return [state_action, *wire_actions]
 
     @staticmethod

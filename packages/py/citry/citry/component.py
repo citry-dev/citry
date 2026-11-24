@@ -909,8 +909,12 @@ class Component(metaclass=ComponentMeta):
             [Guide](/events/state/#max-bytes).
         _max_age (datetime.timedelta | None): How long a State token works
             after Citry issues it. Default: 24 hours, which ``None`` also
-            means. At least one second; a call with an expired token fails
-            with ``stale_state``. [Guide](/events/state/#max-age).
+            means. At least one second. A call made once the token is past
+            half its lifetime gets a new token with a full lifetime, so a
+            component whose page keeps making calls keeps working; the
+            guide lists the calls that do not renew. A call with an expired
+            token fails with ``stale_state``.
+            [Guide](/events/state/#max-age).
     """
 
     Events: ClassVar[type | None] = None

@@ -65,16 +65,40 @@ State holds, as in the example above. With server storage
 cache entry expires or the cache drops it.
 
 A token expires 24 hours after Citry issues it, with either storage.
-Citry issues a new token each time it renders the component and after
-each call that changes State. The expiry limits how long a copied token
-stays useful. A call with an expired token does not run its handler: it
-gets a `stale_state` error, and calls from that component keep failing
-until the visitor reloads the page, which brings a fresh token.
+Citry issues a new token each time it renders the component, after each
+call that changes State, and after a call made once the token is past
+half its lifetime (12 hours by default). So a component that gets a call
+at least once every half lifetime keeps working. A component that gets no
+call in the second half of its token's life expires.
+
+Each component on the page has its own token, renewed only by its own
+calls. A component whose calls all go to
+[`detached`](/events/actions/#skip-the-queue-for-a-read-only-call)
+handlers, which are read-only handlers that skip the call queue, expires
+on schedule, because those calls never get a new token.
+
+A copied token stays useful until it expires, and longer if someone keeps
+calling with it. Anyone who sends calls with a copy at least once per
+half lifetime keeps getting new tokens, as the page does, even when it
+calls only handlers that read State.
+
+Handlers use POST by default, which keeps the token out of the URL. A
+handler that opts into GET with `@event(methods=("GET",))` or
+`Events._methods`, and declares `state`, receives the token in its URL,
+where it can end up in server and proxy logs. Whoever can read those logs
+can keep that token alive the same way. A token grants no permission, so
+check permissions in every handler.
+
+A call with an expired token does not run its handler: it gets a
+`stale_state` error, and calls from that component keep failing until
+the visitor reloads the page, which brings a fresh token.
 [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)
 shows how to tell the visitor.
 
 To change the lifetime, set [`State._max_age`](/events/state/#max-age).
-No setting turns expiry off.
+A call renews a token once it is past half its lifetime, so set it to at
+least twice the longest time a page may go without a call. No setting
+turns expiry off.
 
 To stop accepting every signed token issued so far, give
 `Citry(secret=...)` a new secret and drop the one that signed them. A page
@@ -106,9 +130,9 @@ still sent as plain values, so list the fields the browser needs in
 them. Server storage does not replace the permission check either: still
 authorize every use of the restored values.
 
-Server storage adds a cache entry at every render and after every call
-that changes State, and keeps each one until it expires: after
-`State._max_age`, or after 24 hours when you do not set it. With several
+Server storage adds a cache entry for each token Citry issues (see
+above), and keeps each entry until it expires: after `State._max_age`,
+or after 24 hours when you do not set it. With several
 server processes, use a shared backend and set its memory limit and
 eviction policy. A browser write that would make the stored
 State larger than [`State._max_bytes`](/events/state/#max-bytes)
