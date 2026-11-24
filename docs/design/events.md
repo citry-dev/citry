@@ -1368,6 +1368,12 @@ semantics are two handlers, which keeps a binding's behavior readable
 from the handler it names. `detached` only allows a call outside the
 queue; the call site still asks for it with `wait: false`.
 
+The extension copies every `@event` setting onto the class's
+`EventHandler` when the class is created, and the dispatcher and the
+class descriptor read them from there, never from the function. So
+decorating or editing a shared function later cannot change how a class
+that already exists handles its calls.
+
 Two per-handler knobs from earlier drafts are **derived, not
 configured**. Token requirement follows the signature. A handler
 declaring `state` on a component with no State class is a

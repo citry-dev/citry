@@ -25,7 +25,7 @@ from citry import Citry as _Citry
 from citry import Component, NestedSchemaReplacedWarning
 from citry.ext.events import EventsExtension, ViewEvents, event
 from citry.ext.events.emission import EventInstanceEntry, build_events_manifest
-from citry.ext.events.handlers import EventOptions, event_options
+from citry.ext.events.handlers import EVENT_OPTIONS_ATTR, EventOptions, event_options
 from citry.ext.events.schemas import validate_args
 
 
@@ -1524,6 +1524,29 @@ class TestEventDecorator:
         assert descriptor["eventHandlers"] == {
             "preview": {"httpMethod": "POST", "latestCallWins": True, "detached": True},
             "save": {"httpMethod": "POST"},
+        }
+
+    def test_manifest_keeps_the_settings_the_class_was_created_with(self):
+        app = _Citry()
+        written = []
+
+        class Comp(Component):
+            citry = app
+
+            class Events:
+                @event(detached=True, latest_wins=True, bundle=False)
+                def preview(self):
+                    return None
+
+                written.append(preview)
+
+        # Changing the function's settings after the class exists must not
+        # change what the browser is told about this class's handler.
+        setattr(written[0], EVENT_OPTIONS_ATTR, EventOptions())
+        entry = EventInstanceEntry("r1", Comp.class_id, None, "{}")
+        [descriptor] = build_events_manifest(_events_ext(app), app, [entry])["componentClasses"]
+        assert descriptor["eventHandlers"] == {
+            "preview": {"httpMethod": "POST", "latestCallWins": True, "allowBatching": False, "detached": True},
         }
 
     def test_decorator_value_validation(self):

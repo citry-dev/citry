@@ -13,7 +13,6 @@ from citry._protocol.events import (
 )
 from citry.constness import const_value
 from citry.ext.events import _pydantic_bounded as bounded
-from citry.ext.events.handlers import event_options
 from citry.ext.events.state import public_state_values, state_field_names
 from citry.ext.events.tokens import mint_state_token
 
@@ -105,15 +104,14 @@ def build_events_manifest(
         info = extension.resolve(citry.get_component_by_class_id(entry.component_class_id))
         event_handlers: dict[str, dict[str, object]] = {}
         for handler in info.handlers.values():
-            options = event_options(handler.func)
             event_handlers[handler.name] = build_handler_descriptor(
                 handler.methods[0],
                 uses_state="state" in handler.params,
                 debounce_milliseconds=handler.debounce,
                 throttle_milliseconds=handler.throttle,
-                latest_call_wins=options is not None and options.latest_wins,
-                allow_batching=options is None or options.bundle,
-                detached=options is not None and options.detached,
+                latest_call_wins=handler.latest_wins,
+                allow_batching=handler.bundle,
+                detached=handler.detached,
             )
         writable = (
             info.state_meta.model

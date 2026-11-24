@@ -4057,6 +4057,79 @@ class TestEpochEchoOnRejections:
         assert [item["sendSequence"] for item in results] == list(range(17))
 
 
+class TestHandlerSettingsAreCopiedAtClassCreation:
+    """
+    A handler keeps the ``@event`` settings it had when its class was created.
+
+    Changing the function's stored settings afterwards (another decoration,
+    or a direct edit) must not change how an existing class behaves.
+    """
+
+    def test_turning_bundle_off_later_does_not_let_a_raw_response_through(self, caplog):
+        c = _citry()
+        written = []
+
+        class Export(Component):
+            citry = c
+            template = """
+                <div>export</div>
+            """
+
+            class Events:
+                def run(self):
+                    return RouteResponse(content=b"x")
+
+                written.append(run)
+
+        # The class was created without bundle=False; set it on the function now.
+        setattr(written[0], EVENT_OPTIONS_ATTR, EventOptions(bundle=False))
+        with caplog.at_level(logging.DEBUG, logger="citry"):
+            result = _dispatch(c, {"args": {}}, url_component=Export.class_id, url_event="run")
+        error = result["results"][0]["error"]
+        # Still refused, because the handler kept the settings it was created with.
+        assert error["code"] == "handler_error"
+        assert "@event(bundle=False)" in error["message"]
+
+    def test_turning_detached_off_later_keeps_the_render_refusal(self, caplog):
+        c = _citry()
+        written = []
+
+        class BoardState:
+            moves: int = 0
+
+        class Board(Component):
+            citry = c
+            State = BoardState
+            template = """
+                <div>{{ moves }}</div>
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"moves": 0}
+
+            class Events:
+                @event(detached=True)
+                def redraw(self, state):
+                    return Board()
+
+                written.append(redraw)
+
+        setattr(written[0], EVENT_OPTIONS_ATTR, EventOptions())
+        call = {
+            "componentClassId": Board.class_id,
+            "handlerName": "redraw",
+            "callerRenderId": "i1",
+            "stateToken": _token(Board),
+            "sendSequence": 3,
+        }
+        with caplog.at_level(logging.ERROR, logger="citry"):
+            [item] = _dispatch(c, call)["results"]
+        # Still detached, so the render it returned is refused.
+        assert item["error"]["code"] == "handler_error"
+        logged = "\n".join(record.getMessage() + str(record.exc_info[1]) for record in caplog.records)
+        assert "declared with @event(detached=True)" in logged
+
+
 class TestDetachedHandlers:
     """``@event(detached=True)``: the handler may read State but never render or change it."""
 

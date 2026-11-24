@@ -70,7 +70,7 @@ from citry.ext.events._pydantic_bounded import TOO_SLOW_MESSAGE, ValidationTooCo
 from citry.ext.events.actions import Render, _download_content_disposition
 from citry.ext.events.csrf import _MSG_CSRF_FAILED, csrf_field_names
 from citry.ext.events.errors import EventError, limit_unexpected_fields, unlisted_fields_note, wire_error
-from citry.ext.events.handlers import event_options, refuse_deferred_result
+from citry.ext.events.handlers import refuse_deferred_result
 from citry.ext.events.results import (
     HTML_RENDER_ENCODER,
     RenderEncoder,
@@ -538,8 +538,7 @@ def _too_deep_to_write(state: Any) -> bool:
 
 def _is_detached(handler: EventHandler) -> bool:
     """Whether the handler was declared ``@event(detached=True)``."""
-    options = event_options(handler.func)
-    return options is not None and options.detached
+    return handler.detached
 
 
 def _detached_render_message(plan: _CallPlan) -> str:
@@ -1369,8 +1368,10 @@ class EventsDispatcher:
                 f" and call their per-event URL."
             )
             raise ValueError(msg)
-        options = event_options(plan.handler.func)
-        if options is None or options.bundle:
+        # Read from the handler, which copied the setting when the class
+        # was created, so a later change to the function cannot turn the
+        # batch-route refusal off.
+        if plan.handler.bundle:
             msg = (
                 f"Event handler {plan.handler.name!r} on component {plan.comp_cls.__name__} returned"
                 f" {result_name} but is eligible for bundled requests. Mark it with"

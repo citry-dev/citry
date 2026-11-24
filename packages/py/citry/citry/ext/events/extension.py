@@ -188,6 +188,16 @@ class EventHandler:
         return_type_display: Safe copied return annotation text, or ``None``.
         return_type_fidelity: Whether ``return_type_display`` is normalized.
         description: The handler's cleaned docstring, or ``None``.
+        latest_wins: Whether ``@event(latest_wins=True)`` opted the handler
+            into newest-wins queueing.
+        bundle: ``False`` when ``@event(bundle=False)`` keeps the handler's
+            calls out of batched requests.
+        detached: Whether the handler was declared ``@event(detached=True)``.
+
+    Every ``@event`` setting is copied here when the class is created, and
+    nothing reads the function's settings after that, so decorating or
+    changing the function later cannot change how this class's handler
+    behaves.
 
     """
 
@@ -205,6 +215,11 @@ class EventHandler:
     return_type_display: str | None
     return_type_fidelity: Literal["normalized", "unavailable"]
     description: str | None
+    # The defaults match an undecorated handler, so code that builds an
+    # EventHandler without these keeps its old meaning.
+    latest_wins: bool = False
+    bundle: bool = True
+    detached: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -826,6 +841,12 @@ class EventsExtension(Extension):
                     return_type_display=return_type_display,
                     return_type_fidelity=return_type_fidelity,
                     description=description,
+                    # Copied now, like every setting above, so a later
+                    # decoration or edit of the shared function cannot
+                    # change this class's handler at call or render time.
+                    latest_wins=options is not None and options.latest_wins,
+                    bundle=options is None or options.bundle,
+                    detached=options is not None and options.detached,
                 )
 
         return EventsInfo(

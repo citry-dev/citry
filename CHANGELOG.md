@@ -30,7 +30,10 @@
   above `@event(...)` that keeps `__wrapped__` but drops the settings.
   Code that did this loaded in 1.2.0, but the outer settings replaced
   the inner ones, so an inner `guard=` never ran. Put every setting in
-  one `@event(...)`, and write decorators with `functools.wraps`. See
+  one `@event(...)`, and write decorators with `functools.wraps`. A
+  handler now also keeps the `@event` settings it had when its class was
+  created, so changing the function later does not change how that
+  class's handler behaves. See
   [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
 - Security: an event guard that returns `False` now refuses the call
   with a 403, and one that returns an `EventError` refuses it with that
