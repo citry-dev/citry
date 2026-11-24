@@ -135,6 +135,10 @@ _MSG_UNENCODABLE_RESULT = (
     "The handler returned a value strict JSON cannot encode (for example, a Decimal or a non-finite number such as "
     "inf or nan)."
 )
+# The refusal a guard gets by returning False. Not a protocol example: it
+# reads like the 403 messages guards raise themselves ("Log in first."),
+# since the page may show it to the visitor.
+_MSG_GUARD_REFUSED = "You are not allowed to make this call."
 
 # Sentinel: "the on_event hook did not answer the call" (None is a valid
 # answer, meaning acknowledged with no actions).
@@ -545,6 +549,46 @@ def _detached_render_message(plan: _CallPlan) -> str:
         f" @event(detached=True) but returned actions.Render (or a component). A detached handler may"
         f" return data, dispatch an event, redirect, update the URL, or return a Download; remove"
         f" detached=True to render."
+    )
+
+
+def _apply_guard_result(source: str, guard: Any, result: Any) -> None:
+    """
+    Refuse the call when a guard's result says to, and warn about a result Citry ignores.
+
+    A guard refuses by raising ``EventError``. Returning ``False`` refuses
+    too, because an author who writes ``return user.is_staff`` means a
+    refusal, and letting that call through fails open. Any other value
+    that is not ``None`` lets the call go ahead with a warning, so a guard
+    that returns something by mistake shows up in the server log.
+
+    Args:
+        source: The guard's place, such as "The guard of event 'save' on
+            Editor", as the messages show it.
+        guard: The guard function, named in the warning.
+        result: What the guard returned.
+
+    Raises:
+        TypeError: When the result is unrun code (a coroutine or
+            generator); the dispatcher answers ``handler_error``.
+        EventError: With status 403 when the result is ``False``.
+
+    """
+    # Unrun code first: its body never ran, so whatever it would have
+    # returned is unknown and the call is refused as handler_error.
+    refuse_deferred_result(source, result)
+    if result is None:
+        return
+    # Only the bool False refuses. Other false values (0, "", an empty
+    # list) are not a clear refusal, so they take the warning below.
+    if result is False:
+        raise EventError(_MSG_GUARD_REFUSED, status=403)
+    # The type name, not the value: the value may hold request data, and
+    # the log line should not carry text the caller chose.
+    guard_name = getattr(guard, "__qualname__", None) or type(guard).__name__
+    logger.warning(
+        f"{source}: the guard {guard_name} returned a {type(result).__name__!r} object, which Citry ignores."
+        " A guard refuses a call by raising EventError or by returning False, so this call goes ahead."
     )
 
 
@@ -1178,19 +1222,23 @@ class EventsDispatcher:
                 # The component-level guard runs first and the handler's own
                 # guard second, so a per-handler check (an owner check, say)
                 # adds to the component's login check instead of replacing
-                # it. Either one raising refuses the call.
+                # it. Either one refusing refuses the call. Each result goes
+                # through _apply_guard_result: a coroutine returned unrun
+                # would pass the call and False means "refuse", so both
+                # fail closed there.
                 if handler.component_guard is not None:
-                    # A guard refuses by raising, so a coroutine it returned
-                    # unrun would pass the call; refusing it fails closed.
-                    refuse_deferred_result(
+                    _apply_guard_result(
                         f"The component guard of event {handler.name!r} on {comp_cls.__name__}",
+                        handler.component_guard,
                         handler.component_guard(events),
                     )
                 # The same function set at both levels runs once, so a guard
                 # that counts calls (a rate limit) counts each call once.
                 if handler.guard is not None and handler.guard is not handler.component_guard:
-                    refuse_deferred_result(
-                        f"The guard of event {handler.name!r} on {comp_cls.__name__}", handler.guard(events)
+                    _apply_guard_result(
+                        f"The guard of event {handler.name!r} on {comp_cls.__name__}",
+                        handler.guard,
+                        handler.guard(events),
                     )
         except EventError as err:
             return build_error_result(wire_error(err), send_sequence)

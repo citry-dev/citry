@@ -143,7 +143,10 @@ three places:
   runs after `_guard`;
 - a check inside the handler body.
 
-A guard rejects a call by raising `EventError`:
+A guard refuses a call by raising `EventError`, or by returning `False`.
+Raising lets you choose the message and status; returning `False`
+answers with status 403 and the message "You are not allowed to make
+this call.":
 
 ```citry
 from citry.ext.events import EventError
@@ -173,10 +176,16 @@ Use a guard for a rule every handler shares. Put a check that depends on
 the submitted data in the handler body, where the data has already been
 validated.
 
+Return nothing (`None`) to let the call go ahead. Any other return
+value, such as `True`, `0` or a string, also lets the call go ahead, and
+Citry logs a warning that names the guard, so a guard that returns a
+value by mistake shows up in the server log. Only `False` refuses.
+
 A handler's own guard runs in addition to the component's `_guard`.
 Citry first builds `self.context` with `_context`, so both guards can
 read it. It then runs `_guard`, then the handler's guard. The first one
-that raises `EventError` refuses the call, and nothing after it runs.
+that raises `EventError` or returns `False` refuses the call, and
+nothing after it runs.
 
 To check every component the same way, set an app-wide guard once:
 

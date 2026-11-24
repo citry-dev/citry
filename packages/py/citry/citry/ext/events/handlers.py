@@ -248,7 +248,7 @@ def validate_csrf_value(source: str, value: Any) -> str | bool | Callable[..., A
 
 
 # What a guard does, for the error that refuses an async one.
-GUARD_PURPOSE = "that takes the Events instance and raises EventError to refuse the call, or None"
+GUARD_PURPOSE = "that takes the Events instance and raises EventError or returns False to refuse the call, or None"
 
 # Calling one of these returns an object whose code has not run yet: a
 # coroutine (async def), an async generator, or a generator.
@@ -473,12 +473,15 @@ def event(
             Each must be one of GET, HEAD, POST, PUT, PATCH, DELETE, or
             OPTIONS, the methods the per-event route accepts.
         guard: Per-handler authorization function. It receives the
-            ``Events`` instance and raises ``EventError`` to refuse. It
-            runs after the component's ``_guard`` (or the app-wide
-            ``_guard`` in ``extensions_defaults["events"]`` when the
-            component defines none), and either one raising refuses the
-            call. It must be a plain ``def``, not ``async def``: Citry
-            calls it without awaiting it.
+            ``Events`` instance and refuses the call by raising
+            ``EventError`` or by returning ``False`` (a 403). Returning
+            ``None`` lets the call go ahead; any other value also lets it
+            go ahead and logs a warning. It runs after the component's
+            ``_guard`` (or the app-wide ``_guard`` in
+            ``extensions_defaults["events"]`` when the component defines
+            none), and either one refusing refuses the call. It must be a
+            plain ``def``, not ``async def``: Citry calls it without
+            awaiting it.
         component_guard: Pass ``False`` to skip the component's ``_guard``
             (or the app-wide ``_guard``) for this handler only, for a
             handler that must accept callers the rest of its component

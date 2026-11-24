@@ -1881,6 +1881,57 @@ class TestImmutableAssetRoutes:
         assert response.headers.get("access-control-allow-origin") is None
 
 
+class TestGuardThatReturnsFalseOnEveryRoute:
+    """A guard that returns False refuses the call on every route that runs guards."""
+
+    @staticmethod
+    def _locked(c, ran):
+        def refuse(events):
+            return False
+
+        class Locked(Component):
+            citry = c
+            template = """
+                <p>locked</p>
+            """
+
+            class Events:
+                _guard = refuse
+
+                @event(methods=("GET", "POST"))
+                def go(self):
+                    ran.append("go")
+
+        return Locked
+
+    @pytest.mark.parametrize("adapter", ["asgi", "wsgi"])
+    @pytest.mark.parametrize("route", ["batch", "per-event", "per-event-get", "form"])
+    def test_refused(self, adapter, route):
+        c = _citry()
+        ran = []
+        locked = self._locked(c, ran)
+        client = _landing_client(c, adapter)
+        if route == "batch":
+            envelope = {
+                "protocol": "citry-events/1",
+                "requestId": "r1",
+                "calls": [{"componentClassId": locked.class_id, "handlerName": "go", "args": {}}],
+            }
+            response = _post_envelope(client, "/citry/ext/events/call", envelope)
+        elif route == "per-event":
+            response = _post_call(client, locked, "go", {})
+        elif route == "per-event-get":
+            response = client.get(_event_url(locked, "go"), headers=RUNTIME_HEADERS)
+        else:
+            # The no-JavaScript form post: no runtime header, HTML answer.
+            response = client.post(_event_url(locked, "go"), data={"_citry_caller_render_id": "i1"})
+        if route == "form":
+            assert response.status_code == 403
+        else:
+            assert response.json()["results"][0]["error"]["code"] == "forbidden"
+        assert ran == []
+
+
 class TestCompatMode:
     def test_form_post_round_trip_renders_html(self):
         c = _citry()
