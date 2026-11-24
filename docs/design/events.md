@@ -978,7 +978,7 @@ declarations and no State on the subclass fail at definition, the same as
   | `_public` | tuple of field names | all fields | Which fields templates and client bindings may touch, and the only fields whose plain values ship client-side (4.4, 7.2). Omission from `_public` is how a field becomes server-only. |
   | `_model` | tuple of field names | same as `_public` | Which public fields the client may write, through two-way bindings or `$state`; declare it only to clamp down. Must be a subset of `_public` (7.2). |
   | `_storage` | `"signed"` \| `"server"` | `"signed"` | Where the round-trip State lives: signed into the client token (7.1), or, opt-in, a server-side store keyed by an opaque token (the livecomponents migration's step one, 10). |
-  | `_max_bytes` | `int`, or `None` with server storage | `8192`; `65536` with server storage | Signed storage: mint-time cap on the serialized State, a design-smell canary, not a technical limit (7.1); a browser write that would make the State larger answers 422 `invalid_args` before the handler runs, when the call would return a new token (a caller instance that accepts the `state` action). Server storage: browser writes may not grow the stored State past it; the call answers 422 `invalid_args` before the handler runs. `None` turns that check off, and is a definition error for signed storage. |
+  | `_max_bytes` | `int`, or `None` with server storage | `8192`; `65536` with server storage | Signed storage: mint-time cap on the serialized State, a design-smell canary, not a technical limit (7.1); a browser write that would make the State larger answers 422 `invalid_args` before the handler runs, when the call would return a new token (a caller instance whose answer can carry the `state` action; a form posted without JavaScript cannot). Server storage: browser writes may not grow the stored State past it; the call answers 422 `invalid_args` before the handler runs. `None` turns that check off, and is a definition error for signed storage. |
   | `_max_age` | `timedelta` | 24 hours | Token expiry in both storage modes; expired tokens answer `stale_state` and degrade per component, not per page (7.1). Server storage uses it as the cache entry's lifetime. A page that stays open longer sets a longer `timedelta`; there is no "never expires" value, and a value under one second raises `ValueError`. |
 
   Details and the security doctrine in 7.2.
@@ -5083,9 +5083,15 @@ every render, after every call that changes State, and when a call renews
 a token past half its lifetime. Renewal writes a new entry under a new
 key, as a State change does, so both storage modes renew through the same
 `state` action, and an entry is never rewritten after a client received
-its key. Server storage writes an entry only when a client receives the
-token, so a call with no caller instance, or from a client that does not
-accept the `state` action, stores nothing.
+its key. Server storage writes an entry only for a token that goes into an
+answer the client can store. A call with no caller instance, a client
+that does not accept the `state` action, and a form posted without
+JavaScript or another request that asks for HTML (whose answer drops
+`state` actions) store nothing. For a State change and for a renewal
+alike, the dispatcher builds the `state` action first and writes the entry
+last, so a token that cannot be sent leaves no entry behind. A State change
+whose public values the browser cannot read answers 500 `handler_error`,
+and the handler's own effects stay.
 The caller instance is a value the client sends, so this rule saves only
 honest traffic; it does not limit a client that names a made-up instance.
 
