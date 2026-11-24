@@ -337,9 +337,11 @@ def mint_state_token(
     """
     Turn a State instance into the opaque token delivered with the HTML.
 
-    The same call also runs at the end of a dispatch to re-mint the token from
-    the possibly-mutated State, so the client's stored token always reflects the
-    latest server state.
+    Citry calls this for each component with State that it renders. The
+    dispatcher makes the token after a State change or a renewal with
+    ``prepare_state_token`` and ``commit_state_token`` instead, so it can write
+    the server-storage entry only once the answer that carries the token is
+    ready.
 
     Args:
         state: The State instance to serialize: a dataclass instance, or a
@@ -417,11 +419,11 @@ def prepare_state_token(
     """
     Make a token like ``mint_state_token`` without writing to the cache yet.
 
-    A caller that may still drop the token (the dispatcher renewing a token,
-    which gives up when the public values cannot be sent) prepares it, checks
-    the rest of its answer, and only then writes the server-storage entry
-    with ``commit_state_token``. So a dropped token leaves no cache entry
-    that nobody will read.
+    A caller that may still drop the token (the dispatcher sending a new token
+    after a State change or a renewal, which cannot send a token whose public
+    values the browser cannot read) prepares it, checks the rest of its answer,
+    and only then writes the server-storage entry with ``commit_state_token``.
+    So a dropped token leaves no cache entry that nobody will read.
     """
     state_dict = _state_dict(state, class_id, component_name=component_name)
     return _prepare_state_token_values(
@@ -663,9 +665,9 @@ def state_growth_error(
     Return why the browser's writes made State too large, or ``None`` when they did not.
 
     Signed storage cannot sign a State over the cap, so a call that gets a
-    new token is refused before its handler runs. For server storage,
-    every State change stores a new cache entry, so the cap bounds what one
-    call's browser writes can add to the cache. With a ``before`` size, only
+    new token is refused before its handler runs. For server storage, a
+    State change that sends a token stores a new cache entry, so the cap
+    bounds what one call's browser writes can add to the cache. With a ``before`` size, only
     growth past the cap is refused: State the server itself made large keeps
     working when the browser changes it without making it larger.
     """

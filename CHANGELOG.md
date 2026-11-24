@@ -39,9 +39,6 @@
   browsers over plain http while your server says https, every call
   that is not a `GET` now fails; see
   [Fix an http Origin](https://citry.dev/advanced/web-frameworks/#fix-an-http-origin).
-
-### Changed
-
 - Security: `actions.Dispatch` now raises `ValueError` for the name of
   a standard DOM event, such as `click`, `submit`, `input`, `change`,
   `keydown` or `focus`, because the event would run the page's own
@@ -68,6 +65,14 @@
   the same HTML as when it renders without the cache. Earlier releases
   gave its root element an extra `data-cid` attribute, so the browser
   could load a second compiled template for the same component.
+- On free-threaded Python with the GIL off, the request data from an
+  Events check that failed, and the result of one that passed, are now
+  freed about a second after your code lets go of them, not up to 60
+  seconds later.
+- With `State._storage = "server"`, a call that changes State no longer
+  leaves an unused entry in your cache when its answer cannot carry the
+  new token. That covers a form posted without JavaScript, and a call
+  that fails because a public State value is one the browser cannot read.
 
 ## v1.2.0
 
