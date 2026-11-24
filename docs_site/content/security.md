@@ -65,9 +65,12 @@ State holds, as in the example above. With server storage
 cache entry expires or the cache drops it.
 
 A token expires 24 hours after Citry issues it, with either storage.
-Citry issues a new token each time it renders the component and after
-each call that changes State. The expiry limits how long a copied token
-stays useful. A call with an expired token does not run its handler: it
+Citry issues a new token each time it renders the component, after each
+call that changes State, and after a call whose token is past half its
+lifetime, so a page in use keeps working. The expiry limits how long a
+copied token stays useful when nobody sends it: like the page, someone
+who keeps sending calls with a copied token keeps getting new ones. A
+call with an expired token does not run its handler: it
 gets a `stale_state` error, and calls from that component keep failing
 until the visitor reloads the page, which brings a fresh token.
 [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)
@@ -115,8 +118,9 @@ still sent as plain values, so list the fields the browser needs in
 them. Server storage does not replace the permission check either: still
 authorize every use of the restored values.
 
-Server storage adds a cache entry at every render and after every call
-that changes State, and keeps each one until it expires: after
+Server storage adds a cache entry at every render, after every call
+that changes State, and when it gives a call a new token because the
+old one is past half its lifetime. It keeps each entry until it expires: after
 `State._max_age`, or after 24 hours when you do not set it. With several
 server processes, use a shared backend and set its memory limit and
 eviction policy. A browser write that would make the stored

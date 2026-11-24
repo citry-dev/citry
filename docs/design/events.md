@@ -4929,6 +4929,45 @@ Citry always writes `x`: `_max_age` after the mint time, or 24 hours when
 secret changes. `_max_age` must be at least one second, because the times
 are whole seconds and a shorter lifetime would expire every token at once.
 
+A page that is in use renews its token before the expiry. When a call
+arrives with a valid token that is past half its lifetime (the server's
+clock reads at least `t + (x - t) / 2`), the server sends a new token with
+a full `_max_age` from now, even when the handler did not change State.
+Session cookies are renewed the same way. So a page that calls at least
+once per half lifetime never expires, a page left idle still expires after
+`_max_age`, and the cost is at most one extra token per half lifetime. The
+half-way point comes from the token's own `t` and `x`, so a token minted
+under an older `_max_age` (or with `"x": null`) is due by its own lifetime,
+and the new one gets the lifetime the component declares now. Each server
+compares with its own clock: a token from a server whose clock runs ahead
+is renewed later, never refused for it. The renewal is the `state` action
+of the re-sign flow below, so the v1 protocol carries it unchanged.
+
+The server skips the renewal when it would do harm or nobody could store
+the token:
+
+- The handler changed State, or the result renders the calling instance.
+  The call already returns a new token with a full lifetime, so it returns
+  exactly one.
+- The call names no caller instance (an API client or a no-JS form), or
+  the client's capabilities leave out the `state` action. The current
+  token keeps working until it expires.
+- The handler is detached (`@event(detached=True)`). The browser may send
+  a detached call while queued calls are in flight, so a renewed token
+  could replace the newer token a queued call returns.
+- An earlier call in the same request already sent the caller instance a
+  token. All calls in a request carry the token from before the request,
+  so a later read-only call would otherwise replace the State an earlier
+  call changed with older State.
+- Making the token fails (the State no longer fits a lowered `_max_bytes`,
+  or a public value cannot be sent to the browser). The handler did not
+  change State, so the call still succeeds; the server logs a warning and
+  the current token keeps working until it expires.
+
+A call that sends no token (a GET handler that does not read State) cannot
+renew one. A render replayed from the render cache already signs its State
+again with a new mint time, as a fresh render does.
+
 A later 1.x release may move State tokens to a new version, because only
 Citry reads them. That works because a server answers `stale_state` (409)
 for a token whose version it does not know, and the browser then reports
@@ -5000,7 +5039,8 @@ handler. After the handler, a mutated State is re-signed and returned
 (inside the fragment manifest when a render action exists, as a `state`
 action otherwise, each carrying the public State values beside the
 token), so the client's stored token and its `$state` values always
-reflect the latest state.
+reflect the latest state. An unchanged State is re-signed the same way
+when its token is past half its lifetime, under the rules above.
 
 An optional server-side state store (the token carries a random key, and
 the State lives in `Citry.cache` under `citry:state:<key>`) ships in v1 as
@@ -5021,7 +5061,11 @@ The protocol does not change either way; that is the point of the
 opaque token.
 
 Server storage writes a new cache entry each time it makes a token: at
-every render, and after every call that changes State. It writes one only
+every render, after every call that changes State, and when a call renews
+a token past half its lifetime. Renewal writes a new entry under a new
+key, as a State change does, so both storage modes renew through the same
+`state` action, and an entry is never rewritten after a client received
+its key. It writes one only
 when a client receives the token, so a call with no caller instance, or
 from a client that does not accept the `state` action, stores nothing.
 The caller instance is a value the client sends, so this rule saves only
@@ -5032,8 +5076,8 @@ browser writes may not grow the stored State past `_max_bytes` (64 KiB by
 default). Citry never deletes an old entry when it makes a new one,
 because a call that times out in the browser can still commit on the
 server, and the browser would then hold a token whose entry is gone. A
-deployment therefore sizes its cache for the number of renders and State
-changes within that lifetime.
+deployment therefore sizes its cache for the number of renders, State
+changes, and renewals within that lifetime.
 
 The default `InMemoryCache` keeps State entries in a store of their own,
 under a byte budget (`state_max_bytes`, 64 MiB by default), and drops the
@@ -5075,7 +5119,11 @@ first key signs and every key verifies, and needs no shared runtime state or
 cache once every worker has the same ordered secret list. Its costs are
 equally deliberate: the user can decode every State field, the complete State
 rides on every call, and an old valid token remains replayable until it expires
-or its signing secret is removed. The token is bound to its component class
+or its signing secret is removed. Renewal does not extend that window for
+a token nobody sends, but whoever holds a copy can keep it alive the same
+way a page does, by sending a call at least once per half lifetime. A call
+that changes State already gave a copied token a new lifetime before
+renewal existed, so renewal on read-only calls adds little. The token is bound to its component class
 and protocol version, not to a user, session, page, instance, or latest State
 revision. Handlers must therefore reload authoritative data and perform
 authorization regardless of whether the token verifies.

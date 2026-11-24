@@ -40,7 +40,10 @@ way (it only stores and echoes the string):
   time-to-live, set from ``_max_age`` at mint, or 24 hours when it is unset.
 
 Both storage modes share one lifetime rule: a token is valid for ``_max_age``
-after it is minted, or for 24 hours when ``_max_age`` is unset. A token whose
+after it is minted, or for 24 hours when ``_max_age`` is unset. A call that
+arrives once the token is past half its lifetime gets a new token with a full
+lifetime, even when State did not change (``state_renewal_due``; the
+dispatcher sends it), so only a page left idle reaches the expiry. A token whose
 version this release does not know (one a newer or older release wrote) is
 treated like an expired one, so a version change in a later release costs an
 open page one reload.
@@ -212,11 +215,16 @@ class VerifiedState:
             typed State with ``restore_state(cls.State, state_kwargs)``.
         class_id: The class id the token was minted for; already checked to
             match the component the call is dispatching to.
+        renew_after: The time (epoch seconds) when the token is half way
+            through its lifetime. A call that arrives after it gets a new
+            token (see ``state_renewal_due``). ``None`` when the result did
+            not come from a token.
 
     """
 
     state_kwargs: dict[str, Any]
     class_id: str
+    renew_after: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -744,7 +752,26 @@ def verify_state_token(
         )
         raise InvalidStateError(msg)
 
-    return VerifiedState(state_kwargs=payload["s"], class_id=payload["c"])
+    # A page in use gets a new token once this one is half way through its
+    # lifetime, counted from the token's own mint time and expiry, so a page
+    # that keeps calling never reaches the expiry.
+    minted_at = payload["t"]
+    renew_after = minted_at + (_token_expiry(payload) - minted_at) / 2
+    return VerifiedState(state_kwargs=payload["s"], class_id=payload["c"], renew_after=renew_after)
+
+
+def state_renewal_due(verified: VerifiedState) -> bool:
+    """
+    Whether a verified token is old enough that the call should send a new one.
+
+    A token is due once it is past half its lifetime. Renewing then, rather
+    than only near the expiry, leaves a page that calls at least once per
+    half lifetime with a valid token, and costs at most one new token per
+    half lifetime. Each server compares the token's times with its own clock,
+    so a token minted by a server whose clock runs ahead is renewed later,
+    never refused for it.
+    """
+    return verified.renew_after is not None and _now() >= verified.renew_after
 
 
 def _refuse_unknown_version_prefix(token: str) -> None:
@@ -890,8 +917,8 @@ def _valid_payload_shape(payload: object) -> bool:
     return expiry is None or (type(expiry) in (int, float) and math.isfinite(expiry))
 
 
-def _check_expiry(payload: dict[str, Any]) -> None:
-    """Reject a token past its expiry field as stale."""
+def _token_expiry(payload: dict[str, Any]) -> float:
+    """The time (epoch seconds) a payload stops being valid."""
     expiry = payload.get("x")
     if expiry is None:
         # Releases before 1.0.0 wrote no expiry when `_max_age` was unset.
@@ -901,6 +928,12 @@ def _check_expiry(payload: dict[str, Any]) -> None:
         expiry = payload["t"] + int(_STATE_DEFAULT_MAX_AGE.total_seconds())
     if isinstance(expiry, bool) or not isinstance(expiry, (int, float)):
         raise InvalidStateError(_MALFORMED_MSG)
+    return expiry
+
+
+def _check_expiry(payload: dict[str, Any]) -> None:
+    """Reject a token past its expiry field as stale."""
+    expiry = _token_expiry(payload)
     if _now() >= expiry:
         msg = (
             "The state token has expired. Reload the page to get a fresh token; the component will"

@@ -1375,6 +1375,31 @@ class TestGetHandlers:
         assert response.status_code == 403
         assert response.json()["results"][0]["error"]["code"] == "invalid_state"
 
+    def test_a_get_with_an_old_token_gets_a_new_one(self, monkeypatch):
+        # The browser sends the token on a GET only to a handler that reads
+        # State, together with its render id, and takes a `state` action back.
+        c = _citry()
+        greeter = _greeter(c)
+        client = _mounted(c)
+        token = _token(greeter, text="stored")
+        monkeypatch.setattr("citry.ext.events.tokens._now", lambda: FIXED_NOW + 12 * 60 * 60)
+        response = client.get(
+            _event_url(greeter, "peek"), params={"_citry_state_token": token, "_citry_caller_render_id": "i1"}
+        )
+        state_action, data_action = response.json()["results"][0]["actions"]
+        assert data_action["value"] == {"text": "stored"}
+        assert state_action["action"] == "state"
+        assert state_action["targetRenderId"] == "i1"
+        assert state_action["stateToken"] != token
+
+    def test_a_get_without_a_token_gets_none(self, monkeypatch):
+        c = _citry()
+        greeter = _greeter(c)
+        client = _mounted(c)
+        monkeypatch.setattr("citry.ext.events.tokens._now", lambda: FIXED_NOW + 12 * 60 * 60)
+        response = client.get(_event_url(greeter, "echo"), params={"text": "hi", "_citry_caller_render_id": "i1"})
+        assert response.json()["results"][0]["actions"] == [{"action": "data", "value": {"echo": "hi"}}]
+
     def test_browser_get_preserves_protocol_mismatch_and_correlation(self):
         c = _citry()
         greeter = _greeter(c)
