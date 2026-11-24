@@ -120,12 +120,15 @@ class EventOptions:
     below it, the engine and factory defaults) applies. The queue knobs
     ``latest_wins``, ``bundle`` and ``detached`` have no component level (they
     are per-handler on purpose, design 3.5), so they hold plain booleans whose
-    defaults match an undecorated handler.
+    defaults match an undecorated handler. ``component_guard`` is a plain
+    boolean too: ``True`` (the default) runs the component-level guard before
+    ``guard``, and only an explicit ``False`` turns it off for this handler.
     """
 
     name: str | None = None
     methods: tuple[str, ...] | None = None
     guard: Callable[..., Any] | None = None
+    component_guard: bool = True
     csrf: str | bool | Callable[..., Any] | None = None
     debounce: int | None = None
     throttle: int | None = None
@@ -216,10 +219,12 @@ def validate_timing_value(source: str, value: Any) -> int | None:
 
 def validate_bool_value(source: str, value: Any) -> bool:
     """
-    Check a ``latest_wins`` / ``bundle`` / ``detached`` value: a plain bool.
+    Check a ``latest_wins`` / ``bundle`` / ``detached`` / ``component_guard`` value: a plain bool.
 
-    The queue knobs exist at the handler level only (design 3.5), so unlike
-    the validators above, only the ``@event`` decorator calls this.
+    These knobs exist at the handler level only (design 3.5), so unlike the
+    validators above, only the ``@event`` decorator calls this. A plain bool
+    matters most for ``component_guard``: a truthy stand-in such as ``0`` or
+    ``"no"`` must not decide whether an authorization check runs.
     """
     if not isinstance(value, bool):
         msg = f"{source} must be True or False; got {value!r}."
@@ -419,6 +424,7 @@ def event(
     name: str | None = None,
     methods: tuple[str, ...] | list[str] | None = None,
     guard: Callable[..., Any] | None = None,
+    component_guard: bool = True,
     csrf: str | bool | Callable[..., Any] | None = None,
     debounce: int | None = None,
     throttle: int | None = None,
@@ -435,6 +441,7 @@ def event(
     name: str | None = None,
     methods: tuple[str, ...] | list[str] | None = None,
     guard: Callable[..., Any] | None = None,
+    component_guard: bool = True,
     csrf: str | bool | Callable[..., Any] | None = None,
     debounce: int | None = None,
     throttle: int | None = None,
@@ -448,9 +455,11 @@ def event(
     Bare handlers need no decorator; use ``@event(...)`` only to override the
     component-level defaults for one handler. Every key not given falls back
     to the component's underscore config
-    (``_methods``, ``_guard``, ``_csrf``, ``_debounce``, ``_throttle``),
-    which itself falls back to ``extensions_defaults["events"]`` and then the
-    built-in defaults. The queue knobs ``latest_wins``, ``bundle`` and
+    (``_methods``, ``_csrf``, ``_debounce``, ``_throttle``), which itself
+    falls back to ``extensions_defaults["events"]`` and then the built-in
+    defaults. Guards are the exception: a ``guard`` given here runs after
+    the component's ``_guard`` rather than in its place (see ``guard`` and
+    ``component_guard`` below). The queue knobs ``latest_wins``, ``bundle`` and
     ``detached`` are the exception: they exist per handler only, so a call
     site that needs different queue semantics names a different handler. A
     detached handler also needs the call site to pass ``wait: false``; a
@@ -463,9 +472,18 @@ def event(
         methods: The allowed HTTP methods for this handler, e.g. ``("GET",)``.
             Each must be one of GET, HEAD, POST, PUT, PATCH, DELETE, or
             OPTIONS, the methods the per-event route accepts.
-        guard: Per-handler authorization function; replaces (does not stack
-            on) the component's ``_guard``. It must be a plain ``def``, not
-            ``async def``: Citry calls it without awaiting it.
+        guard: Per-handler authorization function. It runs after the
+            component's ``_guard`` (or the ``_guard`` in
+            ``extensions_defaults["events"]`` when the component sets
+            none), and either one raising ``EventError`` refuses the call.
+            It must be a plain ``def``, not ``async def``: Citry calls it
+            without awaiting it.
+        component_guard: Pass ``False`` to skip the component's ``_guard``
+            (or the engine-wide default ``_guard``) for this handler only,
+            for a handler that must be more open than the rest of its
+            component, such as a public sign-up call. Only ``guard`` then
+            runs, if you give one. Every other handler keeps the
+            component's guard.
         csrf: Per-handler CSRF policy: ``"auto"``, ``False``, or a plain
             (not async) function that raises ``EventError`` to refuse the
             request.
@@ -520,6 +538,11 @@ def event(
                 @event(detached=True)
                 def spell_check(self, data: SpellCheckIn) -> dict:
                     return {"typos": find_typos(data.text)}
+
+                # Runs after the component's _guard.
+                @event(guard=require_owner)
+                def delete(self, state: DocState):
+                    delete_document(state.doc_id)
         ```
 
     Raises:
@@ -537,6 +560,7 @@ def event(
         name=name,
         methods=validate_methods_value("@event(methods=...)", methods) if methods is not None else None,
         guard=validate_callable_value("@event(guard=...)", guard, GUARD_PURPOSE),
+        component_guard=validate_bool_value("@event(component_guard=...)", component_guard),
         csrf=validate_csrf_value("@event(csrf=...)", csrf) if csrf is not None else None,
         debounce=validate_timing_value("@event(debounce=...)", debounce),
         throttle=validate_timing_value("@event(throttle=...)", throttle),

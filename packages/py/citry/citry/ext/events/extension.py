@@ -175,7 +175,12 @@ class EventHandler:
         data_schema: The resolved ``data`` schema class, or ``None`` for a
             handler that declares no ``data``.
         methods: The allowed HTTP methods, uppercase.
-        guard: The authorization callable guarding this handler, or ``None``.
+        component_guard: The component-level guard that runs first: the
+            component's ``_guard``, or the engine default when the component
+            sets none. ``None`` when nothing configures one, or when the
+            handler opted out with ``@event(component_guard=False)``.
+        guard: The handler's own ``@event(guard=...)``, which runs after
+            ``component_guard``; ``None`` when the handler sets none.
         csrf: The CSRF policy: ``"auto"``, ``False``, or a callable.
         debounce: Client-side debounce in milliseconds, or ``None``.
         throttle: Client-side throttle in milliseconds, or ``None``.
@@ -191,6 +196,7 @@ class EventHandler:
     params: tuple[str, ...]
     data_schema: type | None
     methods: tuple[str, ...]
+    component_guard: Callable[..., Any] | None
     guard: Callable[..., Any] | None
     csrf: str | bool | Callable[..., Any]
     debounce: int | None
@@ -794,6 +800,12 @@ class EventsExtension(Extension):
                     )
                     raise ValueError(msg)
                 return_type_display, return_type_fidelity, description = capture_handler_introspection(func)
+                # Guards add up rather than replace: the component-level
+                # guard (its own _guard, else the engine default) runs for
+                # every handler, and a per-handler guard is an extra check on
+                # top. Only an explicit component_guard=False drops it, so a
+                # handler is never more open than its component by accident.
+                skips_component_guard = options is not None and not options.component_guard
                 handlers[wire_name] = EventHandler(
                     name=wire_name,
                     method_name=method_name,
@@ -801,7 +813,8 @@ class EventsExtension(Extension):
                     params=params,
                     data_schema=data_schema,
                     methods=options.methods if options is not None and options.methods is not None else methods,
-                    guard=options.guard if options is not None and options.guard is not None else guard,
+                    component_guard=None if skips_component_guard else guard,
+                    guard=options.guard if options is not None else None,
                     csrf=options.csrf if options is not None and options.csrf is not None else csrf,
                     debounce=options.debounce if options is not None and options.debounce is not None else debounce,
                     throttle=options.throttle if options is not None and options.throttle is not None else throttle,

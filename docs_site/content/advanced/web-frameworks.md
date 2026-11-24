@@ -264,8 +264,10 @@ checks no links and prints one note saying so.
 ## Protect Citry's routes { #protect-citrys-routes }
 
 Check who may call an event in the component: a `_guard` method on its
-`Events` class runs before every handler, and `@event(guard=...)` runs
-before one handler. These checks run under every framework; see
+`Events` class runs before every handler, and `@event(guard=...)` adds
+a check for one handler, which runs after `_guard`. Only a handler marked
+`@event(component_guard=False)` skips `_guard`. These checks run under
+every framework; see
 [Authorize every event](/security/#authorize-every-event).
 
 Do not rely on a login check that your framework runs only for its own

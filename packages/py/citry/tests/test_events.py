@@ -1605,7 +1605,7 @@ class TestConfigResolution:
         assert info.debounce == 250
         # Handlers inherit the component-level resolution.
         assert info.handlers["go"].methods == ("PUT",)
-        assert info.handlers["go"].guard is engine_guard
+        assert info.handlers["go"].component_guard is engine_guard
 
     def test_component_level_beats_extensions_defaults(self):
         def engine_guard(events):
@@ -1627,9 +1627,10 @@ class TestConfigResolution:
 
         info = _events_ext(app).resolve(Comp)
         assert info.guard is comp_guard
-        assert info.handlers["go"].guard is comp_guard
+        assert info.handlers["go"].component_guard is comp_guard
+        assert info.handlers["go"].guard is None
 
-    def test_decorator_beats_component_level(self):
+    def test_decorator_beats_component_level_and_guards_add_up(self):
         def comp_guard(events):
             return None
 
@@ -1653,9 +1654,13 @@ class TestConfigResolution:
                     return None
 
         info = _events_ext(app).resolve(Comp)
+        # A handler's own guard runs after the component's, not in its place;
+        # the other per-handler keys still replace the component's value.
+        assert info.handlers["go"].component_guard is comp_guard
         assert info.handlers["go"].guard is handler_guard
         assert info.handlers["go"].debounce == 0
-        assert info.handlers["other"].guard is comp_guard
+        assert info.handlers["other"].component_guard is comp_guard
+        assert info.handlers["other"].guard is None
         assert info.handlers["other"].debounce == 250
 
     def test_guard_def_and_assignment_bind_identically(self):

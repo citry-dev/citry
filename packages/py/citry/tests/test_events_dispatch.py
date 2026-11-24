@@ -2709,6 +2709,229 @@ class TestAsyncGuardsAreRefused:
         assert ran == []
 
 
+class TestComponentAndHandlerGuardsBothRun:
+    """A handler's own guard runs after the component-level guard, not in its place."""
+
+    def _logging_guard(self, log, name, *, refuse=False):
+        def guard(events):
+            log.append(name)
+            if refuse:
+                raise EventError(f"{name} refused.", status=403)
+
+        return guard
+
+    def _component(self, c, log, *, component_guard=None, handler_guard=None, skip_component_guard=False):
+        """A component whose ``go`` handler has its own guard and whose ``plain`` handler has none."""
+        options = {"guard": handler_guard}
+        if skip_component_guard:
+            options["component_guard"] = False
+
+        def go(self):
+            log.append("go")
+            return {"ok": True}
+
+        def plain(self):
+            log.append("plain")
+            return {"ok": True}
+
+        attrs = {"go": event(**options)(go), "plain": plain}
+        if component_guard is not None:
+            attrs["_guard"] = component_guard
+        events_cls = type("Events", (), attrs)
+        return type("Guarded", (Component,), {"citry": c, "Events": events_cls, "template": "\n<div>g</div>\n"})
+
+    @staticmethod
+    def _call(comp, handler, *, use_async_dispatch=False):
+        envelope = _envelope({"componentClassId": comp.class_id, "handlerName": handler})
+        dispatcher = EventsDispatcher()
+        if use_async_dispatch:
+            result = asyncio.run(dispatcher.dispatch_async(envelope, _ctx(comp.citry)))
+        else:
+            result = dispatcher.dispatch(envelope, _ctx(comp.citry))
+        return result["results"][0]
+
+    @pytest.mark.parametrize("use_async_dispatch", [False, True], ids=["sync", "async"])
+    def test_the_component_guard_refuses_a_handler_that_has_its_own_guard(self, use_async_dispatch):
+        log = []
+        comp = self._component(
+            _citry(),
+            log,
+            component_guard=self._logging_guard(log, "component", refuse=True),
+            handler_guard=self._logging_guard(log, "handler"),
+        )
+        item = self._call(comp, "go", use_async_dispatch=use_async_dispatch)
+        assert item["error"]["status"] == 403
+        assert item["error"]["message"] == "component refused."
+        # The component guard refused first, so the handler guard never ran.
+        assert log == ["component"]
+
+    def test_the_handler_guard_refuses_after_the_component_guard_allows(self):
+        log = []
+        comp = self._component(
+            _citry(),
+            log,
+            component_guard=self._logging_guard(log, "component"),
+            handler_guard=self._logging_guard(log, "handler", refuse=True),
+        )
+        item = self._call(comp, "go")
+        assert item["error"]["message"] == "handler refused."
+        assert log == ["component", "handler"]
+
+    def test_both_guards_allow_in_order_after_one_context_call(self):
+        log = []
+
+        def context(events):
+            log.append("context")
+            return {"user": "ada"}
+
+        def component_guard(events):
+            log.append(f"component sees {events.context['user']}")
+
+        def handler_guard(events):
+            log.append(f"handler sees {events.context['user']}")
+
+        class Ordered(Component):
+            citry = _citry()
+            template = """
+                <div>o</div>
+            """
+
+            class Events:
+                _context = context
+                _guard = component_guard
+
+                @event(guard=handler_guard)
+                def go(self):
+                    log.append("go")
+
+        comp = Ordered
+        item = self._call(comp, "go")
+        assert item["ok"] is True
+        assert log == ["context", "component sees ada", "handler sees ada", "go"]
+
+    def test_the_engine_default_guard_runs_before_a_handler_guard(self):
+        log = []
+        c = _citry(extensions_defaults={"events": {"_guard": self._logging_guard(log, "engine", refuse=True)}})
+        comp = self._component(c, log, handler_guard=self._logging_guard(log, "handler"))
+        item = self._call(comp, "go")
+        assert item["error"]["message"] == "engine refused."
+        assert log == ["engine"]
+
+    def test_a_component_guard_replaces_the_engine_default(self):
+        # Between the component and the engine, the most specific _guard
+        # still wins; only the handler level adds rather than replaces.
+        log = []
+        c = _citry(extensions_defaults={"events": {"_guard": self._logging_guard(log, "engine", refuse=True)}})
+        comp = self._component(
+            c,
+            log,
+            component_guard=self._logging_guard(log, "component"),
+            handler_guard=self._logging_guard(log, "handler"),
+        )
+        assert self._call(comp, "go")["ok"] is True
+        assert log == ["component", "handler", "go"]
+
+    def test_component_guard_false_skips_only_that_handlers_component_guard(self):
+        log = []
+        comp = self._component(
+            _citry(),
+            log,
+            component_guard=self._logging_guard(log, "component", refuse=True),
+            handler_guard=self._logging_guard(log, "handler"),
+            skip_component_guard=True,
+        )
+        assert self._call(comp, "go")["ok"] is True
+        assert log == ["handler", "go"]
+        # The component's other handlers keep its guard.
+        log.clear()
+        assert self._call(comp, "plain")["error"]["status"] == 403
+        assert log == ["component"]
+
+    def test_component_guard_false_without_a_handler_guard_runs_no_guard(self):
+        log = []
+        comp = self._component(
+            _citry(),
+            log,
+            component_guard=self._logging_guard(log, "component", refuse=True),
+            skip_component_guard=True,
+        )
+        assert self._call(comp, "go")["ok"] is True
+        assert log == ["go"]
+
+    def test_component_guard_false_also_skips_the_engine_default(self):
+        log = []
+        c = _citry(extensions_defaults={"events": {"_guard": self._logging_guard(log, "engine", refuse=True)}})
+        comp = self._component(c, log, skip_component_guard=True)
+        assert self._call(comp, "go")["ok"] is True
+        assert self._call(comp, "plain")["error"]["status"] == 403
+        assert log == ["go", "engine"]
+
+    def test_the_same_function_at_both_levels_runs_once(self):
+        log = []
+        guard = self._logging_guard(log, "shared")
+        comp = self._component(_citry(), log, component_guard=guard, handler_guard=guard)
+        assert self._call(comp, "go")["ok"] is True
+        assert log == ["shared", "go"]
+
+    def test_an_inherited_component_guard_runs_before_a_subclass_handler_guard(self):
+        log = []
+        c = _citry()
+        component_guard = self._logging_guard(log, "component", refuse=True)
+        handler_guard = self._logging_guard(log, "handler")
+
+        class BaseEvents:
+            _guard = component_guard
+
+        class Child(Component):
+            citry = c
+            template = """
+                <div>c</div>
+            """
+
+            class Events(BaseEvents):
+                @event(guard=handler_guard)
+                def go(self):
+                    log.append("go")
+
+        assert self._call(Child, "go")["error"]["status"] == 403
+        assert log == ["component"]
+
+    def test_a_view_events_verb_runs_both_guards(self):
+        log = []
+        c = _citry()
+        component_guard = self._logging_guard(log, "component", refuse=True)
+        handler_guard = self._logging_guard(log, "handler")
+
+        class Page(Component):
+            citry = c
+            template = """
+                <div>p</div>
+            """
+
+            class Events(ViewEvents):
+                _guard = component_guard
+
+                @event(guard=handler_guard)
+                def post(self):
+                    log.append("post")
+
+                @event(guard=handler_guard, component_guard=False)
+                def put(self):
+                    log.append("put")
+
+        assert self._call(Page, "post")["error"]["status"] == 403
+        assert log == ["component"]
+        log.clear()
+        assert self._call(Page, "put")["ok"] is True
+        assert log == ["handler", "put"]
+
+    @pytest.mark.parametrize("value", [0, 1, "no", None])
+    def test_component_guard_must_be_a_bool(self, value):
+        # A truthy stand-in must not decide whether an authorization check runs.
+        with pytest.raises(ValueError, match=r"@event\(component_guard=\.\.\.\) must be True or False"):
+            event(component_guard=value)
+
+
 class TestInjection:
     def test_request_and_event_injectables(self):
         c = _citry()

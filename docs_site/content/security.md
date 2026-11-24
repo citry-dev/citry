@@ -139,7 +139,8 @@ the page. Check that the current user may perform the action, in one of
 three places:
 
 - `_guard` on `Events`, which runs before every handler of the component;
-- `@event(guard=...)`, which runs before one handler;
+- `@event(guard=...)`, which adds a check for one handler and runs
+  after `_guard`;
 - a check inside the handler body.
 
 A guard rejects a call by raising `EventError`:
@@ -171,6 +172,38 @@ class DocumentEditor(Component):
 Use a guard for a rule every handler shares. Put a check that depends on
 the submitted data in the handler body, where the data has already been
 validated.
+
+A handler's own guard adds to the component's `_guard`; it does not
+replace it. Citry runs `_context` first, then `_guard`, then the
+handler's guard, and either guard can refuse the call. When the
+component sets no `_guard`, the `_guard` in
+`extensions_defaults["events"]` runs in its place. A component that
+sets its own `_guard` replaces the app-wide one, so call the app-wide
+check from it when both must run.
+
+A handler that must be more open than the rest of its component, such
+as a public sign-up call on a component that otherwise needs a login,
+skips the component's guard with `component_guard=False`. Only that
+handler skips it, and its own guard, if you give one, still runs:
+
+```citry
+from citry.ext.events import event
+
+
+class Newsletter(Component):
+    class Events:
+        _guard = require_login
+
+        # Runs require_login, then require_admin.
+        @event(guard=require_admin)
+        def export_members(self):
+            ...
+
+        # Runs only rate_limit.
+        @event(component_guard=False, guard=rate_limit)
+        def sign_up(self, data: SignUpIn):
+            ...
+```
 
 Write guards and `_context` as plain `def` functions, not `async def`.
 Citry calls them without awaiting them, on WSGI and ASGI servers alike,
@@ -482,9 +515,11 @@ these names still receives it.
 FastAPI, Starlette, Flask, and plain ASGI or WSGI apps have no standard
 CSRF token. If your app uses one, check it with a function set as `_csrf`
 on `Events` for the whole component, or with `@event(csrf=...)` for one
-handler. The function receives the request and raises `EventError` to
-reject the call. Like a guard, it must be a plain `def` function, and
-Citry refuses an `async def` one when the component class is defined:
+handler. A handler's `csrf=` replaces the component's `_csrf` for that
+handler, because one call carries one token. The function receives the
+request and raises `EventError` to reject the call. Like a guard, it
+must be a plain `def` function, and Citry refuses an `async def` one
+when the component class is defined:
 
 ```citry
 from citry.ext.events import EventError, event

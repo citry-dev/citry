@@ -1175,9 +1175,21 @@ class EventsDispatcher:
                     refuse_deferred_result(
                         f"{comp_cls.__name__}: Events._context", events.context, coroutine_only=True
                     )
-                if handler.guard is not None:
+                # The component-level guard runs first and the handler's own
+                # guard second, so a per-handler check (an owner check, say)
+                # adds to the component's login check instead of replacing
+                # it. Either one raising refuses the call.
+                if handler.component_guard is not None:
                     # A guard refuses by raising, so a coroutine it returned
                     # unrun would pass the call; refusing it fails closed.
+                    refuse_deferred_result(
+                        f"The component guard of event {handler.name!r} on {comp_cls.__name__}",
+                        handler.component_guard(events),
+                    )
+                # The same function set at both levels runs once, as it did
+                # when the handler's guard replaced the component's, so a
+                # guard that counts calls (a rate limit) does not count twice.
+                if handler.guard is not None and handler.guard is not handler.component_guard:
                     refuse_deferred_result(
                         f"The guard of event {handler.name!r} on {comp_cls.__name__}", handler.guard(events)
                     )

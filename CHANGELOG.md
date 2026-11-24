@@ -14,6 +14,14 @@
   awaitable or a generator now fails the call, and so does a `_context`
   that returns a coroutine. See
   [GHSA-gj9m-wwqx-m37j](https://github.com/citry-dev/citry/security/advisories/GHSA-gj9m-wwqx-m37j).
+- Security: a handler's own `@event(guard=...)` now runs after the
+  component's `_guard` instead of replacing it, as the security guide
+  always said. Calls that the component's `_guard` (or the `_guard` in
+  `extensions_defaults["events"]`) refuses are now refused on handlers
+  that have their own guard too. A handler that must be more open than
+  its component skips the component's guard with
+  `@event(component_guard=False)`. See
+  [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
 
 ## v1.2.0
 
