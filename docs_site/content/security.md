@@ -82,12 +82,24 @@ calling with it. Anyone who sends calls with a copy at least once per
 half lifetime keeps getting new tokens, as the page does, even when it
 calls only handlers that read State.
 
-Handlers use POST by default, which keeps the token out of the URL. A
-handler that opts into GET with `@event(methods=("GET",))` or
-`Events._methods`, and declares `state`, receives the token in its URL,
-where it can end up in server and proxy logs. Whoever can read those logs
-can keep that token alive the same way. A token grants no permission, so
-check permissions in every handler.
+Citry's browser code keeps the State token out of the URL, which server
+and proxy logs record. Handlers use POST unless they opt into GET with
+`@event(methods=("GET",))` or `Events._methods`. A POST call sends the
+token in the request body. A GET call to a handler that declares `state`
+sends it in the `X-Citry-State-Token` header.
+
+Four things can still put a token in a log. The server also reads a
+token from the `_citry_state_token` query parameter, so a client of your
+own that sends it there logs it. Logs written before 1.3.0 hold the
+tokens that Citry's browser code sent in the URL. When a GET call
+gets an `invalid_state` answer from a server from before 1.3.0, or from
+any server when the event URL is on another origin or the call goes
+through a custom transport, Citry's browser code sends the call once
+more with the token in the URL. A log or tracing tool that records
+request headers also records `X-Citry-State-Token`, so
+leave that header out of it. Whoever can read a logged token can keep
+it alive by calling with it, as described above. A token grants no
+permission, so check permissions in every handler.
 
 A call with an expired token does not run its handler: it gets a
 `stale_state` error, and calls from that component keep failing until

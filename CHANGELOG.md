@@ -39,6 +39,24 @@
   browsers over plain http while your server says https, every call
   that is not a `GET` now fails; see
   [Fix an http Origin](https://citry.dev/advanced/web-frameworks/#fix-an-http-origin).
+- Citry's browser code now sends a GET event call's State token in the
+  `X-Citry-State-Token` header instead of the URL, so server and proxy
+  access logs do not record it by default. The server still reads the
+  `_citry_state_token` query parameter, so clients that send it there
+  keep working. If a server from an earlier release answers
+  `invalid_state`, as during a deploy or after a rollback, the browser
+  sends the call once more with the token in the URL; a custom
+  transport's `send` then runs twice for that call. If your event URL is
+  on another origin and your CORS setup lists the allowed request
+  headers, add `X-Citry-State-Token`. When a GET call sends the header
+  and the handler sets its own `Cache-Control`, Citry makes the policy
+  `private` and drops `public`, `s-maxage`, and CDN-only headers such as
+  `CDN-Cache-Control`, so a CDN that ignores `Vary` cannot give one
+  visitor's answer to another. See
+  [Allow GET requests](https://citry.dev/events/routes/#expose-a-read-only-get-endpoint).
+- Security: a GET event call whose header and query parameter carry
+  different State tokens is now refused with a `400` error, so a URL
+  cannot choose a token other than the one the browser sent.
 - Security: `actions.Dispatch` now raises `ValueError` for the name of
   a standard DOM event, such as `click`, `submit`, `input`, `change`,
   `keydown` or `focus`, because the event would run the page's own

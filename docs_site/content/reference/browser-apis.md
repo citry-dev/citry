@@ -606,7 +606,7 @@ envelope only for other methods:
 | --- | --- |
 | `url` | The event route, with the query string for a `GET` handler. |
 | `method` | The HTTP method, usually `POST`. |
-| `headers` | A new object with the request headers, including the CSRF token on calls that are not `GET`. |
+| `headers` | A new object with the request headers, including the CSRF token on calls that are not `GET`, and the State token in `X-Citry-State-Token` on a `GET` call to a handler that reads State. |
 | `signal` | An `AbortSignal` that fires when the call times out or Citry cancels it, for example because the component was removed. |
 
 Send `request.headers` to the server with the envelope. When a handler
@@ -614,7 +614,11 @@ returns a render, the server reads the `X-Citry-Vue-App`,
 `X-Citry-Vue-Occurrence`, and `X-Citry-Vue-Revision` headers to find the
 component the browser shows. Without them the call fails with
 `handler_error`, and the server log says the app, occurrence, or
-revision header is missing or invalid. The simplest transport sends the
+revision header is missing or invalid. A `GET` call to a handler that
+reads State carries its State token in `X-Citry-State-Token`, not in
+`url`. When the server answers such a call with `invalid_state`, Citry
+calls `send` once more, with a copy of the envelope, the token in `url`,
+and without that header. The simplest transport sends the
 envelope and `request.headers` to `request.url`, Citry's own event
 route.
 

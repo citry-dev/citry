@@ -2286,6 +2286,55 @@ def test_native_get_and_attachment_use_the_per_event_routes(page: Any, serve_liv
 
 
 @pytest.mark.e2e
+def test_a_get_call_that_reads_state_sends_its_token_in_a_header(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
+    # The URL of a GET call lands in access logs, so the browser must send
+    # the State token in a header and the server must read it from there.
+    engine = Citry(secret="vue-get-token-header-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class PeekState:
+        label: str = "kept"
+
+    class Peeker(Component):
+        citry = engine
+        template = """
+          <main>
+            <button id="peek" @click="peek">peek</button>
+            <output id="peek-result" v-text="result"></output>
+          </main>
+        """
+        js = """$component({
+          data(){return {result:''}},
+          methods:{peek(){this.$sendEvent('peek').then(value=>{this.result=value.label})}}
+        });"""
+
+        State = PeekState
+
+        class Events:
+            @event(methods=("GET",))
+            def peek(self, state: PeekState):
+                return {"label": state.label}
+
+    dispatcher_for(engine)
+    html = Peeker().render().serialize()
+    requests: list[Any] = []
+    faults: list[str] = []
+    page.on("request", lambda request: requests.append(request) if "/ext/events/e/" in request.url else None)
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    base = serve_live(engine, html, "")
+    open_citry_page(base + "/")
+    page.locator("#peek").click()
+    page.wait_for_function("document.querySelector('#peek-result')?.textContent === 'kept'")
+    [peek_request] = requests
+    assert peek_request.method == "GET"
+    assert "_citry_state_token" not in peek_request.url
+    assert peek_request.headers.get("x-citry-state-token")
+    assert faults == []
+
+
+@pytest.mark.e2e
 def test_two_serialized_vue_apps_share_runtime_without_reset(
     page: Any, serve_document: Any, open_citry_page: Any
 ) -> None:
