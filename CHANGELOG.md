@@ -37,8 +37,9 @@
   a function used as a `ViewEvents` verb handler in one class no longer
   changes the HTTP methods it accepts in another class. See
   [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
-- Security: an event guard that returns a false value (`False`, `0`,
-  an empty list or QuerySet) or an exception other than `EventError`
+- Security: an event guard that returns a false value other than
+  `None` (`False`, `0`, an empty list or QuerySet) or an exception other
+  than `EventError`
   now refuses the call with a 403, and one that returns an `EventError`
   refuses it with that error's status and message, as if it had raised
   it. Before, a guard written as `return user.is_staff` or

@@ -3373,6 +3373,20 @@ class TestGuardReturnValues:
         assert "testing it for true or false raised" in caplog.text
         assert "_returning.<locals>.guard" in caplog.text
 
+    def test_an_event_error_from_the_true_or_false_test_answers_as_raised(self):
+        # The value's own test refused in the author's words, so that error
+        # answers, as if the guard had raised it.
+        class Refusing:
+            def __bool__(self):
+                msg = "Sign in first."
+                raise EventError(msg, status=401)
+
+        log = []
+        comp = self._component(_citry(), log, handler_guard=self._returning(log, "handler", value=Refusing()))
+        item = self._call(comp, "go")
+        assert item["error"] == {"status": 401, "code": "error", "message": "Sign in first."}
+        assert log == ["handler"]
+
     def test_a_false_value_is_tested_once(self):
         log = []
         lazy = _EmptyLazyQuery()

@@ -143,11 +143,11 @@ three places:
   runs after `_guard`;
 - a check inside the handler body.
 
-A guard refuses a call by raising `EventError`, by returning an
-`EventError`, or by returning `False`. An `EventError`, raised or
-returned, lets you choose the message and status; returning `False`
-answers with status 403 and the message "You are not allowed to make
-this call." For example:
+A guard refuses a call by raising `EventError`, or by returning
+`False` or another value that means "no" (see below). An `EventError`,
+raised or returned, lets you choose the message and status; returning
+`False` answers with status 403 and the message "You are not allowed to
+make this call." For example:
 
 ```citry
 from citry.ext.events import EventError
@@ -185,15 +185,18 @@ can also refuse the call by returning a value that means "no":
 - Any other exception, such as Django's `PermissionDenied()`, refuses
   it with a 403 and the message above. The exception's own text never
   reaches the browser.
-- Any other false value, such as `False`, `0`, an empty list or an
-  empty QuerySet, refuses it with a 403.
+- Any false value other than `None`, such as `False`, `0`, an empty
+  list or an empty QuerySet, refuses it with a 403.
 
 Any other true value lets the call go ahead, and Citry logs a warning
 that names the guard. To decide, Citry tests the value for true or
 false once, which runs a QuerySet's database query; return
 `queryset.exists()` instead of the QuerySet so the query loads no rows.
 If that test raises an error, the call fails with a 500, as when the
-guard itself raises one.
+guard itself raises one. Under an async server such as Starlette or
+FastAPI, Citry runs guards on the event loop, where Django refuses a
+database query (including `.exists()`) with `SynchronousOnlyOperation`,
+so such a guard refuses every call with a 500.
 
 `None` lets the call go ahead, so return `False` explicitly: an
 expression such as `user and user.is_staff` gives `None` when there is

@@ -585,7 +585,8 @@ def _apply_guard_result(source: str, guard: Any, result: Any) -> None:
             run, or when testing the result for true or false raises; the
             dispatcher answers ``handler_error`` (500) to both.
         EventError: The returned error itself when the result is an
-            ``EventError``, or a 403 for any other refusal above.
+            ``EventError``, the error that testing the result raised, or
+            a 403 for any other refusal above.
 
     """
     # Unrun code first: its body never ran, so whatever it would have
@@ -620,6 +621,10 @@ def _apply_guard_result(source: str, guard: Any, result: Any) -> None:
     # up as an error in the log rather than as a user who is not allowed.
     try:
         allowed = bool(result)
+    except EventError:
+        # A value whose test refuses with an EventError means "no" in the
+        # author's own words, so that error answers, as a raised one would.
+        raise
     except Exception as error:
         msg = (
             f"{source}: guard {guard_name!r} returned a value of type {type(result).__name__!r}, and testing it"

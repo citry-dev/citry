@@ -324,8 +324,8 @@ def validate_csrf_value(source: str, value: Any) -> str | bool | Callable[..., A
 
 # What a guard does, for the error that refuses an async one.
 GUARD_PURPOSE = (
-    "that takes the Events instance and raises EventError, or returns False, another false value or an exception,"
-    " to refuse the call; or None for no guard"
+    "that takes the Events instance and raises EventError, or returns an exception or a false value other than"
+    " None, to refuse the call; or None for no guard"
 )
 
 # Calling one of these returns an object whose code has not run yet: a
