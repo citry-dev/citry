@@ -177,8 +177,9 @@ cpu_clock = _choose_cpu_clock()
 # STACK_SET_BY_RECURSION_LIMIT). Data that nests deeper is refused with
 # TOO_DEEP_MESSAGE. Each level takes room on the thread's stack, so the
 # limit keeps a check within a fixed amount of it. On CPython two stacks
-# bound the limit. Checks run on check threads with a stack of CHECK_STACK_BYTES (see `run_on_check_thread`),
-# which hold far more than 64 levels: the heaviest shape measured, a wrap
+# bound the limit. Checks run on check threads with a stack of
+# CHECK_STACK_BYTES (see `run_on_check_thread`), which hold far more than
+# 64 levels: the heaviest shape measured, a wrap
 # validator on a model and another on its field, takes about 14 KB per
 # level on macOS with Python 3.11, so data at the limit needs about
 # 0.9 MiB. The tighter bound is the handler, which gets the checked data on
@@ -211,9 +212,13 @@ SMALL_STACK_CHECK_DEPTH = 32
 #   checked, and left out of the count, they let data nested less deeply
 #   than the limit end the process;
 # - the limit is SMALL_STACK_CHECK_DEPTH on every thread. On PyPy 7.3.23
-#   the heaviest ordinary shape measured (a model whose field nests two
-#   lists, each with a few validators and constraints) used more than 80%
-#   of that stack at 64 levels, and less than half of it at 32.
+#   the heaviest ordinary shapes measured (models whose fields nest
+#   several lists, some with validators and constraints) used more than
+#   80% of that stack at 64 levels, and 30% to 70% of it at 32;
+# - a class that can hold itself inside `Json[...]` is refused, as for a
+#   State Citry reads only as JSON (`_RECURSIVE_CLASS_REASON`): no wrapper
+#   counts its levels there, and each JSON string starts a fresh parse, so
+#   strings nested inside each other could end the process.
 # Parts that pydantic-core checks without calling Python (lists, dicts,
 # optional values, the author's before and after validators) still take
 # stack at each level without counting, so a schema with dozens of such
@@ -679,7 +684,9 @@ def unbudgeted() -> Iterator[None]:
 
 def nesting_limit() -> int:
     """
-    Return the nesting limit here: ``MAX_CHECK_DEPTH`` on a check thread, ``SMALL_STACK_CHECK_DEPTH`` elsewhere.
+    Return the nesting limit for the running thread.
+
+    ``MAX_CHECK_DEPTH`` on a check thread, ``SMALL_STACK_CHECK_DEPTH`` elsewhere.
 
     Where ``STACK_SET_BY_RECURSION_LIMIT`` is set (PyPy), a check thread's
     large stack does not help, so the limit is ``SMALL_STACK_CHECK_DEPTH``
@@ -3103,7 +3110,9 @@ def checker_for(cls: type, *, state: bool = False, by_name: bool = False, repeat
         )
         checker = Checker(None, wrapped=False, refusal=refusal, **common)
         return _remember(store, cls, checker, complete=complete)
-    found = None if state else _unbounded_field(schema, root, _WRAPPED)
+    # On PyPy a recursive class inside `Json[...]` is refused too: nothing
+    # counts its levels there, and each JSON string starts a fresh parse.
+    found = None if state else _unbounded_field(schema, root, _WRAPPED, class_loops=STACK_SET_BY_RECURSION_LIMIT)
     if found is not None:
         # Registration refuses such a class when its schema is complete then;
         # this catches one that was completed later, or one that registration
@@ -3919,7 +3928,11 @@ def check_data_class(comp_name: str, cls: Any) -> None:
     if not is_pydantic_v2_class(cls):
         return
     root = core_schema_of(cls)
-    found = None if root is None else _unbounded_field(_Schema(root), root, _WRAPPED)
+    found = (
+        None
+        if root is None
+        else _unbounded_field(_Schema(root), root, _WRAPPED, class_loops=STACK_SET_BY_RECURSION_LIMIT)
+    )
     if found is None:
         return
     name, reason = found
@@ -4053,7 +4066,7 @@ def check_state_class(comp_name: str, cls: Any, writable: frozenset[str]) -> Non
     if not writable:
         return
     schema = _Schema(root)
-    found = _unbounded_field(schema, root, _WRAPPED, writable)
+    found = _unbounded_field(schema, root, _WRAPPED, writable, class_loops=STACK_SET_BY_RECURSION_LIMIT)
     if found is not None:
         name, reason = found
         # The plain type is not offered: a model State refuses some of these

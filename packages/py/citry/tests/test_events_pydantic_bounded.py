@@ -98,12 +98,26 @@ class _HandClock:
 def deep_checks(monkeypatch: pytest.MonkeyPatch) -> None:
     # A test of the work budget needs data deep enough for the budget to run
     # out before the nesting limit stops it, so these tests raise the limit
-    # to 150, which the stack of a check thread holds many times over. On
-    # PyPy a level of a recursive union counts three times or more (the
-    # union, the member's wrapper and the object), and the limit there is
-    # the small-stack one, so both are raised.
-    monkeypatch.setattr(bounded, "MAX_CHECK_DEPTH", 150)
-    monkeypatch.setattr(bounded, "SMALL_STACK_CHECK_DEPTH", 150)
+    # to 100, which the stack of a check thread holds many times over.
+    monkeypatch.setattr(bounded, "MAX_CHECK_DEPTH", 100)
+    _raise_pypy_limit(monkeypatch)
+
+
+@pytest.fixture
+def pypy_deep_checks(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A test of the work budget at the real nesting limit, run on PyPy too.
+    _raise_pypy_limit(monkeypatch)
+
+
+def _raise_pypy_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    # On PyPy a level of a recursive union counts three times or more (the
+    # union, the member's wrapper and the object) and the limit is the
+    # small-stack one, so a test of the work budget there raises both limits
+    # to 150. The data in these tests passed on PyPy before those rules, so
+    # it fits PyPy's stack; the rules themselves are tested on their own.
+    if bounded.STACK_SET_BY_RECURSION_LIMIT:
+        monkeypatch.setattr(bounded, "MAX_CHECK_DEPTH", 150)
+        monkeypatch.setattr(bounded, "SMALL_STACK_CHECK_DEPTH", 150)
 
 
 @pytest.fixture
@@ -761,6 +775,42 @@ def test_on_pypy_the_wrappers_of_a_wrap_validator_count_toward_the_nesting_limit
     assert validate_args(W, payload).fields == {"_args": bounded.TOO_DEEP_MESSAGE}
 
 
+def _json_tree_class() -> type[pydantic.BaseModel]:
+    class JTree(pydantic.BaseModel):
+        children: list[JTree] = []
+        blob: pydantic.Json[JTree] | None = None
+
+    return JTree
+
+
+def test_on_pypy_a_recursive_class_inside_json_is_refused_in_event_data(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Inside `Json[...]` no wrapper counts the class's levels, and each JSON
+    # string starts a fresh parse, so strings nested in each other could
+    # use up PyPy's stack. On CPython the class is accepted as before.
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", False)
+    bounded.check_data_class("Probe", _json_tree_class())
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", True)
+
+    with pytest.raises(ValueError, match=r"holds a Json\[\.\.\.\] value with a recursive class"):
+        bounded.check_data_class("Probe", _json_tree_class())
+
+
+def test_on_pypy_a_recursive_class_inside_json_is_refused_in_a_writable_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tree_class = _json_tree_class()
+
+    class Forest(pydantic.BaseModel):
+        tree: tree_class = tree_class()  # type: ignore[valid-type]
+
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", False)
+    bounded.check_state_class("Probe", Forest, frozenset({"tree"}))
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", True)
+
+    with pytest.raises(ValueError, match=r"holds a Json\[\.\.\.\] value with a recursive class"):
+        bounded.check_state_class("Probe", Forest, frozenset({"tree"}))
+
+
 @pytest.mark.usefixtures("pypy_stack_rules")
 def test_on_pypy_data_within_the_nesting_limit_is_accepted() -> None:
     # Counting each call must leave the count where it was after each part,
@@ -1215,7 +1265,7 @@ def test_a_check_inside_a_validation_counts_its_cpu_time_on_the_check_thread() -
 # --- recursive unions and the work budget -------------------------------------------
 
 
-@pytest.mark.usefixtures("deep_checks")
+@pytest.mark.usefixtures("pypy_deep_checks")
 def test_a_valid_filter_chain_fourteen_levels_deep_is_accepted() -> None:
     result = validate_args(Query, {"q": _chain(14, 1)})
 
@@ -1297,7 +1347,7 @@ def test_a_recursive_union_that_reads_each_value_with_one_member_spends_nothing(
     assert result.value == Blob.model_validate(payload)
 
 
-@pytest.mark.usefixtures("deep_checks")
+@pytest.mark.usefixtures("pypy_deep_checks")
 def test_the_calls_of_one_request_share_one_work_budget() -> None:
     payload = {"q": _chain(14, 1)}
     results = []
@@ -1308,7 +1358,7 @@ def test_the_calls_of_one_request_share_one_work_budget() -> None:
     assert results[-1].fields == {"_args": bounded.TOO_MUCH_WORK_MESSAGE}
 
 
-@pytest.mark.usefixtures("deep_checks")
+@pytest.mark.usefixtures("pypy_deep_checks")
 def test_a_plain_dataclass_recursive_union_too_deep_to_check_is_refused() -> None:
     @dataclasses.dataclass
     class DAnd:
@@ -1938,10 +1988,12 @@ class Ring(pydantic.BaseModel):
 Ring.model_rebuild()
 
 
-def test_a_strict_recursive_model_inside_a_json_field_reads_its_json() -> None:
+def test_a_strict_recursive_model_inside_a_json_field_reads_its_json(monkeypatch: pytest.MonkeyPatch) -> None:
     # A recursive model is a definition the copy reaches from inside and from
     # outside Json[...]; inside, it must get no wrappers, or the strict model
-    # would see a Python string where JSON gives a date.
+    # would see a Python string where JSON gives a date. PyPy refuses such a
+    # class (see the PyPy tests), so this runs under the CPython rules.
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", False)
     data = pydantic.create_model("Data", f=(pydantic.Json[Ring], ...))
     payload = {"f": json.dumps({"day": "2020-01-02", "kids": [{"day": "2020-01-03"}]})}
 
@@ -2268,7 +2320,7 @@ def test_citry_own_messages_count_toward_the_error_limit() -> None:
 # --- the request's work budget -------------------------------------------------------------------------
 
 
-@pytest.mark.usefixtures("deep_checks")
+@pytest.mark.usefixtures("pypy_deep_checks")
 def test_a_task_started_during_a_request_gets_its_own_budget_after_the_request_ends() -> None:
     async def later() -> bool:
         await asyncio.sleep(0)
@@ -3012,7 +3064,7 @@ def _padded_chain(depth: int, size: int) -> dict[str, Any]:
     return value
 
 
-@pytest.mark.usefixtures("deep_checks")
+@pytest.mark.usefixtures("pypy_deep_checks")
 def test_a_deep_union_over_a_large_leaf_spends_the_budget() -> None:
     data = pydantic.create_model("Data", q=(PadA | PadB, ...))
 
@@ -3031,7 +3083,7 @@ def test_the_same_shallow_tree_with_a_large_leaf_is_accepted() -> None:
     assert result.value == data.model_validate(payload)
 
 
-@pytest.mark.usefixtures("deep_checks")
+@pytest.mark.usefixtures("pypy_deep_checks")
 def test_a_wrap_validator_that_calls_its_handler_twice_spends_for_each_call() -> None:
     class TwicePad(pydantic.BaseModel):
         kid: TwicePad | None = None
@@ -3586,7 +3638,7 @@ def test_a_shallow_tree_with_a_large_leaf_of_small_objects_is_accepted() -> None
     assert validate_args(filter_class, _filter_payload(4, [{"x": 1}] * 60_000)).ok
 
 
-@pytest.mark.usefixtures("deep_checks")
+@pytest.mark.usefixtures("pypy_deep_checks")
 @pytest.mark.parametrize(
     ("value_type", "leaf", "depth"),
     [
@@ -3603,7 +3655,7 @@ def test_a_deep_union_over_text_that_its_check_parses_spends_the_budget(
     assert result.fields == {"_args": bounded.TOO_MUCH_WORK_MESSAGE}
 
 
-@pytest.mark.usefixtures("deep_checks")
+@pytest.mark.usefixtures("pypy_deep_checks")
 @pytest.mark.parametrize(
     ("value_type", "leaf"),
     [

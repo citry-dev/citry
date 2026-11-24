@@ -1,21 +1,22 @@
 # Release notes
 
-## v1.2.1
+## v1.3.0
 
-Citry 1.2.1 is a security release for servers that run on PyPy. It
+Citry 1.3.0 includes a security fix for servers that run on PyPy. It
 still requires citry-core 2.1.2.
 
 ### Fixes
 
 - Security: on PyPy, deeply nested event data or a browser write to
-  State can no longer end the server process. On PyPy, Citry's nesting
-  limit is now 32 levels, and each `Sequence[...]` field, each part that
-  drops bad items (such as `OnErrorOmit`), and each wrap validator or
-  union counts toward it, so data that 1.2.0 accepted on PyPy can now
-  get a 422 that says it is nested too deeply. A tree of models whose
-  children sit in a `Sequence` now passes 15 levels on PyPy, and one
-  whose children sit in a `list` passes 30. CPython accepts the same
-  data as before. See
+  State no longer ends the server process. On PyPy the nesting limit is
+  now 32 levels (it was 64), and `Sequence[...]` fields, `OnErrorOmit`
+  items, and Citry's checks around wrap validators and unions now count
+  as extra levels. A recursive class inside `Json[...]` in event data or
+  in a writable State field is now refused when the component is
+  defined. So on PyPy, data that 1.2.0 accepted can now get a 422 that
+  says it is nested too deeply: a tree of models nests up to 30 levels
+  when its children sit in a `list`, and 15 in a `Sequence`. CPython is
+  unchanged. See
   [GHSA-29wx-2wvw-8962](https://github.com/citry-dev/citry/security/advisories/GHSA-29wx-2wvw-8962).
 
 ## v1.2.0

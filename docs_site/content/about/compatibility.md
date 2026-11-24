@@ -104,10 +104,10 @@ CPython. Issue [#434](https://github.com/citry-dev/citry/issues/434)
 tracks giving PyPy the same answers.
 
 On PyPy, Events refuses event data and State writes that nest more than
-32 levels, and counts some parts of a schema, such as `Sequence[...]`
-fields, as extra levels, so that deeply nested data cannot end the
-server process. On CPython the limit is 64 levels. See
-[Check event data](/security/#check-event-data).
+32 levels, and counts each `Sequence[...]` field and `OnErrorOmit` item
+as an extra level, so that deeply nested data cannot end the server
+process. On CPython the limit is 64 levels (32 in Pyodide). See
+[Event data on PyPy](/security/#event-data-on-pypy).
 
 If you turn off the [expression sandbox](/security/#turning-the-sandbox-off)
 with `Citry(sandbox_expressions=False)`, template expressions on PyPy can

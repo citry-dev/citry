@@ -2169,10 +2169,13 @@ Error modes:
       nested within the limit end the process. Parts that pydantic-core
       checks without calling Python still take stack uncounted, so a
       schema with dozens of them at each level can still end PyPy below
-      the limit, as Pydantic alone does. On PyPy 7.3.23 every shape
-      tried (about 40) is refused at the limit without ending the
-      process; the heaviest ordinary one used less than half of the
-      stack there.
+      the limit, as Pydantic alone does. Inside `Json[...]` no wrapper
+      counts, and each JSON string starts a fresh parse, so on PyPy
+      registration also refuses a recursive class reached through
+      `Json[...]` (`class_loops`, `_RECURSIVE_CLASS_REASON`), in event
+      data and in writable State fields. On PyPy 7.3.23 about 40 shapes
+      were refused at the limit without ending the process; the
+      heaviest ordinary ones used 30% to 70% of the stack there.
     - What cannot absorb the refusal: a part of the schema that drops an
       item on any error, such as `OnErrorOmit`. The tally records the
       first stop for work, time, or nesting, and the check raises it
