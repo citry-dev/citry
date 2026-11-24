@@ -385,6 +385,8 @@ categories:
       - citry.ext.events.actions.Download
       - citry.ext.events.event
       - citry.ext.events.get_event_url
+      - citry.ext.events.is_local_url
+      - citry.ext.events.local_url_or
 
   - kind: authored_api
     slug: browser-apis

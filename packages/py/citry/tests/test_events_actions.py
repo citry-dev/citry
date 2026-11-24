@@ -161,7 +161,7 @@ class TestActionConstructors:
         with pytest.raises(ValueError, match="name must be a non-empty string"):
             actions.Dispatch(None)
         # citry:* is the runtime's own namespace (events.md 4.3).
-        with pytest.raises(ValueError, match="reserved for the citry runtime"):
+        with pytest.raises(ValueError, match="reserved for Citry's own events"):
             actions.Dispatch("citry:boom")
 
     def test_redirect_validates_the_url(self):

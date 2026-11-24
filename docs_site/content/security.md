@@ -65,26 +65,52 @@ State holds, as in the example above. With server storage
 cache entry expires or the cache drops it.
 
 A token expires 24 hours after Citry issues it, with either storage.
-Citry issues a new token each time it renders the component and after
-each call that changes State. The expiry limits how long a copied token
-stays useful. A call with an expired token does not run its handler: it
-gets a `stale_state` error, and calls from that component keep failing
-until the visitor reloads the page, which brings a fresh token.
+Citry issues a new token each time it renders the component, after each
+call that changes State, and after a call made once the token is past
+half its lifetime (12 hours by default). So a component that gets a call
+at least once every half lifetime keeps working. A component that gets no
+call in the second half of its token's life expires.
+
+Each component on the page has its own token, renewed only by its own
+calls. A component whose calls all go to
+[`detached`](/events/actions/#skip-the-queue-for-a-read-only-call)
+handlers, which are read-only handlers that skip the call queue, expires
+on schedule, because those calls never get a new token.
+
+A copied token stays useful until it expires, and longer if someone keeps
+calling with it. Anyone who sends calls with a copy at least once per
+half lifetime keeps getting new tokens, as the page does, even when it
+calls only handlers that read State.
+
+Citry's browser code keeps the State token out of the URL, which server
+and proxy logs record. Handlers use POST unless they opt into GET with
+`@event(methods=("GET",))` or `Events._methods`. A POST call sends the
+token in the request body. A GET call to a handler that declares `state`
+sends it in the `X-Citry-State-Token` header.
+
+Four things can still put a token in a log. The server also reads a
+token from the `_citry_state_token` query parameter, so a client of your
+own that sends it there logs it. Logs written before 1.3.0 hold the
+tokens that Citry's browser code sent in the URL. When a GET call
+gets an `invalid_state` answer from a server from before 1.3.0, or from
+any server when the event URL is on another origin or the call goes
+through a custom transport, Citry's browser code sends the call once
+more with the token in the URL. A log or tracing tool that records
+request headers also records `X-Citry-State-Token`, so
+leave that header out of it. Whoever can read a logged token can keep
+it alive by calling with it, as described above. A token grants no
+permission, so check permissions in every handler.
+
+A call with an expired token does not run its handler: it gets a
+`stale_state` error, and calls from that component keep failing until
+the visitor reloads the page, which brings a fresh token.
 [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)
 shows how to tell the visitor.
 
-To change the lifetime, set `State._max_age` to a `timedelta` of at least
-one second. Token times are whole seconds, so a token can stop working up
-to one second early. No setting turns expiry off. Changing `_max_age` later does not change the tokens
-Citry has already issued.
-
-```python
-from datetime import timedelta
-
-class State:
-    project_id: int
-    _max_age = timedelta(days=7)
-```
+To change the lifetime, set [`State._max_age`](/events/state/#max-age).
+A call renews a token once it is past half its lifetime, so set it to at
+least twice the longest time a page may go without a call. No setting
+turns expiry off.
 
 To stop accepting every signed token issued so far, give
 `Citry(secret=...)` a new secret and drop the one that signed them. A page
@@ -99,15 +125,16 @@ of its own if you want to replace it separately. Citry accepts a value
 signed with any entry of the secret list, so `Citry(...)` raises an error
 when the secret or an entry is empty or only whitespace.
 
-Two State settings narrow what the browser sees and changes. Neither one
-replaces the permission check:
+Two [State settings](/events/state/#state-settings) narrow what the
+browser sees and changes. Neither one replaces the permission check:
 
 - `State._public` lists the fields the browser can read as plain values
   through `$state` and bindings. The other fields still travel to the
   browser, inside the signed value.
 - `State._model` lists the public fields the browser may change.
 
-To keep State values out of the page, set `State._storage = "server"`.
+To keep State values out of the page, set
+[`State._storage = "server"`](/events/state/#storage).
 Citry then keeps the values in its configured cache and sends only a lookup
 key. This hides only the fields left out of `_public`: public fields are
 still sent as plain values, so list the fields the browser needs in
@@ -115,12 +142,13 @@ still sent as plain values, so list the fields the browser needs in
 them. Server storage does not replace the permission check either: still
 authorize every use of the restored values.
 
-Server storage adds a cache entry at every render and after every call
-that changes State, and keeps each one until it expires: after
-`State._max_age`, or after 24 hours when you do not set it. With several
+Server storage adds a cache entry for each token Citry issues (see
+above), and keeps each entry until it expires: after `State._max_age`,
+or after 24 hours when you do not set it. With several
 server processes, use a shared backend and set its memory limit and
 eviction policy. A browser write that would make the stored
-State larger than `State._max_bytes` (64 KiB by default) gets a 422
+State larger than [`State._max_bytes`](/events/state/#max-bytes)
+(64 KiB by default) gets a 422
 before the handler runs. With the default signed storage, Citry makes
 the same check when the call gets a new token. The limit covers only
 browser writes, so when a handler copies request data (anything a visitor
@@ -319,68 +347,69 @@ if data.next.startswith("/"):
     return actions.Redirect(data.next)
 ```
 
-Use a check that parses the URL the way a browser does. Under Django, use
-`url_has_allowed_host_and_scheme`. In this example the login page copies
-its `next` query parameter into a hidden `<input name="next">`, so the
-handler receives it as `data.next`:
+Use [`local_url_or()`][citry.ext.events.local_url_or] instead. It reads
+the URL the way a browser does and returns it when the browser would
+load it from your site, or the fallback you pass when it would not. In
+this example the login page copies its `next` query parameter into a
+hidden `<input name="next">`, so the handler receives it as `data.next`:
 
 ```python
-from django.utils.http import (
-    url_has_allowed_host_and_scheme,
-)
+from citry.ext.events import actions, local_url_or
 
 
 class Events:
     def login(self, data: LoginIn, request):
         # log_in is your own code that checks the password
         log_in(request, data)
-        host = request.native.get_host()
-        is_safe = url_has_allowed_host_and_scheme(
-            data.next,
-            allowed_hosts={host},
-            require_https=request.native.is_secure(),
-        )
-        target = data.next if is_safe else "/"
-        return actions.Redirect(target)
+        return actions.Redirect(local_url_or(data.next, "/"))
 ```
 
-In a Flask or FastAPI app, install the `django` package and call the
-same function. It needs no Django settings. Pass the host names your
-site serves:
+By default only a URL with no host name passes, such as `/orders/7` or
+`?page=2`. To also accept a full URL on your own site, pass your host
+names as `allowed_hosts`. Write a port as part of the name, such as
+`"shop.example:8000"`; a URL must spell the host the same way. If your
+site is served over HTTPS, also pass `require_https=True`. It refuses
+`http:` URLs and URLs that start with `//`, so a redirect cannot drop to
+plain HTTP:
 
 ```python
-from django.utils.http import (
-    url_has_allowed_host_and_scheme,
-)
-
-is_safe = url_has_allowed_host_and_scheme(
+target = local_url_or(
     data.next,
+    "/",
     allowed_hosts={"shop.example"},
     require_https=True,
 )
-target = data.next if is_safe else "/"
 ```
 
-`actions.Redirect` raises `ValueError` for a URL with a control
-character, such as a tab, even when Django's function accepts it. The
-call then fails instead of redirecting, which is safe.
+List your host names in code rather than reading them from the
+request's `Host` header, which the client sends and can set to
+anything.
 
-If you write your own check, do what Django's function does: check the
-URL twice, once as written and once with every `\` changed to `/`, and
-refuse it when either reading leaves your site. A check that only reads
-`urllib.parse.urlsplit(url).hostname`, and accepts an empty host name or
-your own, lets these through:
+The check returns the fallback for:
 
-- `https://other.example\@shop.example/`: Python sees `shop.example`,
-  browsers go to `other.example`;
-- `https:\\other.example/` and `/\/other.example/`: Python sees no host
-  name, browsers go to `other.example`;
-- `https:other.example/`, `https:/other.example/`, and
-  `///other.example/`: Python sees no host name, and browsers can go to
-  `other.example`.
+- a host that is not in `allowed_hosts`, including `//other.example/`
+  and `/\other.example/`;
+- any scheme other than `http:` and `https:`, such as `javascript:`;
+- a user name before `@`, such as `https://me@shop.example/`;
+- a control character anywhere, such as a tab or a newline.
 
-Citry plans a built-in check
-([#568](https://github.com/citry-dev/citry/issues/568)).
+The fallback goes through the same check, with the same
+`allowed_hosts` and `require_https`. A fallback that fails it, such as
+`"https://shop.example/"` with no `allowed_hosts`, raises `ValueError` on
+every call, so a mistyped fallback fails the first time the handler
+runs.
+
+When you need `True` or `False` instead, for example to show an error,
+call [`is_local_url(data.next)`][citry.ext.events.is_local_url]. It
+takes the same `allowed_hosts` and `require_https`, and has no
+fallback.
+
+You do not need Django for this. The rules follow Django's
+`url_has_allowed_host_and_scheme`. The main differences: host names
+match regardless of ASCII letter case, and a URL with a control
+character, or with whitespace other than a space at either end, is
+refused. Django accepts a URL with a tab or a newline, which
+`actions.Redirect` then refuses with `ValueError`.
 
 ## Check URL attributes { #check-url-attributes }
 
@@ -437,6 +466,15 @@ Every event call that is not a `GET` must pass these checks:
   request's `Host` header. Behind a reverse proxy, the proxy must pass the
   browser's `Host` header on; see
   [Run behind a proxy](/advanced/web-frameworks/#run-behind-a-proxy).
+- When the browser sends an `Origin` header and your server says the
+  call arrived over https, the `Origin` must start with `https:`.
+  Anyone on the network can rewrite a plain-http page on the same host,
+  and this check stops such a page from calling your app. When your
+  server says the call arrived over plain http, Citry accepts an
+  `Origin` of either scheme. So behind a proxy that serves your site
+  over https and passes plain http to your app, this check runs only if
+  your server reads the scheme the proxy forwards; see
+  [Read the proxy's scheme](/advanced/web-frameworks/#read-the-proxys-scheme).
 - When the browser sends a `Sec-Fetch-Site` header, it must be
   `same-origin` or `none`.
 

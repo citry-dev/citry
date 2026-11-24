@@ -30,7 +30,7 @@ pickled objects. Three Citry terms come up throughout:
   component re-renders it. See [Event actions](/events/actions/).
 
 The Citry examples assume the `citry_app` instance configured in
-[Server events](/events/#configure-a-signing-secret-before-using-state)
+[Server events](/events/#set-a-signing-secret)
 and these imports:
 
 ```python
@@ -113,8 +113,10 @@ render itself:
 --8<-- "docs_site/snippets/migrate_livecomponents.py:server-state"
 ```
 
-With `_storage = "server"`, Citry keeps the State values in its cache and
-sends the browser a reference instead of a token that holds them.
+With [`_storage = "server"`](/events/state/#storage), Citry keeps the
+State values in its cache and sends the browser a reference instead of a
+token that holds them. [State settings](/events/state/#state-settings)
+describes each setting this step uses.
 
 Three things need attention in this step:
 
@@ -212,7 +214,7 @@ class Events:
 
 If the new render needs slot content, pass it again in the returned
 component. Nothing from an earlier request reappears unless you pass it. See
-[Pass every input](/events/state/#pass-every-input-when-a-handler-renders-again).
+[Access State in handlers](/events/state/#access-state-in-handlers).
 
 ## Plan for differences
 

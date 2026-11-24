@@ -17,6 +17,7 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 import typing
 from dataclasses import dataclass, field, make_dataclass
 from datetime import timedelta
@@ -42,6 +43,7 @@ from citry.ext.events.tokens import (
     VerifiedState,
     apply_state_updates,
     mint_state_token,
+    state_renewal_due,
     verify_state_token,
 )
 
@@ -985,6 +987,102 @@ class TestDefaultLifetime:
         with pytest.raises(StaleStateError) as exc_info:
             verify_state_token(token, cls=FakeCounter, storage="server", secrets=[], cache=cache)
         assert exc_info.value.status == 409
+
+
+class TestRenewalTime:
+    """A token is due for renewal once it is past half its lifetime, in both storage modes."""
+
+    DAY = 24 * 60 * 60
+
+    @pytest.fixture(autouse=True)
+    def _clock(self, monkeypatch):
+        _pin_now(monkeypatch)
+
+    def _verify(self, token, **kwargs):
+        return verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY], **kwargs)
+
+    def test_a_default_token_is_due_after_12_hours(self, monkeypatch):
+        verified = self._verify(GOLDEN_DEFAULT_EXPIRY)
+        assert verified.renew_after == FIXED_NOW + self.DAY / 2
+        _pin_now(monkeypatch, FIXED_NOW + self.DAY / 2 - 1)
+        assert state_renewal_due(verified) is False
+        _pin_now(monkeypatch, FIXED_NOW + self.DAY / 2)
+        assert state_renewal_due(verified) is True
+
+    def test_the_half_way_point_follows_the_token_lifetime(self):
+        # GOLDEN_WITH_EXPIRY was minted with a one-hour lifetime.
+        assert self._verify(GOLDEN_WITH_EXPIRY).renew_after == FIXED_NOW + 30 * 60
+
+    def test_a_token_without_an_expiry_is_due_after_12_hours(self):
+        # Releases before 1.0.0 wrote "x": null; verify reads it as the
+        # 24-hour default, so renewal follows the same half-way point.
+        assert self._verify(GOLDEN_NO_EXPIRY).renew_after == FIXED_NOW + self.DAY / 2
+
+    def test_a_server_entry_is_due_after_half_its_lifetime(self, monkeypatch):
+        _pin_now(monkeypatch, FIXED_NOW)
+        cache = RecordingCache()
+        token = mint_state_token(
+            CounterState(count=1),
+            class_id=CLASS_ID,
+            secret=None,
+            max_age=timedelta(hours=2),
+            max_bytes=8192,
+            storage="server",
+            cache=cache,
+        )
+        verified = verify_state_token(token, cls=FakeCounter, storage="server", secrets=[], cache=cache)
+        assert verified.renew_after == FIXED_NOW + 60 * 60
+
+    def test_a_token_from_a_clock_that_runs_ahead_is_not_due(self, monkeypatch):
+        # The minting server's clock ran ten minutes ahead of this one, so
+        # the token looks newer than it is and is renewed later, not refused.
+        _pin_now(monkeypatch, FIXED_NOW - 600)
+        verified = self._verify(GOLDEN_DEFAULT_EXPIRY)
+        assert state_renewal_due(verified) is False
+
+    def test_a_result_without_a_token_is_never_due(self):
+        assert state_renewal_due(VerifiedState(state_kwargs={}, class_id=CLASS_ID)) is False
+
+    def test_a_render_replayed_from_the_cache_carries_a_new_token(self, monkeypatch):
+        # A cached render holds the token it was made with. Replaying it
+        # makes a new token from the replay time, so a page served from the
+        # cache starts with a full lifetime like a fresh render.
+        _pin_now(monkeypatch, FIXED_NOW)
+        app = Citry(cache=InMemoryCache(), secret=SIGNING_KEY)
+        app.set_mounted_prefix("/citry")
+        renders = 0
+
+        class Cached(Component):
+            citry = app
+
+            class Cache:
+                enabled = True
+                ttl = None
+
+            class State:
+                count: int = 0
+
+            class Events:
+                def inc(self, state):
+                    state.count += 1
+
+            def template_data(self, kwargs, slots):
+                nonlocal renders
+                renders += 1
+                return {}
+
+            template = """
+            <button @click="inc">+</button>
+            """
+
+        str(Cached())
+        replay_at = FIXED_NOW + self.DAY / 2 + 60
+        _pin_now(monkeypatch, replay_at)
+        html = str(Cached())
+        assert renders == 1
+        [token] = set(re.findall(r"cev1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", html))
+        verified = verify_state_token(token, cls=Cached, storage="signed", secrets=[SIGNING_KEY])
+        assert verified.renew_after == replay_at + self.DAY / 2
 
 
 class TestUnknownTokenVersion:

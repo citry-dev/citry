@@ -42,7 +42,7 @@ Returning `TaskList(...)` is the same as returning
 its options, such as `target` (below).
 
 The new render gets only the inputs you pass. See
-[Pass every input](/events/state/#pass-every-input-when-a-handler-renders-again).
+[Access State in handlers](/events/state/#access-state-in-handlers).
 A value every render needs from the request, such as the current user,
 can come from one app-wide function (experimental). See
 [Pass request values](#give-every-render-the-request-values).
@@ -268,9 +268,18 @@ component's JavaScript shows a toast, or a header badge refreshes.
 return actions.Dispatch("TaskRow:saved", {"title": title})
 ```
 
-Start the name with your component's name, as in `TaskRow:saved`. Names that
-start with `citry:` are reserved for Citry, so `actions.Dispatch` raises
-`ValueError` for them.
+Start the name with your component's name, as in `TaskRow:saved`.
+`actions.Dispatch` raises `ValueError` for two kinds of name, in any
+letter case:
+
+- The name of a standard DOM event, such as `click`, `submit`,
+  `input`, `keydown`, `load`, or `message`. This includes common words
+  such as `close`, `toggle`, `error`, `select`, and `progress`. The
+  event would run the page's own listeners for it, including
+  [`@c-*` bindings](/events/bindings/) that call the server.
+- A name that starts with `citry:`, which Citry uses for its own
+  events, or with `vue:` or `vnode-`, which Vue keeps for its element
+  lifecycle hooks.
 
 The event starts at the first element of the component whose handler ran and
 bubbles up to `document`. It fires once, even when the component has several
@@ -297,12 +306,15 @@ script, listen on an ancestor element, on `document`, or with
 !!! warning "Choose the event name yourself"
 
     Never build the name from request data (a query parameter, form
-    field, or header). A name such as `click` or `submit` runs the
-    page's own listeners for that event, including
-    [`@c-*` bindings](/events/bindings/) that call the server. If the
-    component's first element is a `<form>`, Firefox also submits that
-    form to its `action` on a `submit` event, and a listener cannot
-    cancel it.
+    field, or header). Citry refuses only standard DOM event names and
+    the prefixes above. Your page code may listen for other names, such
+    as `TaskRow:saved`, and a name taken from a request would choose
+    which of those listeners run.
+
+If you pass actions to
+[`Citry.events.applyActions`](/reference/browser-apis/#citry-events-apply-actions)
+yourself, Citry's browser code refuses the same names: the event does
+not fire, and the returned Promise rejects.
 
 ## `Data` for JavaScript { #send-data-to-javascript }
 
@@ -424,9 +436,11 @@ home page, with no warning.
     another site. Check it before you redirect to it. A prefix check such
     as `url.startswith("/")` is not enough, because browsers treat
     `//other.example` and `/\other.example` as addresses on another site.
-    Django's `url_has_allowed_host_and_scheme` does a full check. A
-    Flask or FastAPI app can call it after installing the `django`
-    package; see [Check redirect URLs](/security/#check-redirect-urls).
+    [`local_url_or()`][citry.ext.events.local_url_or] reads the URL the
+    way a browser does and returns `"/"` instead of a URL that leaves
+    your site: `actions.Redirect(local_url_or(data.next, "/"))`. By
+    default only a URL with no host name passes; to accept a full URL on
+    your own site, see [Check redirect URLs](/security/#check-redirect-urls).
 
 If a redirect with another scheme reaches the browser another way, such
 as through browser code you wrote that calls `Citry.events.applyActions()`,
@@ -517,7 +531,7 @@ class Events:
 The new State still reaches the browser, so Vue parts that read
 `$state.editing` update. Server-rendered HTML stays as it was. Only fields
 the browser can read reach `$state`; see
-[`_public` and `_model`](/events/state/#limit-what-the-browser-can-read-and-change).
+[`_public`](/events/state/#public) and [`_model`](/events/state/#model).
 
 ## Action lists { #return-several-actions-in-order }
 

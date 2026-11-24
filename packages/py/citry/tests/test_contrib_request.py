@@ -147,6 +147,8 @@ class TestRouteRequest:
         assert request.body == b""
         assert request.content_type == ""
         assert request.native is None
+        # An empty scheme means "unknown", which skips the Events https Origin check.
+        assert request.scheme == ""
 
     def test_is_frozen(self):
         with pytest.raises(AttributeError):

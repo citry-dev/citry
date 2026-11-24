@@ -49,7 +49,7 @@ Django + HTMX + Alpine, Rusty + HTMX + Alpine, Jinja + HTMX + Alpine, Tetra, dja
 | Missing required input on a browser-side component | E | n/a | n/a | n/a | n/a | M | n/a | n/a | R | E | E | E |
 | Required slot left unfilled | E | M | n/a | R | M | n/a | R | E | R | E | M | E |
 | Slot fill reads a misspelled slot-data field | E | n/a | n/a | R | M | n/a | M | E | E | E | E | E |
-| Template reads a misspelled state field | E | M | M | R | M | M | M | E | E | E | E | E |
+| Displayed value is read from a misspelled state field | E | M | M | R | M | M | M | E | E | E | E | E |
 | Browser code reads a misspelled server value | E | R | R | R | R | R | R | n/a | M | E | M | E |
 | Link to a route that does not exist | Ew | R | R | R | R | R | R | R | M | M | Rw | E |
 | Translation message given a missing or misnamed argument | E | M | R | n/a | M | M | M | n/a | n/a | n/a | n/a | n/a |
@@ -61,7 +61,7 @@ Django + HTMX + Alpine, Rusty + HTMX + Alpine, Jinja + HTMX + Alpine, Tetra, dja
 | Wrong-typed operation in a template expression | E | M | M | R | M | M | M | E | E | E | M | M |
 | Wrong-typed input on a browser-side component | E | n/a | n/a | n/a | n/a | M | n/a | n/a | M | E | E | E |
 | Slot fill uses slot data as the wrong type | E | n/a | n/a | R | M | n/a | M | E | R | E | E | E |
-| State field given a value of the wrong type | E | M | M | M | E | E | M | E | E | E | E | E |
+| Server handler stores a wrong-typed value in a state field | E | M | M | M | E | E | M | E | E | E | E | E |
 | Component input given a value outside its allowed choices | E | M | M | M | M | M | R | E | M | E | E | E |
 | Loop over a value that is not a list | E | R | R | R | R | R | R | E | E | C | E | E |
 | Link passes a route parameter of the wrong type | R | R | R | R | R | R | R | R | M | M | M | M |
@@ -88,18 +88,18 @@ Django + HTMX + Alpine, Rusty + HTMX + Alpine, Jinja + HTMX + Alpine, Tetra, dja
 | Boolean attribute given the text "false" | E | M | M | M | M | M | M | M | M | E | M | E |
 | **Events and server requests** | (10/12) | (3/8) | (3/8) | (4/8) | (5/10) | (6/11) | (3/8) | (4/9) | (9/11) | (9/9) | (8/12) | (10/11) |
 | Misspelled server handler name | E | R | R | R | R | M | R | R | E | E | E° | E |
-| State field typo in an update handler | E | M | M | R | M | M | M | E | E | R | E | E |
+| Server handler writes to a misspelled state field | E | M | M | R | M | M | M | E | E | R | E | E |
 | Misspelled field in a request payload | E | R | R | R | n/a | R | R | R | E | P | M | E |
-| Child emits an event the parent does not listen for | E | M | M | M | M | E | M | M | E | E | E | E |
+| Child component emits a misspelled event to its parent | E | M | M | M | M | E | M | M | E | E | E | E |
 | Child component changes an input it received | E | P | P | P | P | M | P | n/a | C | C | C | C |
-| Parent listens for a misspelled event | Ew | M | M | M | M | E° | M | M | R | E | E | E |
-| Event sent with a payload of the wrong type | M | n/a | n/a | n/a | R | E | n/a | n/a | n/a | n/a | n/a | n/a |
+| Parent listens for a misspelled event from its child | Ew | M | M | M | M | E° | M | M | R | E | E | E |
+| Child component's event carries a value of the wrong type | M | n/a | n/a | n/a | R | E | n/a | n/a | n/a | n/a | n/a | n/a |
 | Misspelled browser event name on an element | Ew | M | M | M | M | M | M | M | M | C | M | E |
 | Request payload field of the wrong type | E | P | P | P | R | P | P | P | E | P | M | E |
 | Request payload leaves out a required field | E | R | R | R | R | R | R | R | E | E | R | E |
 | Browser reads a misspelled field of the server's reply | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | E | n/a |
 | Form field name differs from what the server reads | E | M | M | M | M | M | M | M | M | R | M | M |
-| Handler declares arguments the event does not send | M | n/a | n/a | n/a | C | E° | n/a | M | E° | E° | E° | E |
+| Parent's handler takes more arguments than its child's event sends | M | n/a | n/a | n/a | C | E° | n/a | M | E° | E° | E° | E |
 | **Server and browser** | (2/4) | (2/3) | (2/3) | (2/3) | (2/3) | (2/3) | (1/3) | (2/3) | (1/3) | (0/2) | (2/3) | (2/3) |
 | Server-only value read in browser code | E | R | R | R | R | R | M | R | M | M | R | R |
 | Server and browser render different content | M | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | R | R |

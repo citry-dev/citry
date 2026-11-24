@@ -40,6 +40,7 @@ from typing import Any
 from unicodedata import category, normalize
 from urllib.parse import quote
 
+from citry._html_attribute_values import DOM_EVENT_NAMES
 from citry._protocol.events import SWAPS, is_finite_json_number
 from citry._urls import url_scheme
 from citry.citry_element import CitryElement
@@ -274,14 +275,24 @@ class Dispatch(Action):
     ``document``, and no ``$onEvent`` listener is called.
 
     Prefix the name with the component name, such as ``"MyCard:submit"``,
-    so events from different components do not collide. Names starting with
-    ``citry:`` are reserved for Citry's own events and raise ``ValueError``.
+    so events from different components do not collide.
 
-    Choose the name in your own code, never from request data. A standard
-    DOM event name such as ``click`` or ``submit`` runs the page's own
-    listeners for that event, including ``@c-*`` bindings that call the
-    server. If the component's first element is a ``<form>``, Firefox
-    also submits that form to its ``action`` on ``submit``.
+    ``Dispatch`` raises ``ValueError`` for two kinds of name, whatever
+    their letter case:
+
+    - The name of a standard DOM event, such as ``click``, ``submit``,
+      ``input``, ``keydown``, ``load`` or ``message``. The event would run
+      the page's own listeners for it, including Vue ``@click`` handlers
+      and ``@c-*`` bindings that call the server.
+    - A name starting with ``citry:``, which Citry keeps for its own
+      events, or with ``vue:`` or ``vnode-``, which Vue keeps for its
+      element lifecycle hooks.
+
+    Citry's browser code refuses the same names before it fires the event.
+
+    Choose the name in your own code, never from request data. Page code
+    may listen for any name you dispatch, so a name taken from request
+    data would let that data choose which listeners run.
 
     Attributes:
         name: The event name, dispatched verbatim.
@@ -291,8 +302,9 @@ class Dispatch(Action):
         wait: Whether later actions hold until this one has applied.
 
     Raises:
-        ValueError: If ``name`` is empty or starts with ``citry:``, or a
-            timing value is invalid.
+        ValueError: If ``name`` is empty, is a standard DOM event name, or
+            starts with ``citry:``, ``vue:`` or ``vnode-`` (letter case
+            ignored), or if a timing value is invalid.
 
     """
 
@@ -303,14 +315,55 @@ class Dispatch(Action):
         if not isinstance(self.name, str) or not self.name:
             msg = f"actions.Dispatch: name must be a non-empty string; got {self.name!r}."
             raise ValueError(msg)
-        if self.name.startswith("citry:"):
+        reason = reserved_event_name_reason(self.name)
+        if reason is not None:
             msg = (
-                f"actions.Dispatch: event names starting with 'citry:' are reserved for the citry"
-                f" runtime; got {self.name!r}. Pick another name (the convention is prefixing with"
-                f" the component name, e.g. 'MyCard:submit')."
+                f"actions.Dispatch: {self.name!r} {reason}. Pick another name; the convention is"
+                f" prefixing it with the component name, e.g. 'MyCard:submit'."
             )
             raise ValueError(msg)
         super().__post_init__()
+
+
+# Name prefixes that something other than the app already listens for:
+# Citry's own runtime events (`citry:ready`) and Vue's lifecycle hooks
+# (`@vue:mounted`, `@vnode-mounted`). The browser runtime keeps a copy in
+# `_vue/client.js` (`reservedEventPrefixes`); a test checks the two match.
+RESERVED_EVENT_PREFIXES = ("citry:", "vue:", "vnode-")
+
+# Lowercases A-Z only. Browsers compare event names character for
+# character, so only ASCII case is folded: a name with a Unicode lookalike
+# letter never reaches a standard listener and needs no refusal. Python's
+# `str.lower` and JavaScript's `toLowerCase` also disagree on a few
+# non-ASCII letters, which would let the server and the browser copy of
+# this check drift apart.
+_ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
+
+
+def reserved_event_name_reason(name: str) -> str | None:
+    """
+    Return why ``name`` cannot be dispatched, or ``None`` when it can.
+
+    A dispatched event bubbles from the component's first element to
+    ``document`` and ``window``, so a standard DOM event name would run the
+    page's own listeners for that event. The comparison ignores ASCII
+    letter case. A browser matches ``Click`` only to a ``Click`` listener.
+    But HTML reads an ``onClick`` attribute as ``onclick``, and Vue reads
+    ``@Click`` on a component tag as a ``click`` listener. No app needs a
+    custom event that differs from a standard one only in case, so refusing
+    every case keeps the rule simple to state and to check.
+    """
+    folded = name.translate(_ASCII_LOWER)
+    if folded in DOM_EVENT_NAMES:
+        return (
+            "is a standard DOM event name (letter case is ignored), and the event would run the"
+            " page's own listeners for it"
+        )
+    for prefix in RESERVED_EVENT_PREFIXES:
+        if folded.startswith(prefix):
+            owner = "Citry's own events" if prefix == "citry:" else "Vue's element lifecycle hooks"
+            return f"starts with {prefix!r} (letter case is ignored), which is reserved for {owner}"
+    return None
 
 
 # The schemes a Redirect may navigate to. A Redirect accepts only these and
@@ -360,8 +413,10 @@ class Redirect(Action):
     The action checks the scheme only, not where the URL leads. A URL such
     as ``//other.example`` or ``/\other.example`` has no scheme, yet the
     browser sends the visitor to another site. When the URL comes from the
-    request, such as a ``next`` parameter, check it before you pass it in.
-    Checking that it starts with ``/`` is not enough.
+    request, such as a ``next`` parameter, checking that it starts with
+    ``/`` is not enough. Check it with
+    [`local_url_or()`][citry.ext.events.local_url_or] before you pass it
+    in: ``actions.Redirect(local_url_or(data.next, "/"))``.
 
     Attributes:
         url: The URL to navigate to: an ``http:`` or ``https:`` URL, or a

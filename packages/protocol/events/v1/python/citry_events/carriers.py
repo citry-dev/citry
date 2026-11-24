@@ -18,6 +18,10 @@ SEND_SEQUENCE_FIELD = "_citry_send_sequence"
 PROTOCOL_FIELD = "_citry_protocol"
 REQUEST_ID_FIELD = "_citry_request_id"
 CAPABILITIES_FIELD = "_citry_capabilities"
+# A GET call sends its State token in this request header, which access logs
+# do not record by default, unlike the query string. STATE_TOKEN_FIELD stays
+# accepted in the query for clients that send it there.
+STATE_TOKEN_HEADER = "X-Citry-State-Token"  # noqa: S105 - header name, not a credential
 
 FORM_REQUEST_ID = "form"
 FLAT_REQUEST_ID = "flat"

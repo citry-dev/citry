@@ -479,7 +479,9 @@ address, and Citry checks that its host and port match the request's
 reverse proxy that replaces `Host` with your app server's address, such
 as `127.0.0.1:8000`, makes every call fail that check. To confirm the
 cause, turn on the `citry` logger's `DEBUG` level locally: it logs
-`Origin '...' does not match the request host '127.0.0.1:8000'`.
+`Origin '...' does not match the request host '127.0.0.1:8000'`. If it
+logs `... is not https, but the request arrived over https` instead,
+see [Fix an http Origin](#fix-an-http-origin).
 
 Have the proxy pass the `Host` header the browser sent. Caddy and Traefik
 do this by default. nginx does not, so set it. Use `$http_host`, not
@@ -501,6 +503,37 @@ sends the browser's host in `X-Forwarded-Host` and you cannot change its
 Werkzeug's `ProxyFix(x_host=1)`, also works. Use it only behind a proxy
 you run, and on Flask, wrap it after `mount()`
 ([Order WSGI middleware](#order-wsgi-middleware)).
+
+### Fix an http Origin
+
+Calls also fail when your server says a request arrived over https but
+the browser's page is on plain http. The `DEBUG` log then says
+`Origin 'http://...' is not https, but the request arrived over https`.
+This happens, for example, when your server trusts an
+`X-Forwarded-Proto: https` header that the proxy also sends on requests
+that arrived over http. Serve the site over https, or stop the proxy
+from claiming https for http requests.
+
+### Read the proxy's scheme { #read-the-proxys-scheme }
+
+Citry takes the scheme from your server: the ASGI scope's `scheme`, the
+WSGI `wsgi.url_scheme`, or Django's `request.scheme`, which follows
+`SECURE_PROXY_SSL_HEADER`. A proxy that serves your site over https and
+passes plain http to your app works: your server reports http, and
+Citry then accepts an `Origin` of either scheme.
+
+To have Citry refuse an `http:` `Origin` there too, make your server
+read the scheme the proxy forwards:
+
+- Django: set `SECURE_PROXY_SSL_HEADER`.
+- Uvicorn: list the proxy's address in `--forwarded-allow-ips`. Uvicorn
+  already believes a proxy at `127.0.0.1`.
+- Flask and other WSGI apps: wrap the app in Werkzeug's
+  `ProxyFix(x_proto=1)`. On Flask, wrap it after `mount()`
+  ([Order WSGI middleware](#order-wsgi-middleware)).
+
+Do this only for a proxy you run, and make sure the proxy sets the
+forwarded scheme on every request.
 
 ## URLs Citry serves
 

@@ -2005,6 +2005,70 @@ def test_dispatch_uses_one_canonical_live_root_for_every_vue_root_shape(page: An
 
 
 @pytest.mark.e2e
+def test_the_browser_refuses_a_standard_event_name_on_a_mounted_component(page: Any, serve_live: Any) -> None:
+    engine = Citry(secret="vue-dispatch-names-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class ProbeEvents:
+        def ping(self):
+            # `actions.Dispatch` refuses `click` when it builds the action.
+            # Changing the name afterwards stands in for a server that skips
+            # that check, so the browser's own check is what decides.
+            dispatch = actions.Dispatch("Probe:ping")
+            object.__setattr__(dispatch, "name", "click")
+            return dispatch
+
+    class Probe(Component):
+        citry = engine
+        Events = ProbeEvents
+        template = """
+            <button id="probe">probe</button>
+        """
+        js = """
+            $component({
+              onServerRender({ component, onEvent }) {
+                onEvent("click", () => globalThis.__heard.push("onEvent"));
+                globalThis.__send = () =>
+                  component.$sendEvent("ping").then(
+                    () => "resolved",
+                    (error) => String(error && error.message),
+                  );
+              },
+            });
+        """
+
+    dispatcher_for(engine)
+    page.add_init_script(
+        """globalThis.__heard=[];
+        document.addEventListener('click',()=>__heard.push('document'));"""
+    )
+    html = Probe().render().serialize()
+    render_id = re.search(r'"renderId":"([^"]+)"', html)
+    assert render_id is not None
+    page.goto(serve_live(engine, html, "") + "/")
+    page.wait_for_function("typeof globalThis.__send === 'function'")
+    page.evaluate("document.querySelector('#probe').addEventListener('click',()=>__heard.push('element'))")
+
+    # A server result for the mounted component goes through the bridge's
+    # own dispatch, which runs the `onEvent` listeners and then fires the
+    # DOM event; neither may run.
+    outcome = page.evaluate("globalThis.__send()")
+    assert "refused to dispatch" in outcome
+    # Page code that applies an action list aimed at the mounted component
+    # hands it to the Events bridge, which fires an untargeted event in that
+    # list with its page-wide dispatch.
+    applied = page.evaluate(
+        """target=>Citry.events.applyActions([
+          {action:'event',eventName:'Probe:noop',target},
+          {action:'event',eventName:'Click'},
+        ]).then(()=>'resolved',error=>String(error.message))""",
+        f"render:{render_id.group(1)}",
+    )
+    assert "refused to dispatch" in applied
+    assert page.evaluate("globalThis.__heard") == []
+
+
+@pytest.mark.e2e
 def test_a_removed_component_comes_back_with_its_stylesheet(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     page.set_default_timeout(5_000)
     engine = Citry(secret="vue-returning-style-owner-secret", autodiscover=False)  # noqa: S106
@@ -2218,6 +2282,55 @@ def test_native_get_and_attachment_use_the_per_event_routes(page: Any, serve_liv
     assert download.path().read_text() == "download-body"
     post_request = next(request for request in requests if request.method == "POST")
     assert post_request.url.endswith(f"/ext/events/e/{HttpActions.class_id}/download")
+    assert faults == []
+
+
+@pytest.mark.e2e
+def test_a_get_call_that_reads_state_sends_its_token_in_a_header(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
+    # The URL of a GET call lands in access logs, so the browser must send
+    # the State token in a header and the server must read it from there.
+    engine = Citry(secret="vue-get-token-header-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class PeekState:
+        label: str = "kept"
+
+    class Peeker(Component):
+        citry = engine
+        template = """
+          <main>
+            <button id="peek" @click="peek">peek</button>
+            <output id="peek-result" v-text="result"></output>
+          </main>
+        """
+        js = """$component({
+          data(){return {result:''}},
+          methods:{peek(){this.$sendEvent('peek').then(value=>{this.result=value.label})}}
+        });"""
+
+        State = PeekState
+
+        class Events:
+            @event(methods=("GET",))
+            def peek(self, state: PeekState):
+                return {"label": state.label}
+
+    dispatcher_for(engine)
+    html = Peeker().render().serialize()
+    requests: list[Any] = []
+    faults: list[str] = []
+    page.on("request", lambda request: requests.append(request) if "/ext/events/e/" in request.url else None)
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    base = serve_live(engine, html, "")
+    open_citry_page(base + "/")
+    page.locator("#peek").click()
+    page.wait_for_function("document.querySelector('#peek-result')?.textContent === 'kept'")
+    [peek_request] = requests
+    assert peek_request.method == "GET"
+    assert "_citry_state_token" not in peek_request.url
+    assert peek_request.headers.get("x-citry-state-token")
     assert faults == []
 
 
