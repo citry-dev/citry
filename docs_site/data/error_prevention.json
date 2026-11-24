@@ -162,7 +162,7 @@
     },
     {
       "id": "m13-state-field-typo",
-      "title": "State field typo in an update handler",
+      "title": "Server handler writes to a misspelled state field",
       "category": "events"
     },
     {
@@ -217,7 +217,7 @@
     },
     {
       "id": "m24-undeclared-event",
-      "title": "Child emits an event the parent does not listen for",
+      "title": "Child component emits a misspelled event to its parent",
       "category": "events"
     },
     {
@@ -242,12 +242,12 @@
     },
     {
       "id": "m29-listener-name",
-      "title": "Parent listens for a misspelled event",
+      "title": "Parent listens for a misspelled event from its child",
       "category": "events"
     },
     {
       "id": "m30-event-payload-type",
-      "title": "Event sent with a payload of the wrong type",
+      "title": "Child component's event carries a value of the wrong type",
       "category": "events"
     },
     {
@@ -287,12 +287,12 @@
     },
     {
       "id": "m38-state-read-typo",
-      "title": "Template reads a misspelled state field",
+      "title": "Displayed value is read from a misspelled state field",
       "category": "naming"
     },
     {
       "id": "m39-state-type",
-      "title": "State field given a value of the wrong type",
+      "title": "Server handler stores a wrong-typed value in a state field",
       "category": "types"
     },
     {
@@ -397,7 +397,7 @@
     },
     {
       "id": "m60-handler-arguments",
-      "title": "Handler declares arguments the event does not send",
+      "title": "Parent's handler takes more arguments than its child's event sends",
       "category": "events"
     },
     {
