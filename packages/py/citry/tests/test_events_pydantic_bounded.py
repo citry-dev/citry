@@ -961,8 +961,9 @@ def test_on_pypy_a_state_read_only_as_json_accepts_json_value() -> None:
 @pytest.mark.usefixtures("pypy_stack_rules")
 def test_on_pypy_a_state_read_only_as_json_refuses_a_recursive_alias() -> None:
     # Nothing counts the levels of a JSON-only read, so Pydantic's JSON
-    # parser lets a list alias nest about 200 levels, and writing the State
-    # out again calls Python at each level, which ends PyPy.
+    # parser lets a recursive alias nest about 200 levels, and for a type
+    # such as Sequence[...] writing the State out calls Python at each
+    # level, which ends PyPy.
     state = pydantic.create_model(
         "StrictMeta", __config__=pydantic.ConfigDict(strict=True), meta=(PlainPair | None, None)
     )
@@ -1098,6 +1099,11 @@ SerializedNest = TypeAliasType(
     "SerializedNest", "Annotated[list[SerializedNest | None], pydantic.WrapSerializer(_write_unchanged)]"
 )
 UnserializedNest = TypeAliasType("UnserializedNest", "list[UnserializedNest | None]")
+# functools.partial hides the app's function behind a standard library one.
+PartialSerializedNest = TypeAliasType(
+    "PartialSerializedNest",
+    "Annotated[list[PartialSerializedNest | None], pydantic.WrapSerializer(functools.partial(_write_unchanged))]",
+)
 # The serializer sits on the reference to the alias, not on its definition.
 SerializedReference = TypeAliasType(
     "SerializedReference", "list[Annotated[SerializedReference, pydantic.WrapSerializer(_write_unchanged)] | None]"
@@ -1111,6 +1117,7 @@ SequenceNest = TypeAliasType("SequenceNest", "Sequence[SequenceNest | None]")
     [
         pytest.param(SerializedNest, True, id="serializer"),
         pytest.param(SerializedReference, True, id="serializer on the reference"),
+        pytest.param(PartialSerializedNest, True, id="serializer in functools.partial"),
         pytest.param(UnserializedNest, False, id="plain list"),
     ],
 )

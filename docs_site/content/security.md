@@ -786,8 +786,9 @@ write holds a recursive model, dataclass, or TypedDict (one that can
 hold itself) with no wrap validator on the way back to itself. A loop
 that passes through an `Iterable` field is still such a loop. On PyPy
 the same goes for a recursive type of any other kind, such as a list
-alias: Pydantic reads up to 200 levels of it there, and writing the
-State back out calls Python at each level, which ends PyPy. Fix it by
+alias: nothing counts the up to 200 levels Pydantic reads there, and
+for some types, such as `Sequence[...]`, writing the State back out
+calls Python at each level, which can end PyPy. Fix it by
 removing what makes Citry check the State only as JSON, by leaving the
 field out of `_model`, or by adding a wrap validator to the recursive
 type.
@@ -847,7 +848,8 @@ Each `Sequence[...]` or `defaultdict` field and each `OnErrorOmit` item
 adds one more, and so does each level of a recursive type that has a
 serializer function such as `WrapSerializer`, because Pydantic calls
 that function at each level when Citry writes State back out. So
-recursive data can nest fewer levels on PyPy than on CPython. Measured on PyPy 7.3.23, a tree of models was accepted up to
+recursive data can nest fewer levels on PyPy than on CPython. Measured
+on PyPy 7.3.23, a tree of models was accepted up to
 about 30 levels when each model held its children in a `list`, 15 in a
 `Sequence`, and 10 in `list[OnErrorOmit[list[OnErrorOmit[Tree]]]]`.
 
@@ -869,9 +871,10 @@ model with 48 validators, 31 levels deep, with 100 levels of
 The other is your own code that handles nested data again: a
 validator that calls `model_validate` on a nested value, or a handler
 that stores event data in a State field of another type, such as a
-`Sequence[...]` or a type with a `WrapSerializer`, which Citry then
-writes out at every level of the data. A larger
-thread stack does not help on PyPy, and raising the recursion limit
+`Sequence[...]` or a type with a `WrapSerializer`, whose serializer
+Pydantic calls at every level of the data when Citry writes the State
+out. A larger thread stack does not help on PyPy, and raising the
+recursion limit
 does not make the check safer. If your app takes deeply nested data
 from the browser, run it on CPython.
 

@@ -1785,9 +1785,10 @@ class _Schema:
           Citry reads only as JSON, where the JSON read is the only check.
         - with ``class_loops`` under the PyPy rules, also any other type that
           can hold itself without such a wrap validator, such as a list alias
-          (``uncounted_loop_reason``), inside ``Json[...]`` text and in a
-          State read only as JSON alike: Pydantic's JSON parser lets it nest
-          200 levels, and writing the State out again calls Python at each.
+          (``uncounted_loop_reason``), both inside ``Json[...]`` text and in
+          a State read only as JSON: Pydantic's JSON parser lets it nest 200
+          uncounted levels, and for a type such as ``Sequence[...]`` writing
+          the State out calls Python at each level.
 
         A wrap validator lets wrappers back in below it, so the walk treats
         everything below one as counted, as the copy does.

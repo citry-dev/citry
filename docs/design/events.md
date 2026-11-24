@@ -2182,8 +2182,8 @@ Error modes:
       the handler stored in State, and then ended PyPy 7.3.23 when the
       State was written out, as on 1.2.0. A handler that stores data in
       a State field of another type, whose serializer function or
-      `Sequence[...]` the check never saw, is not counted. Parts that pydantic-core
-      checks without calling Python still take stack uncounted, so a
+      `Sequence[...]` the check never saw, is not counted. Parts that
+      pydantic-core checks without calling Python still take stack uncounted, so a
       schema with dozens of them at each level can still end PyPy below
       the limit, as Pydantic alone does. Inside `Json[...]` no wrapper
       counts, and each JSON string starts a fresh parse, so on PyPy
@@ -2193,8 +2193,8 @@ Error modes:
       (`class_loops`, `_Schema.uncounted_loop_reason`) when the loop
       passes through a class (model, dataclass, TypedDict, NamedTuple:
       `_RECURSIVE_CLASS_REASON`), and any other such loop too
-      (`_JSON_LOOP_REASON`), below a `json` node and in a State read
-      only as JSON alike: in such a State nothing counts the JSON read,
+      (`_JSON_LOOP_REASON`), both below a `json` node and in a State
+      read only as JSON: in such a State nothing counts the JSON read,
       so a `Sequence[Sequence[Sequence[SS]]]` alias 150 levels deep
       (640 bytes) passed the read and then ended PyPy 7.3.23 in
       `state_wire_values`, where `model_dump` calls a Python function
