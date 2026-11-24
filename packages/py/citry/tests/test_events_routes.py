@@ -182,7 +182,7 @@ def _token(comp_cls, **state_kwargs):
     )
 
 
-def _request(method="POST", content_type="application/json", headers=(), body=b"", query=None):
+def _request(method="POST", content_type="application/json", headers=(), body=b"", query=None, scheme=""):
     all_headers = list(headers)
     if content_type:
         all_headers.append(("Content-Type", content_type))
@@ -193,6 +193,7 @@ def _request(method="POST", content_type="application/json", headers=(), body=b"
         headers=RouteHeaders(all_headers),
         body=body,
         content_type=content_type,
+        scheme=scheme,
     )
 
 
@@ -542,6 +543,45 @@ class TestCsrfFloor:
         request = _request(headers=[("X-Citry-Events", "1"), ("Origin", "null"), ("Host", "good.example")])
         with pytest.raises(EventError):
             enforce_floor(request)
+
+    def test_origin_that_urlsplit_cannot_read_is_a_csrf_failure(self):
+        request = _request(headers=[("X-Citry-Events", "1"), ("Origin", "http://[::1"), ("Host", "[::1")])
+        with pytest.raises(EventError) as excinfo:
+            enforce_floor(request)
+        assert excinfo.value.status == 403
+
+    @pytest.mark.parametrize(
+        ("scheme", "origin", "passes"),
+        [
+            # A page on plain http must not call an app the host serves over https.
+            ("https", "http://good.example", False),
+            ("https", "HTTP://good.example", False),
+            ("https", "https://good.example", True),
+            ("https", "HTTPS://good.example", True),
+            # Behind a proxy that ends TLS the app sees http while the browser
+            # sends an https Origin; the schemes need not match.
+            ("http", "https://good.example", True),
+            ("http", "http://good.example", True),
+            # A RouteRequest built without a scheme is not checked for one.
+            ("", "http://good.example", True),
+        ],
+    )
+    def test_origin_scheme_against_the_request_scheme(self, scheme, origin, passes):
+        request = _request(
+            headers=[("X-Citry-Events", "1"), ("Origin", origin), ("Host", "good.example")],
+            scheme=scheme,
+        )
+        if passes:
+            enforce_floor(request)
+        else:
+            with pytest.raises(EventError) as excinfo:
+                enforce_floor(request)
+            assert excinfo.value.message == CSRF_FAILED_MESSAGE
+            assert excinfo.value.status == 403
+
+    def test_https_request_without_an_origin_header_passes(self):
+        # The scheme check reads the Origin header; with none, the other checks decide.
+        enforce_floor(_request(headers=[("X-Citry-Events", "1"), ("Host", "good.example")], scheme="https"))
 
     @pytest.mark.parametrize(
         ("fetch_site", "passes"),

@@ -104,6 +104,14 @@ class RouteRequest:
             request names none.
         native: The untouched host request object: the ASGI scope, the WSGI
             environ, or Django's `HttpRequest`.
+        scheme: The scheme the host reports the request arrived over,
+            lowercase: `"http"` or `"https"`, or `""` when the adapter does
+            not know it. The ASGI adapter reads the scope's `scheme`, the
+            WSGI adapter reads `wsgi.url_scheme`, and the Django adapter
+            reads `request.scheme`, which follows `SECURE_PROXY_SSL_HEADER`.
+            Behind a proxy that ends TLS, this is the scheme between the
+            proxy and the app, usually `"http"`, unless the server or
+            framework is set up to read the proxy's forwarded scheme.
 
     """
 
@@ -114,6 +122,8 @@ class RouteRequest:
     body: bytes = b""
     content_type: str = ""
     native: Any = None
+    # Last, so a caller that passes the fields by position keeps working.
+    scheme: str = ""
 
 
 class URLRouteHandler(Protocol):

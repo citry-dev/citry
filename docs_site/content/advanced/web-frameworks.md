@@ -501,6 +501,18 @@ Werkzeug's `ProxyFix(x_host=1)`, also works. Use it only behind a proxy
 you run, and on Flask, wrap it after `mount()`
 ([Order WSGI middleware](#order-wsgi-middleware)).
 
+Citry also refuses a call that your server reports as https when its
+`Origin` starts with `http:`. The scheme comes from your server: the
+ASGI scope's `scheme`, the WSGI `wsgi.url_scheme`, or Django's
+`request.scheme`, which follows `SECURE_PROXY_SSL_HEADER`. A proxy that
+ends TLS and talks plain http to your app is fine, because Citry does
+not compare the schemes on an http request. The reverse setup fails:
+if the site is served to browsers over plain http while your app
+reports https, every call is refused, and the `DEBUG` log says
+`Origin 'http://...' is not https, but the request arrived over https`.
+Serve the site over https, or make your server report the scheme the
+browser used.
+
 ## URLs Citry serves
 
 Under the prefix, Citry serves:

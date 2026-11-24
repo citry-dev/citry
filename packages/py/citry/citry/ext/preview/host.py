@@ -161,6 +161,8 @@ def preview_app(citry: Citry, routes: tuple[URLRoute, ...]) -> ASGIApp:
             headers=headers,
             content_type=headers.get("content-type", ""),
             native=scope,
+            # Read as the ASGI adapter reads it, so every route sees one shape.
+            scheme=str(scope.get("scheme") or "http").lower(),
         )
         handler = matched.route.handler_async or matched.route.handler
         assert handler is not None  # noqa: S101 - match_route only returns handler routes

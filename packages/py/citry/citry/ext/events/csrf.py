@@ -41,7 +41,7 @@ event's data class (design 3.5, ``security_csrf.md`` 4.4).
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 from urllib.parse import urlsplit
 
 from citry.ext.events.errors import EventError
@@ -141,7 +141,7 @@ _MSG_CSRF_FAILED = "The call failed the CSRF check; reload the page and try agai
 _ACCEPTED_FETCH_SITES = ("same-origin", "none")
 
 
-def _reject(reason: str) -> None:
+def _reject(reason: str) -> NoReturn:
     logger.debug(f"Events CSRF floor rejected the request: {reason}")
     raise EventError(_MSG_CSRF_FAILED, status=403)
 
@@ -170,10 +170,24 @@ def enforce_floor(request: RouteRequest) -> None:
     if origin is not None:
         # The Origin header is browser-set and unforgeable by page JS;
         # compare its authority against the request's own Host.
-        origin_host = urlsplit(origin).netloc.lower()
+        try:
+            parsed_origin = urlsplit(origin)
+        except ValueError:
+            # urlsplit refuses some authorities, such as "[::1"; no browser
+            # sends one, so refuse it as a plain CSRF failure here rather
+            # than let the dispatcher log it as a policy that raised.
+            _reject(f"Origin {origin!r} is not a valid origin")
+        origin_host = parsed_origin.netloc.lower()
         host = (request.headers.get("host") or "").lower()
         if not origin_host or origin_host != host:
             _reject(f"Origin {origin!r} does not match the request host {host!r}")
+        # A page served over plain http on the same host must not call an
+        # https app: a network attacker can write that page. Only the
+        # direction the host can vouch for is checked. Behind a proxy that
+        # ends TLS the app sees "http" while the browser sends an https
+        # Origin, so an http request does not require the schemes to match.
+        if request.scheme == "https" and parsed_origin.scheme.lower() != "https":
+            _reject(f"Origin {origin!r} is not https, but the request arrived over https")
 
     fetch_site = request.headers.get("sec-fetch-site")
     if fetch_site is not None and fetch_site.lower() not in _ACCEPTED_FETCH_SITES:
