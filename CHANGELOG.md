@@ -19,8 +19,9 @@ still requires citry-core 2.1.2.
   nested too deeply. A schema with many validators at each level,
   especially with a free-form field deep inside it, a handler that
   stores event data in a State field of another type that has a
-  serializer, or your own code that validates nested data again, can
-  still end the process. See
+  serializer (or a Pydantic class from a plain dataclass `data` class
+  in a free-form field), or your own code that validates nested data
+  again, can still end the process. See
   [Event data on PyPy](https://citry.dev/security/#event-data-on-pypy)
   and
   [GHSA-29wx-2wvw-8962](https://github.com/citry-dev/citry/security/advisories/GHSA-29wx-2wvw-8962).
@@ -44,10 +45,12 @@ still requires citry-core 2.1.2.
   defined if its event `data` class or any State field has a serializer
   whose return type leads into a recursive type with a serializer of
   its own, such as `Annotated[Any, PlainSerializer(f, return_type=Tree)]`,
-  or a `PlainValidator` on a recursive type. Pydantic calls Python at
-  every level of such a value when Citry writes the State out. Remove
-  `return_type` (or the serializer's return annotation), or use an
-  `AfterValidator` or `WrapValidator` in place of the `PlainValidator`.
+  or a `PlainValidator` on a level of a recursive type, as in
+  `Tree = Annotated[list[Tree], PlainValidator(f)]`. Pydantic calls
+  Python at every level of such a value when Citry writes the State
+  out. Remove `return_type`, annotate a `field_serializer` or
+  `model_serializer` as returning `Any`, or use an `AfterValidator` or
+  `WrapValidator` in place of the `PlainValidator`.
 
 CPython accepts and refuses the same data as before. Citry applies the
 PyPy rules on every Python implementation other than CPython, such as

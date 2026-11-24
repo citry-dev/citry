@@ -1243,16 +1243,33 @@ def test_on_pypy_a_plain_validator_on_a_recursive_type_is_refused() -> None:
     # every level.
     state = pydantic.create_model("ValidatedState", tree=(PlainValidatedNest | None, None))
 
-    with pytest.raises(ValueError, match="has a PlainValidator on the recursive type PlainValidatedNest") as raised:
+    with pytest.raises(ValueError, match="writes out through the recursive type PlainValidatedNest") as raised:
         bounded.check_state_class("Probe", state, frozenset({"tree"}))
 
-    assert "Use an AfterValidator or a WrapValidator on PlainValidatedNest" in str(raised.value)
+    assert "has a PlainValidator whose value Pydantic writes out" in str(raised.value)
+    assert "Use an AfterValidator or a WrapValidator in its place." in str(raised.value)
+
+
+class SerializedLeaf(pydantic.BaseModel):
+    when: datetime.date = datetime.date(2000, 1, 1)
+
+    @pydantic.field_serializer("when")
+    def _write_when(self, value: datetime.date) -> str:
+        return value.isoformat()
+
+
+# SerializedLeaf is used twice, so Pydantic makes it a definition, but it cannot hold itself.
+ReturnsLeafPair = TypeAliasType(
+    "ReturnsLeafPair",
+    "Annotated[Any, pydantic.PlainSerializer(_return_unchanged, return_type=tuple[SerializedLeaf, SerializedLeaf])]",
+)
 
 
 @pytest.mark.usefixtures("pypy_stack_rules")
 @pytest.mark.parametrize(
     "field_type",
     [
+        pytest.param(ReturnsLeafPair, id="return type with a serializer that does not recurse"),
         pytest.param(UnreturnedSerializer, id="serializer without a return type"),
         pytest.param(ReturnsUnserializedNest, id="return type without a serializer"),
     ],

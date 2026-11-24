@@ -112,7 +112,8 @@ model that can hold itself (a class that Citry first meets at a call
 gets a 422 for that call instead), a State checked only as JSON
 text whose writable field holds a recursive list alias or other
 recursive type, and a serializer whose return type leads into a
-recursive type with a serializer of its own. These rules keep deeply
+recursive type with a serializer of its own, or a `PlainValidator` on a
+level of a recursive type. These rules keep deeply
 nested data from ending the server process in the cases measured; see
 [Event data on PyPy](/security/#event-data-on-pypy). Citry applies
 them on every Python implementation other than CPython.

@@ -2186,13 +2186,19 @@ Error modes:
       also follows a serializer's return type (`return_schema`, which
       Pydantic sets for `return_type=`, a serializer's return
       annotation and a `PlainValidator`), which neither the check nor
-      the copy reads. So under the PyPy rules, registration refuses, in
-      the event data class and in every State field, writable or not, a
-      function serializer whose return type leads into a definition on
-      a loop that holds a function serializer, the app's or Pydantic's
-      (`serializer_return_loop`, `_refuse_serializer_return_loop`; the
-      loop and the serializers are found through both the children and
-      the serializers' schemas). Without it,
+      the copy reads. So under the PyPy rules, registration looks at
+      every function serializer in the event data class (a Pydantic
+      model or dataclass) and in every State field, writable or not.
+      It refuses one whose return type leads into a recursive
+      definition that itself holds a function serializer, the app's or
+      Pydantic's (`serializer_return_loop`,
+      `_refuse_serializer_return_loop`; the loop and the serializers
+      are found through both the children and the serializers'
+      schemas). Any serializer function in that definition counts, also
+      one on a value that does not nest, so a few safe shapes are
+      refused too. A plain-dataclass or TypedDict data class is not
+      read, so a handler that stores a Pydantic class from one in an
+      `Any` State field is not covered. Without it,
       `Annotated[Any, PlainSerializer(f, return_type=Tree)]`, with a
       `WrapSerializer` on `Tree`'s levels, and a `PlainValidator` on a
       recursive alias each passed at 190 levels and ended PyPy 7.3.23

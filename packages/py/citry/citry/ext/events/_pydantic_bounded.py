@@ -4206,8 +4206,9 @@ def _refuse_serializer_return_loop(comp_name: str, root: Any, owner: str) -> Non
 
     The first field (in name order) whose serializer's return type leads
     into a recursive type with a serializer of its own is named (see
-    ``serializer_return_loop``), then the rest of the class. ``owner``
-    names the class, such as "the State Board".
+    ``serializer_return_loop``). When no field has one, the class as a
+    whole is checked and named. ``owner`` names the class, such as "the
+    State Board".
 
     Raises:
         ValueError: Such a serializer was found, naming the field and the fix.
@@ -4237,16 +4238,16 @@ def _refuse_serializer_return_loop(comp_name: str, root: Any, owner: str) -> Non
     )
     if by_validator:
         msg = (
-            f"Component {comp_name}: {where} has a PlainValidator on the recursive type {loop_type}, so"
-            f" Pydantic writes the value out through a Python function {limit} Use an AfterValidator or a"
-            f" WrapValidator on {loop_type} in its place."
+            f"Component {comp_name}: {where} has a PlainValidator whose value Pydantic writes out through"
+            f" the recursive type {loop_type}, which calls a Python function {limit} Use an AfterValidator or"
+            " a WrapValidator in its place."
         )
     else:
         msg = (
             f"Component {comp_name}: {where} has a serializer whose return type leads into the recursive type"
             f" {loop_type}, which has a serializer of its own. Writing the value out calls Python {limit}"
-            " Remove return_type from that serializer (or the return annotation of a field_serializer or"
-            f" model_serializer), or remove the serializer from {loop_type}."
+            " Remove return_type from that serializer, or annotate a field_serializer or model_serializer as"
+            f" returning Any, or remove the serializer from {loop_type}."
         )
     raise ValueError(msg)
 
