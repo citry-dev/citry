@@ -52,9 +52,9 @@
   an error fails the call with a 500. See
   [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
 - When an event guard, `_context`, an `on_event` hook or a State
-  validator raises an unexpected error, the server log now names it
-  instead of saying the event handler raised, since the handler never
-  ran.
+  validator raises an unexpected error, the server log, and in debug
+  mode the error message, now name it instead of saying the event
+  handler raised, since the handler never ran.
 
 ## v1.2.0
 

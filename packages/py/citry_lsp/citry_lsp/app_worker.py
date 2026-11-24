@@ -401,8 +401,8 @@ def _event_sources(component_class: type) -> dict[str, object]:
         # The editor lets `wait: false` through only for these handlers, as the browser does.
         # The dispatcher reads `detached` from the handler record, where citry copies the
         # `@event` settings when the class is created, so the editor reads it there too and
-        # a function decorated later does not change the hint. An older citry keeps it only
-        # on the function's options (and citry 0.6.0 not even there), so read those softly.
+        # a function decorated later does not change the hint. A citry before 1.3.0 keeps it
+        # only on the function's options, so fall back to those.
         detached = getattr(handler, "detached", None)
         if not isinstance(detached, bool):
             detached = getattr(event_options(func), "detached", False)

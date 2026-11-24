@@ -35,6 +35,7 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+import sys
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -553,15 +554,19 @@ def _detached_render_message(plan: _CallPlan) -> str:
 
 def _callable_name(func: Any) -> str:
     """The name the server log uses for a guard or another callable: its qualified name, else its type's name."""
-    name = getattr(func, "__qualname__", None)
-    # A callable object may answer `__qualname__` with anything; only text
-    # names it, and the type's name stands in otherwise.
+    # A callable object may answer `__qualname__` with anything, or raise.
+    # Only a non-empty string is used; otherwise the type's name stands in,
+    # so naming a guard for the log can never fail the call.
+    try:
+        name = getattr(func, "__qualname__", None)
+    except Exception:  # noqa: BLE001 - see the comment above
+        name = None
     return name if isinstance(name, str) and name else type(func).__name__
 
 
-def _drop_tracebacks(error: BaseException) -> None:
+def _drop_tracebacks(error: BaseException, *, keep: BaseException | None) -> None:
     """
-    Clear the traceback of ``error`` and of every exception chained to it.
+    Clear the traceback of ``error`` and of every exception chained to it, down to ``keep``.
 
     A guard may keep one exception object and return or raise it on every
     call. Its traceback, and those of the exceptions on its ``__cause__``
@@ -569,21 +574,34 @@ def _drop_tracebacks(error: BaseException) -> None:
     frames of the call that raised them, and through them the request and
     the State, so they are cleared once the call is answered. A chain can
     loop back on itself, so each exception is visited once.
+
+    ``keep`` is the exception the host was handling when it called the
+    dispatcher (``None`` outside an ``except`` block). Python chains it
+    onto every exception raised during the call, and the host may still
+    re-raise or log it, so it and everything below it keep their
+    tracebacks.
+
+    Clearing is best effort and never raises: the call has its answer, and
+    an exception class whose ``__cause__`` or ``exceptions`` raises must
+    not turn that answer into an error that ends the whole request.
     """
     seen: set[int] = set()
     pending: list[BaseException] = [error]
     while pending:
         current = pending.pop()
-        if id(current) in seen:
+        if current is keep or id(current) in seen:
             continue
         seen.add(id(current))
-        current.__traceback__ = None
-        pending.extend(
-            chained for chained in (current.__cause__, current.__context__) if isinstance(chained, BaseException)
-        )
-        # Python 3.11+, which citry requires; ruff still checks for 3.10 (#331).
-        if isinstance(current, BaseExceptionGroup):  # noqa: F821
-            pending.extend(current.exceptions)
+        try:
+            current.__traceback__ = None
+            pending.extend(
+                chained for chained in (current.__cause__, current.__context__) if isinstance(chained, BaseException)
+            )
+            # Python 3.11+, which citry requires; ruff still checks for 3.10 (#331).
+            if isinstance(current, BaseExceptionGroup):  # noqa: F821
+                pending.extend(member for member in current.exceptions if isinstance(member, BaseException))
+        except Exception:  # noqa: BLE001, S112 - app exception classes may raise here; see the docstring
+            continue
 
 
 def _apply_guard_result(source: str, guard: Any, result: Any) -> None:
@@ -638,7 +656,9 @@ def _apply_guard_result(source: str, guard: Any, result: Any) -> None:
     # Clearing the traceback first stops an error kept in a module constant
     # and returned on every call from collecting one traceback per call.
     if isinstance(result, EventError):
-        _drop_tracebacks(result)
+        # The exception the host is handling, if any, is chained below the
+        # returned one and stays as it is.
+        _drop_tracebacks(result, keep=sys.exc_info()[1])
         raise result
     # Any other exception, or an exception class, is a refusal too (a
     # Django `return PermissionDenied()`, say). Its text was not written for
@@ -648,7 +668,7 @@ def _apply_guard_result(source: str, guard: Any, result: Any) -> None:
     # it was raised from) are cleared so a shared object does not keep that
     # call's frames alive.
     if isinstance(result, BaseException):
-        _drop_tracebacks(result)
+        _drop_tracebacks(result, keep=sys.exc_info()[1])
         raise EventError(_MSG_GUARD_REFUSED, status=403)
     if isinstance(result, type) and issubclass(result, BaseException):
         raise EventError(_MSG_GUARD_REFUSED, status=403)
@@ -1154,7 +1174,7 @@ class EventsDispatcher:
                         comp_cls=comp_cls,
                         handler=handler,
                         send_sequence=send_sequence,
-                        failed_step="a validator of the State class",
+                        failed_step=f"a validator of {comp_cls.__name__}.State",
                     )
                 # A model State validates its values here, and a
                 # ValidationError means the same as a dataclass's TypeError.
@@ -1307,6 +1327,10 @@ class EventsDispatcher:
         events.event = call_event
 
         answered: Any = _NOT_ANSWERED
+        # The exception the host was handling when it called the dispatcher,
+        # if any. Python chains it onto errors the guards raise, and clearing
+        # their tracebacks below must leave the host's own one alone.
+        host_exception = sys.exc_info()[1]
         # Which step is running, so a crash before the handler is logged
         # against the code that failed (a guard, say), not the handler.
         step = "the on_event hook"
@@ -1361,7 +1385,7 @@ class EventsDispatcher:
             # dropping its tracebacks (and those of the exceptions chained to
             # it) stops that object holding this call's frames (the request,
             # the State) until the next call.
-            _drop_tracebacks(err)
+            _drop_tracebacks(err, keep=host_exception)
             return build_error_result(error, send_sequence)
         except Exception as err:  # noqa: BLE001 - a crash before the handler still answers 500
             return self._unexpected_error(
@@ -1876,7 +1900,9 @@ class EventsDispatcher:
                 f"Uncaught exception from {failed_step} of event {handler_label!r} on component {comp_label};"
                 " the event handler did not run."
             )
-            raised = f"{failed_step[0].upper()}{failed_step[1:]} raised"
+            # "failed", not "raised": a guard's result that Citry refuses
+            # (a callable, a coroutine) lands here too, and it raised nothing.
+            raised = f"{failed_step[0].upper()}{failed_step[1:]} failed with"
         else:
             source = "checking the data for" if checking_args else "from"
             logger.exception(f"Uncaught exception {source} event handler {handler_label!r} on component {comp_label}.")

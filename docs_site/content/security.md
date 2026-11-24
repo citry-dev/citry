@@ -192,9 +192,11 @@ A guard that returns a function or other callable, as
 `return self.can_edit` does when the `()` is missing, fails the call
 with a 500, and the server log names the guard, since the check it
 meant to run never ran. Any other true value lets the call go ahead,
-and Citry logs a warning that names the guard. To decide, Citry tests the value for true or
-false once, which runs a QuerySet's database query; return
-`queryset.exists()` instead of the QuerySet so the query loads no rows.
+and Citry logs a warning that names the guard.
+
+Citry tests a returned value for true or false once, which runs a
+QuerySet's database query; return `queryset.exists()` instead of the
+QuerySet so the query loads no rows.
 If that test raises an error, the call fails with a 500, as when the
 guard itself raises one. Under an async server such as Starlette or
 FastAPI, Citry runs guards on the event loop, where Django refuses a

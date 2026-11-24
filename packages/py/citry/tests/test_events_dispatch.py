@@ -1070,7 +1070,7 @@ def test_the_500_log_line_names_a_state_validator_that_raised(monkeypatch, caplo
     assert item["error"]["code"] == "handler_error"
     assert ran == []
     assert (
-        "Uncaught exception from a validator of the State class of event 'read' on component Notes;"
+        "Uncaught exception from a validator of Notes.State of event 'read' on component Notes;"
         " the event handler did not run."
     ) in caplog.text
 
@@ -3118,8 +3118,8 @@ class TestGuardReturnValues:
     """
     Any false value or a returned exception refuses the call.
 
-    None and True go ahead silently; any other true value goes ahead with a
-    warning.
+    None and True go ahead silently; a callable answers 500; any other true
+    value goes ahead with a warning.
     """
 
     @staticmethod
@@ -3562,6 +3562,50 @@ class TestGuardReturnValues:
         assert error.__traceback__ is None
         assert chained.__traceback__ is None
 
+    @pytest.mark.parametrize("returned", [True, False], ids=["returned", "raised"])
+    def test_the_host_s_own_exception_keeps_its_traceback(self, returned):
+        # A host may call the dispatcher inside an `except` block (a retry
+        # middleware, say). Python chains the host's exception onto every
+        # exception the guard raises; it is the host's, so it keeps its
+        # traceback for the host to re-raise or log.
+        log = []
+
+        def guard(events):
+            log.append("guard")
+            error = EventError("No.", status=403)
+            if returned:
+                return error
+            raise error
+
+        comp = self._component(_citry(), log, handler_guard=guard)
+        host_error = RuntimeError("host")
+        try:
+            raise host_error
+        except RuntimeError:
+            assert self._call(comp, "go")["error"]["message"] == "No."
+        assert host_error.__traceback__ is not None
+        assert log == ["guard"]
+
+    def test_an_exception_whose_chain_raises_still_answers(self):
+        # Clearing tracebacks is best effort: an app exception class whose
+        # `__cause__` raises must not turn the answered call into an error
+        # that ends the whole request.
+        class Odd(EventError):
+            @property
+            def __cause__(self):
+                msg = "odd"
+                raise RuntimeError(msg)
+
+        log = []
+
+        def guard(events):
+            log.append("guard")
+            raise Odd("No.", status=403)
+
+        comp = self._component(_citry(), log, handler_guard=guard)
+        assert self._call(comp, "go")["error"]["message"] == "No."
+        assert log == ["guard"]
+
     def test_an_exception_chain_that_loops_is_cleared_once(self):
         # A chain can point back at itself (`a.__context__ = b`,
         # `b.__context__ = a`); clearing it must still finish.
@@ -3637,7 +3681,7 @@ class TestGuardReturnValues:
         with caplog.at_level(logging.DEBUG, logger="citry"):
             item = self._call(comp, "go")
         assert item["error"]["message"] == (
-            f"The guard {guard.__qualname__!r} raised an unexpected error: RuntimeError: database is down"
+            f"The guard {guard.__qualname__!r} failed with an unexpected error: RuntimeError: database is down"
         )
 
     def test_the_500_log_line_names_context_when_it_raised(self, caplog):
