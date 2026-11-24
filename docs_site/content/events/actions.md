@@ -42,7 +42,7 @@ Returning `TaskList(...)` is the same as returning
 its options, such as `target` (below).
 
 The new render gets only the inputs you pass. See
-[Pass every input](/events/state/#pass-every-input-when-a-handler-renders-again).
+[Access State in handlers](/events/state/#access-state-in-handlers).
 A value every render needs from the request, such as the current user,
 can come from one app-wide function (experimental). See
 [Pass request values](#give-every-render-the-request-values).
@@ -517,7 +517,7 @@ class Events:
 The new State still reaches the browser, so Vue parts that read
 `$state.editing` update. Server-rendered HTML stays as it was. Only fields
 the browser can read reach `$state`; see
-[`_public` and `_model`](/events/state/#limit-what-the-browser-can-read-and-change).
+[`_public`](/events/state/#public) and [`_model`](/events/state/#model).
 
 ## Action lists { #return-several-actions-in-order }
 

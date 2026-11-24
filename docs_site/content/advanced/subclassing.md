@@ -208,7 +208,8 @@ class StaticCard(BaseCard):
 
 ## Subclass State
 
-A child's `State` follows the same rule. It also carries settings:
+A child's `State` follows the same rule. It also carries
+[settings](/events/state/#state-settings):
 where the values are kept and what browser code can do with them. For
 example, `_public` lists the fields browser code can read. Name the
 parent's class to keep both its fields and its settings:
@@ -230,8 +231,8 @@ class SortedProjectPanel(ProjectPanel):
 Because the child keeps `_public`, browser code cannot read `sort` until
 the child lists it: `_public = ("project_id", "sort")`.
 
-A plain `class State:` starts from the default settings, not the
-parent's:
+A plain `class State:` starts from the
+[default settings](/events/state/#state-settings), not the parent's:
 
 - values are stored, signed, in the page;
 - browser code can read and change every field;
