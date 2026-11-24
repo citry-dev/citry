@@ -337,7 +337,7 @@ Every event call that is not a `GET` must pass these checks:
   `Origin` of either scheme. So behind a proxy that serves your site
   over https and passes plain http to your app, this check runs only if
   your server reads the scheme the proxy forwards; see
-  [Run behind a proxy](/advanced/web-frameworks/#run-behind-a-proxy).
+  [Read the proxy's scheme](/advanced/web-frameworks/#read-the-proxys-scheme).
 - When the browser sends a `Sec-Fetch-Site` header, it must be
   `same-origin` or `none`.
 
