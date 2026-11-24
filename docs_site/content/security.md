@@ -853,30 +853,44 @@ on PyPy 7.3.23, a tree of models was accepted up to
 about 30 levels when each model held its children in a `list`, 15 in a
 `Sequence`, and 10 in `list[OnErrorOmit[list[OnErrorOmit[Tree]]]]`.
 
-Defining a component also raises `ValueError` on PyPy when its event
-`data` class, or a State field the browser may write, holds a recursive
-type inside `Json[...]`, as described in
-[Fix a refused schema](#schemas-citry-refuses), and when a State that
-Citry checks only as JSON text lets the browser write a recursive type
-of any kind (see [Check event data](#check-event-data)).
+Defining a component also raises `ValueError` on PyPy in these cases,
+described in [Fix a refused schema](#schemas-citry-refuses):
+
+- its event `data` class, or a State field the browser may write, holds
+  a recursive type inside `Json[...]`;
+- a State that Citry checks only as JSON text lets the browser write a
+  recursive type of any kind (see [Check event data](#check-event-data));
+- its event `data` class or any State field has a serializer whose
+  return type leads into a recursive type with a serializer of its own,
+  or a `PlainValidator` on a recursive type.
 
 These rules kept the ordinary schemas in our tests on PyPy 7.3.23 from
-ending the process, but two things can still use up PyPy's stack and
-end it. One is a schema with many validators or other parts at each
-level, more so with a `Json[Any]`, `JsonValue` or other free-form field
-deep inside it: Citry does not count the up to 200 levels of such a
-field, and its own checks use part of the stack too. In our tests a
-model with 48 validators, 31 levels deep, with 100 levels of
-`Json[Any]` below it ended the process, as it does with citry 1.2.0.
-The other is your own code that handles nested data again: a
-validator that calls `model_validate` on a nested value, or a handler
-that stores event data in a State field of another type, such as a
-`Sequence[...]` or a type with a `WrapSerializer`, whose serializer
-Pydantic calls at every level of the data when Citry writes the State
-out. A larger thread stack does not help on PyPy, and raising the
-recursion limit
-does not make the check safer. If your app takes deeply nested data
-from the browser, run it on CPython.
+ending the process, but these things can still use up PyPy's stack and
+end it:
+
+- A schema with many validators or other parts at each level, more so
+  with a `Json[Any]`, `JsonValue` or other free-form field deep inside
+  it. Citry does not count the up to 200 levels of such a field, and
+  its own checks use part of the stack too. In our tests a model with
+  48 validators, 31 levels deep, with 100 levels of `Json[Any]` below
+  it ended the process, as it does with citry 1.2.0.
+- 25 or more `AfterValidator`s on one recursive type. Pydantic runs
+  them without leaving a Python call on the stack, so Citry counts
+  nothing for them, but each one makes every level take more stack. In
+  our tests 25 of them on a recursive list alias ended PyPy at 98
+  levels, and Pydantic alone ends PyPy on the same type and data.
+- A handler that stores event data in a State field of a different
+  type that has a serializer, such as a `Sequence[...]`, a type with a
+  `WrapSerializer`, or a serializer with a `return_type`. Citry counts
+  the levels of the event data's own type, and Pydantic calls the State
+  field's serializer at every level of the data when Citry writes the
+  State out.
+- Your own code that checks nested data again, such as a validator
+  that calls `model_validate` on a nested value.
+
+A larger thread stack does not help on PyPy, and raising the recursion
+limit does not make the check safer. If your app takes deeply nested
+data from the browser, run it on CPython.
 
 Citry applies the same rules on every Python implementation other than
 CPython, such as GraalPy.
@@ -1045,6 +1059,29 @@ text, so change the browser code that sends it.
       the type inside `Json[...]`, as in `Tree` for `Json[Tree]`. The
       field then takes the value itself, not JSON text, so change the
       browser code that sends it.
+- **On PyPy, a serializer that returns a recursive type.** A
+  serializer in a `data` class or in any State field, writable or not,
+  has a return type that leads into a recursive type with a serializer
+  of its own. The serializer can be a `PlainSerializer` or
+  `WrapSerializer` with `return_type=`, or a `field_serializer` or
+  `model_serializer` with `return_type=` or a return annotation.
+  Pydantic also gives a `PlainValidator` such a serializer, with the
+  type it sits on as the return type. Citry checks the value with the
+  field's own type, such as `Any`, but Pydantic writes it out with the
+  return type when Citry writes the State out, and calls Python at
+  each of its levels:
+    - Refused: `Annotated[Any, PlainSerializer(f, return_type=Tree)]`,
+      where `Tree` is a recursive alias with a `WrapSerializer` on its
+      levels, or a recursive `Sequence[...]` alias.
+    - Refused: `Tree = Annotated[list[Tree], PlainValidator(f)]`.
+    - Fine: the same serializer without `return_type` or a return
+      annotation. Pydantic then writes the returned value by its type,
+      without calling Python at each level.
+    - Fine: a return type that is recursive but has no serializer
+      function, such as `list[Tree]` where `Tree` is a plain recursive
+      list alias.
+    - Fine: an `AfterValidator` or `WrapValidator` on the recursive
+      type in place of the `PlainValidator`.
 
 Citry looks for these parts when the component class is defined. It
 cannot look inside a class it meets only when a call arrives: a Pydantic

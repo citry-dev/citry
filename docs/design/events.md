@@ -2182,10 +2182,26 @@ Error modes:
       the handler stored in State, and then ended PyPy 7.3.23 when the
       State was written out, as on 1.2.0. A handler that stores data in
       a State field of another type, whose serializer function or
-      `Sequence[...]` the check never saw, is not counted. Parts that
-      pydantic-core checks without calling Python still take stack uncounted, so a
-      schema with dozens of them at each level can still end PyPy below
-      the limit, as Pydantic alone does. Inside `Json[...]` no wrapper
+      `Sequence[...]` the check never saw, is not counted. Writing out
+      also follows a serializer's return type (`return_schema`, which
+      Pydantic sets for `return_type=`, a serializer's return
+      annotation and a `PlainValidator`), which neither the check nor
+      the copy reads. So under the PyPy rules, registration refuses, in
+      the event data class and in every State field, writable or not, a
+      function serializer whose return type leads into a definition on
+      a loop that holds a function serializer, the app's or Pydantic's
+      (`serializer_return_loop`, `_refuse_serializer_return_loop`; the
+      loop and the serializers are found through both the children and
+      the serializers' schemas). Without it,
+      `Annotated[Any, PlainSerializer(f, return_type=Tree)]`, with a
+      `WrapSerializer` on `Tree`'s levels, and a `PlainValidator` on a
+      recursive alias each passed at 190 levels and ended PyPy 7.3.23
+      when the State was written out, as on 1.2.0. Parts that
+      pydantic-core checks without calling Python still take stack
+      uncounted, so a schema with dozens of them at each level can
+      still end PyPy below the limit, as Pydantic alone does: 25
+      `AfterValidator`s on one recursive list alias end it at 98
+      levels. Inside `Json[...]` no wrapper
       counts, and each JSON string starts a fresh parse, so on PyPy
       registration and the first-call check also refuse, in event data
       and in writable State fields, a definition reached through

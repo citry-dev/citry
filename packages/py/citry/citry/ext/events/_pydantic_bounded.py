@@ -219,7 +219,11 @@ SMALL_STACK_CHECK_DEPTH = 32
 #   validator on the way is refused, whatever its kind
 #   (`_Schema.uncounted_loop_reason`): no wrapper counts its levels there,
 #   one JSON string adds up to 200 of them on top of the levels checked
-#   outside it, and strings nested inside each other add up further.
+#   outside it, and strings nested inside each other add up further;
+# - a serializer whose return type leads into a recursive type that calls a
+#   serializer function at its levels is refused (`serializer_return_loop`):
+#   writing the State out walks the return type, which the check never
+#   reads, so nothing counts those levels.
 # Parts that pydantic-core checks without calling Python (lists, dicts,
 # optional values, the author's before and after validators) still take
 # stack at each level without counting, so a schema with dozens of such
@@ -2722,6 +2726,98 @@ def _has_authors_serializer(node: Any) -> bool:
     return module.split(".")[0] not in _OWN_PACKAGES
 
 
+def _function_serializer(node: Any) -> dict[str, Any] | None:
+    """Return a schema node's serializer when it is a Python function (anyone's), else ``None``."""
+    serialization = node.get("serialization") if type(node) is dict else None
+    if type(serialization) is dict and serialization.get("type") in ("function-wrap", "function-plain"):
+        return serialization
+    return None
+
+
+def _written_children(node: Any) -> list[Any]:
+    """
+    Return the nodes Pydantic may write a node's value out through: its children and its serializer's schemas.
+
+    A serializer's ``return_schema`` (its return type) and ``schema`` say
+    how Pydantic writes the value the function returns, so writing out
+    walks them although the check never does.
+    """
+    found = _children(node)
+    serializer = _function_serializer(node)
+    if serializer is not None:
+        found.extend(serializer[key] for key in ("return_schema", "schema") if type(serializer.get(key)) is dict)
+    return found
+
+
+def _written_nodes(start: Any, definitions: dict[str, Any] | None = None) -> Iterator[Any]:
+    """Yield every schema node writing out may reach from ``start``, each once, following refs into ``definitions``."""
+    stack = [start]
+    seen: set[int] = set()
+    while stack:
+        node = stack.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        if type(node) is not dict:
+            stack.extend(_written_children(node))
+            continue
+        yield node
+        if definitions is not None and _kind(node) == "definition-ref":
+            target = definitions.get(str(node.get("schema_ref", "")))
+            if target is not None:
+                stack.append(target)
+        stack.extend(_written_children(node))
+
+
+def _written_refs(node: Any) -> set[str]:
+    """Return the refs writing out may use below a node, without following them."""
+    return {str(item.get("schema_ref", "")) for item in _written_nodes(node) if _kind(item) == "definition-ref"}
+
+
+def serializer_return_loop(root: Any, start: Any) -> tuple[str, bool] | None:
+    """
+    Return the recursive type a serializer's return type below ``start`` leads into, when it has a serializer.
+
+    A serializer's return type (``return_type=`` on a ``PlainSerializer``,
+    ``WrapSerializer``, ``field_serializer`` or ``model_serializer``, and
+    the one Pydantic gives a ``PlainValidator``) is the schema Pydantic
+    writes the returned value with. Citry's copy counts levels only in the
+    schema that checks the value, which may read it as something shallow,
+    such as ``Any``. When the return type is a recursive type that calls a
+    serializer function (an app's or Pydantic's) at its levels, writing
+    the State out puts Python frames on the stack at every level of the
+    data, which nothing counted, and on PyPy that ends the process.
+
+    The result is the recursive type's name, and whether the serializer
+    that carries the return type is the one Pydantic adds for a
+    ``PlainValidator``, so the message can name what the app wrote.
+    ``None`` means no serializer below ``start`` has such a return type.
+    """
+    # Writing out also reaches definitions that only a return type uses,
+    # so they are collected along the serializers' schemas too.
+    definitions: dict[str, Any] = {}
+    for node in _written_nodes(root):
+        ref = node.get("ref")
+        if isinstance(ref, str) and _kind(node) != "definition-ref":
+            definitions[ref] = node
+    # The refs each definition's own nodes use, through its serializers' schemas.
+    direct = {ref: _written_refs(node) for ref, node in definitions.items()}
+    for node in _written_nodes(start, definitions):
+        serializer = _function_serializer(node)
+        returned = None if serializer is None else serializer.get("return_schema")
+        if serializer is None or type(returned) is not dict:
+            continue
+        for ref in sorted(_reachable(_written_refs(returned), direct)):
+            # Only a type on a loop nests as deep as the data does, and only
+            # a serializer function on it keeps a Python frame per level.
+            target = definitions.get(ref)
+            looping = target is not None and ref in _reachable(direct.get(ref, set()), direct)
+            if looping and any(_function_serializer(item) is not None for item in _written_nodes(target)):
+                module = getattr(serializer.get("function"), "__module__", "") or ""
+                return _type_name(ref), module == "pydantic.functional_validators"
+    return None
+
+
 def _wrap(schema: Any, function: Callable[[Any, Any], Any]) -> dict[str, Any]:
     wrapper: dict[str, Any] = {
         "type": "function-wrap",
@@ -4074,12 +4170,19 @@ def check_data_class(comp_name: str, cls: Any) -> None:
     Raises:
         ValueError: A ``Json[...]`` field holds a part that no wrapper can
             reach and that Citry cannot count (see
-            ``_Schema.unbounded_reason``), naming the field and the fix.
+            ``_Schema.unbounded_reason``), or, under the PyPy rules, a
+            serializer's return type leads into a recursive type with a
+            serializer (see ``serializer_return_loop``); the message names
+            the field and the fix.
 
     """
     if not is_pydantic_v2_class(cls):
         return
     root = core_schema_of(cls)
+    if root is not None:
+        # A handler may store the data in State as it is, and a model or
+        # dataclass instance keeps its own serializers there.
+        _refuse_serializer_return_loop(comp_name, root, f"the event data class {cls.__qualname__}")
     found = (
         None
         if root is None
@@ -4094,6 +4197,57 @@ def check_data_class(comp_name: str, cls: Any) -> None:
         f"Component {comp_name}: {where} {cls.__qualname__} holds a Json[...] value with {reason}."
         f" {_fix_for(reason, loop_type)}{_plain_type_fix(name, json_at)}"
     )
+    raise ValueError(msg)
+
+
+def _refuse_serializer_return_loop(comp_name: str, root: Any, owner: str) -> None:
+    """
+    Refuse, under the PyPy rules, a class with a serializer that writes a value out through an uncounted recursion.
+
+    The first field (in name order) whose serializer's return type leads
+    into a recursive type with a serializer of its own is named (see
+    ``serializer_return_loop``), then the rest of the class. ``owner``
+    names the class, such as "the State Board".
+
+    Raises:
+        ValueError: Such a serializer was found, naming the field and the fix.
+
+    """
+    if not STACK_SET_BY_RECURSION_LIMIT:
+        # CPython raises RecursionError on a write-out that nests too
+        # deeply, where PyPy ends the process.
+        return
+    fields = _top_fields(root)
+    found: tuple[str | None, str, bool] | None = None
+    for field_name in sorted(fields):
+        hit = serializer_return_loop(root, fields[field_name])
+        if hit is not None:
+            found = (field_name, *hit)
+            break
+    else:
+        hit = serializer_return_loop(root, root)
+        found = None if hit is None else (None, *hit)
+    if found is None:
+        return
+    name, loop_type, by_validator = found
+    where = f"the field {name!r} of {owner}" if name is not None else owner
+    limit = (
+        "at every level of the data, which Citry cannot limit on Python implementations other than CPython,"
+        " such as PyPy."
+    )
+    if by_validator:
+        msg = (
+            f"Component {comp_name}: {where} has a PlainValidator on the recursive type {loop_type}, so"
+            f" Pydantic writes the value out through a Python function {limit} Use an AfterValidator or a"
+            f" WrapValidator on {loop_type} in its place."
+        )
+    else:
+        msg = (
+            f"Component {comp_name}: {where} has a serializer whose return type leads into the recursive type"
+            f" {loop_type}, which has a serializer of its own. Writing the value out calls Python {limit}"
+            " Remove return_type from that serializer (or the return annotation of a field_serializer or"
+            f" model_serializer), or remove the serializer from {loop_type}."
+        )
     raise ValueError(msg)
 
 
@@ -4227,10 +4381,14 @@ def check_state_class(comp_name: str, cls: Any, writable: frozenset[str]) -> Non
       count only below a union member or another part whose errors are
       thrown away.
 
+    Under the PyPy rules, every field of the State, writable or not, is
+    also refused when a serializer's return type in it leads into a
+    recursive type with a serializer (see ``serializer_return_loop``).
+
     Raises:
-        ValueError: The State holds a ``pydantic.v1`` class, or has a
-            writable field Citry cannot check; the message names it and the
-            fix.
+        ValueError: The State holds a ``pydantic.v1`` class, has a writable
+            field Citry cannot check, or, under the PyPy rules, has such a
+            serializer; the message names it and the fix.
 
     """
     if not is_pydantic_v2_class(cls):
@@ -4252,6 +4410,9 @@ def check_state_class(comp_name: str, cls: Any, writable: frozenset[str]) -> Non
             f" annotated classes and Pydantic v2 models only. Make {v1_class.__qualname__} a Pydantic v2 model."
         )
         raise ValueError(msg)
+    # Writing the State out reaches every field, also those only the
+    # server writes, which may hold event data a handler stored.
+    _refuse_serializer_return_loop(comp_name, root, f"the State {cls.__qualname__}")
     if not writable:
         return
     schema = _Schema(root)

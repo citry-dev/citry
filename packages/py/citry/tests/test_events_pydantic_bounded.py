@@ -1173,6 +1173,104 @@ def test_on_pypy_event_data_counts_serializer_functions_too() -> None:
     assert validate_args(data, {"tree": payload}).fields == {"_args": bounded.TOO_DEEP_MESSAGE}
 
 
+def _return_unchanged(value: Any) -> Any:
+    return value
+
+
+# The check reads the value as Any; writing it out walks the return type,
+# a recursive alias with a serializer at each level.
+ReturnsSerializedNest = TypeAliasType(
+    "ReturnsSerializedNest",
+    "Annotated[Any, pydantic.PlainSerializer(_return_unchanged, return_type=SerializedNest | None)]",
+)
+# The loop runs only through the serializer's own return type.
+ReturnsItself = TypeAliasType(
+    "ReturnsItself",
+    "Annotated[Any, pydantic.PlainSerializer(_return_unchanged, return_type=list[ReturnsItself | None])]",
+)
+ReturnsUnserializedNest = TypeAliasType(
+    "ReturnsUnserializedNest",
+    "Annotated[Any, pydantic.PlainSerializer(_return_unchanged, return_type=UnserializedNest | None)]",
+)
+UnreturnedSerializer = TypeAliasType(
+    "UnreturnedSerializer", "Annotated[Any, pydantic.PlainSerializer(_return_unchanged)]"
+)
+# Pydantic gives a PlainValidator a serializer whose return type is the type it sits on.
+PlainValidatedNest = TypeAliasType(
+    "PlainValidatedNest", "Annotated[list[PlainValidatedNest | None], pydantic.PlainValidator(_return_unchanged)]"
+)
+
+
+@pydantic.dataclasses.dataclass
+class ReturnsNestNode:
+    kids: Any = None
+
+    @pydantic.field_serializer("kids", mode="plain", return_type=SerializedNest | None)
+    def _write_kids(self, value: Any) -> Any:
+        return value
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+@pytest.mark.parametrize(
+    ("field_type", "loop_type"),
+    [
+        pytest.param(ReturnsSerializedNest, "SerializedNest", id="alias with a PlainSerializer"),
+        pytest.param(ReturnsItself, "ReturnsItself", id="loop through the return type"),
+        pytest.param(ReturnsNestNode, "SerializedNest", id="field_serializer on a nested dataclass"),
+    ],
+)
+def test_on_pypy_a_serializer_returning_a_recursive_type_with_a_serializer_is_refused(
+    field_type: Any, loop_type: str
+) -> None:
+    # Writing the State out walks the return type, which the check never
+    # reads, so nothing counts the serializer calls at its levels.
+    state = pydantic.create_model("ReturnState", tree=(field_type, None))
+    data = pydantic.create_model("ReturnData", tree=(field_type, None))
+    refusal = f"has a serializer whose return type leads into the recursive type {loop_type}, "
+
+    # Every State field counts, also one only the server writes: a handler
+    # may store event data there.
+    with pytest.raises(ValueError, match=re.escape(f"the field 'tree' of the State ReturnState {refusal}")):
+        bounded.check_state_class("Probe", state, frozenset())
+    # A handler may store the data in State as it is.
+    with pytest.raises(ValueError, match=re.escape(f"the field 'tree' of the event data class ReturnData {refusal}")):
+        bounded.check_data_class("Probe", data)
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_a_plain_validator_on_a_recursive_type_is_refused() -> None:
+    # Pydantic writes such a value out through its own Python function at
+    # every level.
+    state = pydantic.create_model("ValidatedState", tree=(PlainValidatedNest | None, None))
+
+    with pytest.raises(ValueError, match="has a PlainValidator on the recursive type PlainValidatedNest") as raised:
+        bounded.check_state_class("Probe", state, frozenset({"tree"}))
+
+    assert "Use an AfterValidator or a WrapValidator on PlainValidatedNest" in str(raised.value)
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+@pytest.mark.parametrize(
+    "field_type",
+    [
+        pytest.param(UnreturnedSerializer, id="serializer without a return type"),
+        pytest.param(ReturnsUnserializedNest, id="return type without a serializer"),
+    ],
+)
+def test_on_pypy_a_serializer_return_type_without_a_serialized_loop_is_accepted(field_type: Any) -> None:
+    # Pydantic writes these out without calling Python at each level.
+    bounded.check_state_class("Probe", pydantic.create_model("ReturnState", tree=(field_type, None)), frozenset())
+    bounded.check_data_class("Probe", pydantic.create_model("ReturnData", tree=(field_type, None)))
+
+
+def test_on_cpython_a_serializer_returning_a_recursive_type_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    # CPython raises RecursionError on a write-out that nests too deeply.
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", False)
+    state = pydantic.create_model("ReturnState", tree=(ReturnsSerializedNest, None))
+
+    bounded.check_state_class("Probe", state, frozenset({"tree"}))
+
+
 @pydantic.dataclasses.dataclass
 class DeepNode:
     c: DeepNode | None = None
