@@ -40,6 +40,13 @@
   that is not a `GET` now fails; see
   [Fix an http Origin](https://citry.dev/advanced/web-frameworks/#fix-an-http-origin).
 
+### Fixed
+
+- On free-threaded Python with the GIL off, the request data from an
+  Events check that failed, and the result of one that passed, are now
+  freed within about a second after your code lets go of them. Before,
+  they could stay in memory for up to 60 seconds.
+
 ## v1.2.0
 
 Citry 1.2.0 adds Experimental APIs for host integrations such as

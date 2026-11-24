@@ -2112,7 +2112,14 @@ Error modes:
           even while a validator waits for I/O.
         - Free-threaded Python runs the check threads in parallel; the
           several threads can spend from the request's work budget at
-          once.
+          once. With the GIL off, an object one thread made and another
+          thread drops is freed only when the thread that made it next
+          runs Python code. The caller drops a failed check's error
+          (whose traceback reaches the request data) and a check's
+          result after the check thread has gone idle, so for its first
+          60 seconds idle a check thread wakes every second
+          (`_CHECK_THREAD_WAKE_SECONDS`) and frees them. A kept thread
+          past that waits 60 seconds at a time.
     - How the limit is sized: each level takes room on the C stack of
       the check thread, so data at the limit must be checked in half of
       its stack. A test, run in a process of its own, checks data at the
