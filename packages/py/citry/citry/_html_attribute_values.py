@@ -2,7 +2,7 @@
 HTML, ARIA, SVG, and DOM event names and HTML attribute values. Generated; do not edit.
 
 Run python scripts/generate_html_attribute_values.py to refresh it.
-WHATWG HTML Standard, Last Updated 20 October 2026. Generated 2026-10-21 from these sources:
+WHATWG HTML Standard, Last Updated 24 November 2026. Generated 2026-11-24 from these sources:
 - WHATWG HTML Standard, index: https://html.spec.whatwg.org/multipage/indices.html
 - WHATWG HTML Standard, obsolete features: https://html.spec.whatwg.org/multipage/obsolete.html
 - WAI-ARIA 1.2, W3C Recommendation: https://www.w3.org/TR/wai-aria-1.2/
@@ -219,8 +219,8 @@ ELEMENT_ATTRIBUTES: Final[dict[str, tuple[str, ...]]] = {'a': ('download', 'href
  'input': ('accept', 'alpha', 'alt', 'autocomplete', 'checked', 'colorspace', 'dirname', 'disabled', 'form',
            'formaction', 'formenctype', 'formmethod', 'formnovalidate', 'formtarget', 'height', 'list', 'max',
            'maxlength', 'min', 'minlength', 'multiple', 'name', 'pattern', 'placeholder', 'popovertarget',
-           'popovertargetaction', 'readonly', 'required', 'size', 'src', 'step', 'title', 'type', 'value',
-           'width'),
+           'popovertargetaction', 'readonly', 'required', 'size', 'src', 'step', 'switch', 'title', 'type',
+           'value', 'width'),
  'ins': ('cite', 'datetime'),
  'label': ('for',),
  'li': ('value',),
@@ -288,7 +288,8 @@ BOOLEAN_ATTRIBUTES: Final[dict[str, tuple[str, ...]]] = {'allowfullscreen': ('if
  'shadowrootclonable': ('template',),
  'shadowrootcustomelementregistry': ('template',),
  'shadowrootdelegatesfocus': ('template',),
- 'shadowrootserializable': ('template',)}
+ 'shadowrootserializable': ('template',),
+ 'switch': ('input',)}
 
 # Every aria-* state and property of WAI-ARIA 1.2 and the 1.3 draft, deprecated ones included.
 ARIA_ATTRIBUTES: Final[frozenset[str]] = frozenset(('aria-activedescendant', 'aria-atomic', 'aria-autocomplete', 'aria-braillelabel',

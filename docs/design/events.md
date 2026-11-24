@@ -1360,9 +1360,9 @@ declaring `state` on a component with no State class is a
 class-definition error. On a State-declaring component, POST calls
 always carry the token: pending two-way updates ride the next call and
 must be verified, applied, and re-signed whether or not the handler
-reads state. GET calls carry the token in the query only when the
-handler declares `state`, which is what keeps read-only GET URLs
-pasteable and token-free. Token expiry is a property of the one shared
+reads state. GET calls carry the token only when the handler declares
+`state`, which is what keeps read-only GET URLs pasteable and
+token-free, and they carry it in the `X-Citry-State-Token` header (6.2). Token expiry is a property of the one shared
 State, not of any handler, so it lives on State meta (`_max_age`, 3.2
 and 7.1) alongside `_storage` and `_max_bytes`.
 
@@ -4770,7 +4770,7 @@ registry keyed by content type; user codecs ride
 | Envelope | `application/citry-events+json` | v1 | The identity codec: the body already is the envelope. What the runtime sends. The vendor media type is what distinguishes an envelope from flat JSON, so classification never depends on body shape (a user schema could legitimately declare fields named `v` or `calls`). The batch route takes only the envelope and accepts it under plain `application/json` too, since a batch body has no flat reading. |
 | Flat JSON | `application/json` | v1 | Flat handler fields as one JSON object (`POST {"email": "a@b.c"}`), per-event route only: what an external API client sends without knowing the protocol. Fields bind per 3.3's JSON rules (native types, strict); the reserved `_citry_state_token` / `_citry_caller_render_id` keys map into the envelope like the form codec's. |
 | Form | `application/x-www-form-urlencoded` | v1 | Classic form posts: fields become the args payload; the reserved `_citry_state_token` / `_citry_caller_render_id` fields map into the envelope; the source-aware binding rule (3.3) turns the strings into typed values, including `int` / `float` / `bool` fields. |
-| Query | GET query string | v1 | Args ride as query parameters, bound per the same source-aware rule (3.3); the state token rides `_citry_state_token` only when the handler declares State (3.5). Browser calls additionally reserve `_citry_protocol`, `_citry_request_id`, and JSON `_citry_capabilities` for the flattened envelope, plus `_citry_caller_render_id` and `_citry_send_sequence` for call metadata. |
+| Query | GET query string | v1 | Args ride as query parameters, bound per the same source-aware rule (3.3); the state token counts only when the handler declares State (3.5), read from the `X-Citry-State-Token` header or the `_citry_state_token` parameter (two different values are refused with 400). Browser calls additionally reserve `_citry_protocol`, `_citry_request_id`, and JSON `_citry_capabilities` for the flattened envelope, plus `_citry_caller_render_id` and `_citry_send_sequence` for call metadata. |
 | Multipart | `multipart/form-data` | v1.x | File uploads: the envelope JSON rides as one part, each file as its own part, bound to `UploadedFile` fields ("Files, precisely" below). |
 | Msgpack | `application/msgpack` | candidate, unscheduled | A binary envelope for apps where payload size matters; would pair with symmetric response encoding negotiated via `Accept`. Open an issue when someone measures the need. |
 
@@ -5063,8 +5063,11 @@ Rules, each closing a named prior-art hole:
   at 150 to 300 bytes (section 1.4), so a component approaching the cap
   is holding state that belongs in the database, and the error says so
   (keep an id in State, reload the rest in the rebuild). The one nearby
-  technical budget is GET handlers, whose token rides a query parameter
-  under practical URL length limits of roughly 2 KB.
+  technical budget is GET handlers, whose token rides the
+  `X-Citry-State-Token` header, which nginx, Apache and Gunicorn cap at
+  about 8 KB per header by default (the `_citry_state_token` query
+  parameter instead counts against the request-line limit, 4 KB in
+  Gunicorn and 8 KB in nginx).
 - Signed, not encrypted: State values are visible to their own user, like
   anything rendered into HTML. The docs lead with the symptom ("anything
   in State is visible in the page source"); the mitigations, in order: do
@@ -5180,9 +5183,11 @@ component whose handlers only read State, renewal is what lets a copy
 outlive `_max_age`. The case that matters most is a handler that opts into
 GET (`@event(methods=("GET",))` or `Events._methods`) and declares `state`.
 A handler uses POST by default, so its token stays out of the URL. A GET
-call carries the token in its query only when the handler declares `state`
-(section 3.5), and that URL can land in server and proxy logs. Whoever
-reads those logs can keep that token alive. Renewal does not change what a
+call carries the token only when the handler declares `state` (section
+3.5). Citry's browser code sends it in the `X-Citry-State-Token` header
+(6.2), but the server still reads the `_citry_state_token` query
+parameter, and a URL that carries it can land in server and proxy logs.
+Whoever reads those logs can keep that token alive. Renewal does not change what a
 token permits, which is why every handler still checks permission. The token is bound to its component class and protocol
 version, not to a user, session, page, instance, or latest State
 revision. Handlers must therefore reload authoritative data and perform
@@ -5356,12 +5361,23 @@ traversal of any object graph; extra arg keys are rejected, not absorbed.
   inject the CSRF token; this is that helper, absorbed.)
 - GET handlers are opt-in, csrf-exempt by nature, and read-only by
   contract; their args ride as query parameters, and the state token
-  rides as a `_citry_state_token` query parameter only when the handler
-  declares `state` in its signature (3.5), so read-only GET URLs stay
-  pasteable and token-free (the docs note URL length limits and the
-  id-plus-reload fix for large-State components).
+  rides only when the handler declares `state` in its signature (3.5),
+  so read-only GET URLs stay pasteable and token-free. The browser sends
+  the token in the `X-Citry-State-Token` request header, which access
+  logs do not record the way they record a URL; the server also reads a
+  `_citry_state_token` query parameter, and refuses a call whose header
+  and query parameter carry different tokens with 400
+  `protocol_mismatch`. A GET answer lists `X-Citry-State-Token` in
+  `Vary`.
   The per-handler descriptor carries `usesState: true` only when the handler
-  declares the State injectable, so the browser can enforce that URL rule.
+  declares the State injectable, so the browser sends the token only to such
+  a handler. When a header-only call answers `invalid_state` without
+  listing the header in `Vary` (a server from before 1.3.0 reads only the
+  query), the browser sends it once more with the token in the query.
+  When a call sends the header and a handler's own response sets a cache
+  policy, the server keeps only the directives a browser cache follows,
+  adds `private`, and drops CDN-only cache headers, because the URL does
+  not carry the token and some CDNs ignore `Vary`.
   The built-in browser transport selects GET for a single call to a
   GET-declared handler. It serializes scalar string, boolean, and finite
   number args, and non-empty arrays of those values as repeated query
@@ -5370,7 +5386,7 @@ traversal of any object graph; extra arg keys are rejected, not absorbed.
   `_citry_request_id`, and JSON `_citry_capabilities`, preserving version rejection,
   response correlation, and morph/action negotiation from the ordinary
   envelope. `_citry_caller_render_id` and `_citry_send_sequence` preserve call metadata;
-  `_citry_state_token` appears only for a state-declaring handler. The query codec
+  the `X-Citry-State-Token` header appears only for a state-declaring handler. The query codec
   removes those reserved fields before input validation. A GET call never flushes or consumes pending
   two-way writes: those remain queued for the next mutating call. A mixed or
   multi-call envelope still uses the POST-only batch endpoint, including when

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gc
+import itertools
 import json
 import weakref
 from concurrent.futures import ThreadPoolExecutor
@@ -1291,6 +1292,53 @@ def test_server_state_cache_hit_mints_fresh_storage_key_without_rebuilding_state
     assert app.cache.has(_state_cache_key(second_entry.state_token))
 
 
+@pytest.mark.parametrize("cache_kind", ["component", "fragment"])
+def test_cache_replay_of_an_events_component_writes_the_live_html(monkeypatch, cache_kind) -> None:
+    # Each render takes its render IDs from a counter that starts again at 1,
+    # so the live render and the replay hand out the same IDs.
+    ids = itertools.count(1)
+    app = Citry(secret="cache-state-test-secret", id_generator=lambda: f"c{next(ids)}")  # noqa: S106
+    app.set_mounted_prefix("/citry")
+    builds = 0
+
+    class Card(Component):
+        citry = app
+
+        class Cache:
+            enabled = cache_kind == "component"
+
+        class Events:
+            def update(self):
+                return None
+
+        def template_data(self, kwargs, slots):
+            nonlocal builds
+            builds += 1
+            return {}
+
+        template = """
+        <button @c-click="update">go</button>
+        """
+
+    class Page(Component):
+        citry = app
+        template = """
+        <main><c-cache key="events-card"><c-card /></c-cache></main>
+        """
+
+    # The Vue app ID is random, so it is fixed here; only the cache can make
+    # the two renders differ.
+    monkeypatch.setattr("citry._vue.serialization.token_hex", lambda _size: "0" * 32)
+    rendered = []
+    for _ in range(2):
+        ids = itertools.count(1)
+        root = Card() if cache_kind == "component" else Page()
+        rendered.append(root.render().serialize())
+
+    assert builds == 1
+    assert rendered[1] == rendered[0]
+
+
 def _state_cache_key(token: str) -> str:
     """The cache key a server-storage ``ces1.<key>`` token's State is stored under."""
     return "citry:state:" + token.removeprefix("ces1.")
@@ -1398,7 +1446,8 @@ def test_replay_accepts_a_token_whose_values_fit_the_current_state_types() -> No
 
     staged = _stage_signed_state(app, entry)
 
-    assert staged.frame_markers == ((0, ('data-cid="c1abcdef"',)),)
+    assert [item.render_id for item in dict(staged.extra_items)[EVENTS_EXTRA_KEY]] == ["c1abcdef"]
+    assert staged.frame_markers == ()
 
 
 def test_replay_rejects_a_token_with_a_value_that_no_longer_fits_its_type() -> None:

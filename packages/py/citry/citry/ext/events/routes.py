@@ -58,7 +58,7 @@ from citry._protocol.events import (
 )
 from citry._urls import url_scheme_and_rest
 from citry.ext.dependencies.routes import SHARED_RUNTIME
-from citry.ext.events.codecs import decode_request
+from citry.ext.events.codecs import STATE_TOKEN_HEADER, decode_request
 from citry.ext.events.csrf import build_csrf_check
 from citry.ext.events.dispatcher import EventRequest, EventsDispatcher, TransportContext
 from citry.ext.events.errors import EventError, wire_error
@@ -296,7 +296,7 @@ def _serve_call(
     """One events HTTP request through the sync dispatcher: decode, dispatch, translate back to HTTP."""
     prepared = _prepare_dispatch(request, citry, url_component=url_component, url_event=url_event)
     if isinstance(prepared, RouteResponse):
-        return prepared
+        return _early_refusal(prepared, request)
     outcome = dispatcher.dispatch(
         prepared.envelope,
         prepared.ctx,
@@ -325,7 +325,7 @@ async def _serve_call_async(
     """
     prepared = _prepare_dispatch(request, citry, url_component=url_component, url_event=url_event)
     if isinstance(prepared, RouteResponse):
-        return prepared
+        return _early_refusal(prepared, request)
     outcome = await dispatcher.dispatch_async(
         prepared.envelope,
         prepared.ctx,
@@ -335,6 +335,18 @@ async def _serve_call_async(
         csrf_check=prepared.csrf_check,
     )
     return _respond(request, outcome, batch=prepared.batch, compat=prepared.compat)
+
+
+def _early_refusal(response: RouteResponse, request: RouteRequest) -> RouteResponse:
+    """
+    Mark a refusal sent before dispatch like any other answer.
+
+    It can depend on the request headers, such as a State token header that
+    differs from the query parameter, and a GET answer is kept out of
+    caches, as a dispatched one is.
+    """
+    refused = _with_no_store(response) if request.method == "GET" else response
+    return _with_cache_marks(refused, request)
 
 
 def _prepare_dispatch(
@@ -449,7 +461,7 @@ def _respond(
     if isinstance(outcome, RouteResponse):
         # The RouteResponse escape hatch (per-event route only).
         response = _with_no_store(outcome) if request.method == "GET" else outcome
-        return _with_page_nonce_marks(response, sent=PAGE_NONCE_HEADER in request.headers)
+        return _with_cache_marks(response, request)
 
     if compat:
         response = _compat_response(outcome, request)
@@ -464,9 +476,104 @@ def _respond(
     # GET handlers are cacheable in principle but served no-store until GET
     # caching lands (design 3.5 and section 16).
     response = _with_no_store(response) if request.method == "GET" else response
-    # A Render in this answer may carry the nonce the call sent, which belongs
-    # to one tab of one visitor, so no cache may keep the answer for another.
-    return _with_page_nonce_marks(response, sent=PAGE_NONCE_HEADER in request.headers)
+    return _with_cache_marks(response, request)
+
+
+def _with_cache_marks(response: RouteResponse, request: RouteRequest) -> RouteResponse:
+    """
+    Keep caches from giving one visitor's answer to another.
+
+    ``Vary`` lists the request headers that carry one visitor's values into
+    the answer: the page nonce, which a Render may carry and which belongs
+    to one tab, and on a GET call the State token. Citry's own GET URLs hold
+    a fresh request ID, so no cache shares their answers; a client of the
+    app's own may send a stable URL, though, and some CDNs ignore ``Vary``.
+    So when such a call sends its token in the ``X-Citry-State-Token``
+    header and the handler lets caches keep the answer, only the visitor's
+    own browser may.
+    """
+    is_get = request.method == "GET"
+    if is_get and request.headers.get(STATE_TOKEN_HEADER):
+        response = _private_cache_policy(response)
+    varied = (PAGE_NONCE_HEADER, STATE_TOKEN_HEADER) if is_get else (PAGE_NONCE_HEADER,)
+    return _with_page_nonce_marks(response, sent=PAGE_NONCE_HEADER in request.headers, varied=varied)
+
+
+# Cache-Control directives a browser's own cache may follow, without and with
+# a number of seconds. Everything else is dropped: `public`, `s-maxage`, and a
+# `private` that names fields, which still lets a shared cache keep the rest.
+_BROWSER_CACHE_FLAGS = frozenset({"must-revalidate", "no-transform", "immutable"})
+_BROWSER_CACHE_SECONDS = frozenset({"max-age", "stale-while-revalidate"})
+# Headers that set the policy of a CDN alone; a CDN that reads one ignores
+# Cache-Control. RFC 9213 also lets a CDN name its own `<vendor>-CDN-Cache-Control`.
+_CDN_CACHE_HEADERS = frozenset({"surrogate-control", "edge-control", "x-accel-expires"})
+
+
+def _private_cache_policy(response: RouteResponse) -> RouteResponse:
+    """Turn a handler's cache policy into one that only the visitor's browser may follow."""
+    headers: list[tuple[str, str]] = []
+    for name, value in response.headers:
+        lowered = name.lower()
+        if lowered in _CDN_CACHE_HEADERS or lowered.endswith("cdn-cache-control"):
+            continue
+        if lowered == "cache-control":
+            headers.append((name, _private_cache_control(value)))
+        else:
+            headers.append((name, value))
+    return RouteResponse(
+        content=response.content,
+        content_type=response.content_type,
+        status=response.status,
+        headers=tuple(headers),
+    )
+
+
+def _private_cache_control(value: str) -> str:
+    """The ``Cache-Control`` value ``private`` plus the handler's directives a browser cache may follow."""
+    kept: list[str] = []
+    for item in _split_cache_directives(value):
+        name, has_argument, argument = item.partition("=")
+        directive = name.strip().lower()
+        argument = argument.strip()
+        if directive == "no-store":
+            return "no-store"
+        if directive == "no-cache":
+            # A `no-cache` that names fields binds every cache, and browsers
+            # often read it as the bare form; the bare form is never looser.
+            if "no-cache" not in kept:
+                kept.append("no-cache")
+        elif directive in _BROWSER_CACHE_FLAGS and not has_argument:
+            kept.append(directive)
+        elif directive in _BROWSER_CACHE_SECONDS and argument.isascii() and argument.isdigit():
+            kept.append(f"{directive}={argument}")
+    return ", ".join(["private", *kept])
+
+
+def _split_cache_directives(value: str) -> list[str]:
+    """
+    Split a ``Cache-Control`` value at the commas outside quoted strings.
+
+    One pass over the characters, so a long value a handler built costs
+    time in step with its length.
+    """
+    items: list[str] = []
+    current: list[str] = []
+    quoted = False
+    escaped = False
+    for char in value:
+        if escaped:
+            escaped = False
+        elif quoted and char == "\\":
+            escaped = True
+        elif char == '"':
+            quoted = not quoted
+        elif char == "," and not quoted:
+            items.append("".join(current))
+            current = []
+            continue
+        current.append(char)
+    items.append("".join(current))
+    return [item for item in items if item.strip()]
 
 
 def _encode_envelope(envelope: Mapping[str, Any]) -> tuple[str, Mapping[str, Any]]:
@@ -840,9 +947,11 @@ def _encode_location(url: str) -> str:
     return quote(url, safe=_LOCATION_SAFE)
 
 
-def _with_page_nonce_marks(response: RouteResponse, *, sent: bool) -> RouteResponse:
+def _with_page_nonce_marks(
+    response: RouteResponse, *, sent: bool, varied: tuple[str, ...] = (PAGE_NONCE_HEADER,)
+) -> RouteResponse:
     """
-    Mark an answer so that no cache gives the nonce of one page to another.
+    List ``varied`` in ``Vary``, and keep a nonce answer out of every cache.
 
     Every answer lists ``X-Citry-Page-Nonce`` in ``Vary``: whether the call
     sent the header changes the answer, so a cache must not give an answer
@@ -850,21 +959,23 @@ def _with_page_nonce_marks(response: RouteResponse, *, sent: bool) -> RouteRespo
     call ``sent`` the header, ``no-store`` also keeps every cache from storing
     the answer, unless the handler set its own cache policy. Any ``Vary`` the
     handler set is extended rather than repeated, because the Django adapter
-    refuses a repeated header name.
+    refuses a repeated header name. ``varied`` names the request headers to
+    list, ``X-Citry-Page-Nonce`` first.
     """
     with_no_store = _with_no_store(response) if sent else response
     headers: list[tuple[str, str]] = []
-    varied = False
+    has_vary = False
     for name, value in with_no_store.headers:
         merged = value
         if name.lower() == "vary":
-            varied = True
+            has_vary = True
             listed = {item.strip().lower() for item in value.split(",")}
-            if "*" not in listed and PAGE_NONCE_HEADER.lower() not in listed:
-                merged = f"{value}, {PAGE_NONCE_HEADER}"
+            if "*" not in listed:
+                missing = [header for header in varied if header.lower() not in listed]
+                merged = ", ".join([value, *missing])
         headers.append((name, merged))
-    if not varied:
-        headers.append(("Vary", PAGE_NONCE_HEADER))
+    if not has_vary:
+        headers.append(("Vary", ", ".join(varied)))
     return RouteResponse(
         content=with_no_store.content,
         content_type=with_no_store.content_type,

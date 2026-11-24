@@ -177,6 +177,12 @@ test("exports the transport carrier field names", () => {
 	});
 });
 
+test("exports the transport carrier header names", () => {
+	assert.deepEqual(protocol.CARRIER_HEADERS, {
+		stateToken: "X-Citry-State-Token",
+	});
+});
+
 test("strict JSON checks reject browser-only invalid values", () => {
 	const cyclic = {};
 	cyclic.self = cyclic;
