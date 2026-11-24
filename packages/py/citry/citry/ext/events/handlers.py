@@ -19,7 +19,7 @@ import inspect
 import re
 import sys
 import textwrap
-from collections.abc import Callable, Coroutine
+from collections.abc import AsyncGenerator, Callable, Coroutine, Generator
 from dataclasses import dataclass, is_dataclass
 from types import FunctionType
 from typing import Any, TypeVar, get_type_hints, overload
@@ -332,8 +332,9 @@ def refuse_deferred_result(source: str, result: Any, *, coroutine_only: bool = F
         coroutine_only: Refuse only a coroutine, compiled ones included.
             ``_context`` passes this: its value is app data, which may be
             some other awaitable or a generator on purpose. A guard or CSRF
-            function refuses only by raising, so a result Citry would have
-            to await or iterate means its check did not run.
+            function never returns such an object on purpose, so a result
+            Citry would have to await or iterate means its check did not
+            run.
 
     Raises:
         TypeError: When ``result`` is a coroutine, or (without
@@ -347,7 +348,10 @@ def refuse_deferred_result(source: str, result: Any, *, coroutine_only: bool = F
         # but not a native coroutine, so ``inspect.iscoroutine`` misses it.
         deferred = isinstance(result, Coroutine)
     else:
-        deferred = inspect.isawaitable(result) or inspect.isgenerator(result) or inspect.isasyncgen(result)
+        # The abstract classes, not inspect.isgenerator / isasyncgen: a
+        # compiled (Cython) generator registers only with collections.abc,
+        # and a guard that returned one would otherwise let the call through.
+        deferred = inspect.isawaitable(result) or isinstance(result, (Generator, AsyncGenerator))
     if not deferred:
         return
     # _context may return other awaitables and generators, so its message
