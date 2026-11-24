@@ -329,11 +329,15 @@ Every event call that is not a `GET` must pass these checks:
   request's `Host` header. Behind a reverse proxy, the proxy must pass the
   browser's `Host` header on; see
   [Run behind a proxy](/advanced/web-frameworks/#run-behind-a-proxy).
-- When your server reports that the call arrived over https, the `Origin`
-  must start with `https:`. This stops a page served over plain http on
-  the same host, which anyone on the network can change, from calling
-  your app. Over plain http, Citry does not compare the schemes, so a
-  proxy that ends TLS and talks http to your app keeps working.
+- When the browser sends an `Origin` header and your server says the
+  call arrived over https, the `Origin` must start with `https:`.
+  Anyone on the network can rewrite a plain-http page on the same host,
+  and this check stops such a page from calling your app. When your
+  server says the call arrived over plain http, Citry accepts an
+  `Origin` of either scheme. So behind a proxy that serves your site
+  over https and passes plain http to your app, this check runs only if
+  your server reads the scheme the proxy forwards; see
+  [Run behind a proxy](/advanced/web-frameworks/#run-behind-a-proxy).
 - When the browser sends a `Sec-Fetch-Site` header, it must be
   `same-origin` or `none`.
 

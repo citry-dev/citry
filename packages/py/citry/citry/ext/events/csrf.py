@@ -11,7 +11,8 @@ Three layers protect the events routes, stacked:
   (HTML forms cannot attach custom headers, and cross-origin JS attempting
   it hits a CORS preflight the browser blocks), and when the browser
   supplied ``Origin`` or ``Sec-Fetch-Site`` headers, they must say
-  same-origin. The floor never turns off.
+  same-origin (on a request the adapter reports as https, that includes
+  an ``https:`` Origin). The floor never turns off.
 - **The host token layer**: under Django the events routes are plain views,
   so Django's CSRF middleware applies to them untouched; nothing in citry
   reimplements or bypasses it (no ``csrf_exempt`` anywhere), and no
@@ -182,11 +183,16 @@ def enforce_floor(request: RouteRequest) -> None:
         if not origin_host or origin_host != host:
             _reject(f"Origin {origin!r} does not match the request host {host!r}")
         # A page served over plain http on the same host must not call an
-        # https app: a network attacker can write that page. Only the
-        # direction the host can vouch for is checked. Behind a proxy that
-        # ends TLS the app sees "http" while the browser sends an https
-        # Origin, so an http request does not require the schemes to match.
-        if request.scheme == "https" and parsed_origin.scheme.lower() != "https":
+        # https app: a network attacker can write that page. Only an https
+        # request is checked, because only then does the app know the
+        # browser used TLS. Behind a proxy that serves the site over https
+        # and passes plain http on, the app sees "http" while the browser
+        # sends an https Origin, so an http request accepts either scheme.
+        # urlsplit is enough here: a browser serializes Origin itself, and
+        # any stray whitespace or case already fails the host comparison.
+        # The scheme is lowercased because a hand-built RouteRequest may
+        # not be.
+        if request.scheme.lower() == "https" and parsed_origin.scheme.lower() != "https":
             _reject(f"Origin {origin!r} is not https, but the request arrived over https")
 
     fetch_site = request.headers.get("sec-fetch-site")

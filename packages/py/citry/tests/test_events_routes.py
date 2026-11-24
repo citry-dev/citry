@@ -564,6 +564,8 @@ class TestCsrfFloor:
             ("http", "http://good.example", True),
             # A RouteRequest built without a scheme is not checked for one.
             ("", "http://good.example", True),
+            # A hand-built RouteRequest may carry an uppercase scheme.
+            ("HTTPS", "http://good.example", False),
         ],
     )
     def test_origin_scheme_against_the_request_scheme(self, scheme, origin, passes):

@@ -95,10 +95,15 @@ only `same-origin` or `none`. This floor cannot be disabled by
 `csrf=False`.
 
 The Origin check is deliberately described as a cross-site request floor, not
-an exact origin comparison. Citry's current host-neutral request record does
-not carry the request scheme, so the implementation compares authority
-(`host[:port]`) rather than scheme, host, and port together. Host middleware
-remains responsible for its stronger origin policy.
+an exact origin comparison. It compares the authority (`host[:port]`), and
+compares the scheme in one direction only: when the adapter reports the
+request as https (`RouteRequest.scheme`), an `Origin` that is not `https:` is
+refused, so a plain-http page on the same host cannot call the app. An http
+request accepts an `Origin` of either scheme, because behind a proxy that
+serves the site over https and passes plain http to the app, the app sees
+http while the browser's `Origin` is `https:`. An empty `scheme` (a
+hand-built request) skips the scheme comparison. Host middleware remains
+responsible for its stronger origin policy.
 
 ### 3.2 Host middleware
 

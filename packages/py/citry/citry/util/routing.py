@@ -106,12 +106,16 @@ class RouteRequest:
             environ, or Django's `HttpRequest`.
         scheme: The scheme the host reports the request arrived over,
             lowercase: `"http"` or `"https"`, or `""` when the adapter does
-            not know it. The ASGI adapter reads the scope's `scheme`, the
-            WSGI adapter reads `wsgi.url_scheme`, and the Django adapter
-            reads `request.scheme`, which follows `SECURE_PROXY_SSL_HEADER`.
-            Behind a proxy that ends TLS, this is the scheme between the
-            proxy and the app, usually `"http"`, unless the server or
-            framework is set up to read the proxy's forwarded scheme.
+            not know it. When it is `"https"`, Events refuse a call whose
+            `Origin` is not `https:`; when it is `"http"` or `""`, they
+            skip that check. The ASGI adapter reads the scope's `scheme`,
+            the WSGI adapter reads `wsgi.url_scheme`, and the Django
+            adapter reads `request.scheme`, which follows
+            `SECURE_PROXY_SSL_HEADER`. Behind a proxy that serves the site
+            over https and passes plain http to the app, this is `"http"`
+            unless the server reads the scheme the proxy forwards (for
+            example Uvicorn's `--proxy-headers` or Werkzeug's
+            `ProxyFix(x_proto=1)`).
 
     """
 

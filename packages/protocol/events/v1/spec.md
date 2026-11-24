@@ -1204,12 +1204,17 @@ Citry's HTTP routes read these request headers:
 A `vue-prepared/1` render needs all three `X-Citry-Vue-*` headers; without
 them the call fails with `handler_error`. A client that asks only for
 `html-fragment/1` renders does not need them. A call that is not `GET`
-must also come from the page's own origin: the server rejects one whose
-`Origin` header names another host or port, one that arrived over https with an
-`Origin` that is not `https:`, and one whose `Sec-Fetch-Site` header is not
-`same-origin` or `none`, with `csrf_failed`. Over plain http the server does
-not compare the schemes, because a proxy that ends TLS sends the app http while
-the browser names an `https:` origin.
+must also come from the page's own origin. The server rejects it with
+`csrf_failed` when:
+
+- the `Origin` header names another host or port;
+- the host framework reports that the call arrived over https and the `Origin`
+  is not `https:`; or
+- the `Sec-Fetch-Site` header is not `same-origin` or `none`.
+
+Over plain http the server accepts an `Origin` of either scheme, because behind
+a proxy that serves the site over https the app sees http while the browser's
+`Origin` is `https:`.
 
 Whether a call sends `X-Citry-Page-Nonce` changes its answer, so every
 answer lists `X-Citry-Page-Nonce` in its `Vary` header. The answer to a

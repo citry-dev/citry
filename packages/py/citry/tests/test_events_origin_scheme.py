@@ -34,6 +34,8 @@ from django.urls import clear_url_caches, include, path  # noqa: E402
 from starlette.testclient import TestClient  # noqa: E402
 
 from citry import Citry, Component  # noqa: E402
+from citry.contrib import asgi as asgi_adapter  # noqa: E402
+from citry.contrib import wsgi as wsgi_adapter  # noqa: E402
 from citry.contrib.asgi import asgi_app  # noqa: E402
 from citry.contrib.django import urlpatterns as django_urlpatterns  # noqa: E402
 from citry.contrib.wsgi import wsgi_app  # noqa: E402
@@ -195,3 +197,40 @@ def test_csrf_failed_is_the_wire_error_for_the_refused_scheme() -> None:
             headers={"Content-Type": ENVELOPE_CONTENT_TYPE, "Origin": f"http://{HOST}", "X-Citry-Events": "1"},
         )
     assert response.json()["results"][0]["error"]["code"] == "csrf_failed"
+
+
+def test_a_form_post_from_an_http_page_is_refused_on_an_https_request() -> None:
+    # The attack this check stops: a plain-http page on the same host posts
+    # an ordinary form, which needs no custom header and no CORS preflight.
+    citry, component = _engine()
+    with TestClient(asgi_app(citry), base_url=f"https://{HOST}") as client:
+        response = client.post(
+            f"/ext/events/e/{component.class_id}/echo",
+            content=b"text=hi",
+            headers={"Content-Type": "application/x-www-form-urlencoded", "Origin": f"http://{HOST}"},
+        )
+    assert response.status_code == 403
+
+
+@pytest.mark.parametrize(
+    ("scope_scheme", "expected"),
+    [(None, "http"), ("http", "http"), ("https", "https"), ("HTTPS", "https")],
+)
+def test_asgi_adapter_reports_the_scope_scheme(scope_scheme: str | None, expected: str) -> None:
+    # The ASGI spec makes `scheme` optional, with "http" as its default.
+    scope: dict[str, Any] = {"type": "http", "headers": []}
+    if scope_scheme is not None:
+        scope["scheme"] = scope_scheme
+    assert asgi_adapter._build_request(scope, "GET", "/", b"").scheme == expected
+
+
+@pytest.mark.parametrize(
+    ("url_scheme", "expected"),
+    [(None, ""), ("http", "http"), ("https", "https"), ("HTTPS", "https")],
+)
+def test_wsgi_adapter_reports_the_environ_scheme(url_scheme: str | None, expected: str) -> None:
+    # A missing wsgi.url_scheme reads as unknown, which skips the check.
+    environ: dict[str, Any] = {"REQUEST_METHOD": "GET", "PATH_INFO": "/"}
+    if url_scheme is not None:
+        environ["wsgi.url_scheme"] = url_scheme
+    assert wsgi_adapter._build_request(environ, "GET", None).scheme == expected

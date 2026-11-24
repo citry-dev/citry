@@ -471,6 +471,11 @@ Some setups need care:
 with status 403 and the message "The call failed the CSRF check; reload
 the page and try again."
 
+Two checks can cause this: the `Origin` host must match the `Host`
+header, and on a request your server reports as https, the `Origin`
+must be https too ([Fix an http Origin](#fix-an-http-origin)). The
+`DEBUG` log says which one refused the call.
+
 On each such call, the browser sends an `Origin` header with the site's
 address, and Citry checks that its host and port match the request's
 `Host` header (see
@@ -501,17 +506,24 @@ Werkzeug's `ProxyFix(x_host=1)`, also works. Use it only behind a proxy
 you run, and on Flask, wrap it after `mount()`
 ([Order WSGI middleware](#order-wsgi-middleware)).
 
-Citry also refuses a call that your server reports as https when its
-`Origin` starts with `http:`. The scheme comes from your server: the
-ASGI scope's `scheme`, the WSGI `wsgi.url_scheme`, or Django's
-`request.scheme`, which follows `SECURE_PROXY_SSL_HEADER`. A proxy that
-ends TLS and talks plain http to your app is fine, because Citry does
-not compare the schemes on an http request. The reverse setup fails:
-if the site is served to browsers over plain http while your app
-reports https, every call is refused, and the `DEBUG` log says
+### Fix an http Origin
+
+Calls also fail when your server says a request arrived over https but
+the browser's page is on plain http. The `DEBUG` log then says
 `Origin 'http://...' is not https, but the request arrived over https`.
-Serve the site over https, or make your server report the scheme the
-browser used.
+This happens, for example, when your server trusts an
+`X-Forwarded-Proto: https` header that the proxy also sends on requests
+that arrived over http. Serve the site over https, or stop the proxy
+from claiming https for http requests.
+
+Citry takes the scheme from your server: the ASGI scope's `scheme`, the
+WSGI `wsgi.url_scheme`, or Django's `request.scheme`, which follows
+`SECURE_PROXY_SSL_HEADER`. A proxy that serves your site over https and
+passes plain http to your app works: your server reports http, and
+Citry then accepts an `Origin` of either scheme. To have Citry refuse
+an `http:` `Origin` there too, make your server read the scheme the
+proxy forwards, for example with Django's `SECURE_PROXY_SSL_HEADER`,
+Uvicorn's `--proxy-headers`, or Werkzeug's `ProxyFix(x_proto=1)`.
 
 ## URLs Citry serves
 

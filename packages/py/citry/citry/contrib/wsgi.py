@@ -123,7 +123,8 @@ def _build_request(environ: dict[str, Any], method: str, body_limit: int | None)
         content_type=headers.get("content-type", ""),
         native=environ,
         # PEP 3333 requires the server to set it; a proxy-aware middleware
-        # such as Werkzeug's ProxyFix(x_proto=1) rewrites it from the proxy.
+        # such as Werkzeug's ProxyFix(x_proto=1) rewrites it from the proxy's
+        # X-Forwarded-Proto header.
         scheme=str(environ.get("wsgi.url_scheme", "")).lower(),
     )
 
