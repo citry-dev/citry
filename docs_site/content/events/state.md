@@ -178,7 +178,7 @@ any other user input. See [Security](/security/#treat-state-as-client-input).
 
 | Data | Put it in | How long it lives |
 |---|---|---|
-| Small values a later server call needs, or values bound with `:c-*` | `State` | Kept across calls until its token expires: 24 hours after Citry last issued one, unless `_max_age` sets another lifetime. A call made after half that time gets a new token, so only a page left idle that long expires. After that, the next call fails with `stale_state` until the page is reloaded ([why tokens expire](/security/#treat-state-as-client-input), [how to tell the visitor](/reference/browser-apis/#out-of-date-pages)). |
+| Small values a later server call needs, or values bound with `:c-*` | `State` | Kept across calls. A token lasts 24 hours (`_max_age` changes that), and a call made after its first 12 hours gets a new one. When no call comes in the last 12 hours, the next call fails with `stale_state` until the page is reloaded ([why tokens expire](/security/#treat-state-as-client-input), [how to tell the visitor](/reference/browser-apis/#out-of-date-pages)). |
 | Larger or computed values the browser code reads | `js_data()` | Recomputed on each render. |
 | Browser-only UI state, such as whether a panel is open | Vue `data()` | Kept by the Vue component in the browser. |
 

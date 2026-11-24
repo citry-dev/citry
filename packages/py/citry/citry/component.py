@@ -878,9 +878,9 @@ class Component(metaclass=ComponentMeta):
     ``datetime.timedelta`` of at least one second that sets how long the
     State token (the string Citry sends to the page for the next call)
     works after Citry issues it. With ``None``, the token expires after 24
-    hours in either storage. A call that arrives once the token is past half
-    its lifetime gets a new token with a full lifetime, so only a page left
-    idle for ``_max_age`` reaches the expiry. A call with an expired token
+    hours in either storage. A call made once the token is past half its
+    lifetime gets a new token with a full lifetime, so a component that gets
+    a call at least that often keeps working. A call with an expired token
     fails with ``stale_state``; see
     [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)
     for how to tell the visitor.

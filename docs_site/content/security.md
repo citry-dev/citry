@@ -66,20 +66,34 @@ cache entry expires or the cache drops it.
 
 A token expires 24 hours after Citry issues it, with either storage.
 Citry issues a new token each time it renders the component, after each
-call that changes State, and after a call whose token is past half its
-lifetime, so a page in use keeps working. The expiry limits how long a
-copied token stays useful when nobody sends it: like the page, someone
-who keeps sending calls with a copied token keeps getting new ones. A
-call with an expired token does not run its handler: it
-gets a `stale_state` error, and calls from that component keep failing
-until the visitor reloads the page, which brings a fresh token.
+call that changes State, and after a call made once the token is more
+than 12 hours old (half its lifetime). So a component that gets a call
+at least every 12 hours keeps working. A component that gets no call
+during the last 12 hours of its token's life expires, and so does a
+component whose calls all go to `detached` handlers, which never get a
+new token. Each component on the page has its own token, renewed only by
+its own calls.
+
+The expiry limits how long a copied token stays useful only while nobody
+uses it. Anyone who sends calls with a copy at least every 12 hours keeps
+getting new tokens, as the page does, even to handlers that only read
+State. A token that a GET handler receives in its URL can end up in
+server and proxy logs, so whoever can read those logs can keep that
+token alive the same way. Tokens give no permission: check it in every
+handler.
+
+A call with an expired token does not run its handler: it gets a
+`stale_state` error, and calls from that component keep failing until
+the visitor reloads the page, which brings a fresh token.
 [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)
 shows how to tell the visitor.
 
 To change the lifetime, set `State._max_age` to a `timedelta` of at least
 one second. Token times are whole seconds, so a token can stop working up
 to one second early. No setting turns expiry off. Changing `_max_age` later does not change the tokens
-Citry has already issued.
+Citry has already issued. A call renews a token once it is past half its
+lifetime, so set `_max_age` to at least twice the longest time a page may
+go without a call.
 
 ```python
 from datetime import timedelta
@@ -118,9 +132,8 @@ still sent as plain values, so list the fields the browser needs in
 them. Server storage does not replace the permission check either: still
 authorize every use of the restored values.
 
-Server storage adds a cache entry at every render, after every call
-that changes State, and when it gives a call a new token because the
-old one is past half its lifetime. It keeps each entry until it expires: after
+Server storage adds a cache entry for each token Citry issues (see
+above), and keeps each entry until it expires: after
 `State._max_age`, or after 24 hours when you do not set it. With several
 server processes, use a shared backend and set its memory limit and
 eviction policy. A browser write that would make the stored

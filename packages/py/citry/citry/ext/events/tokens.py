@@ -43,7 +43,8 @@ Both storage modes share one lifetime rule: a token is valid for ``_max_age``
 after it is minted, or for 24 hours when ``_max_age`` is unset. A call that
 arrives once the token is past half its lifetime gets a new token with a full
 lifetime, even when State did not change (``state_renewal_due``; the
-dispatcher sends it), so only a page left idle reaches the expiry. A token whose
+dispatcher sends it). So a page that calls at least once per half lifetime
+never reaches the expiry. A token whose
 version this release does not know (one a newer or older release wrote) is
 treated like an expired one, so a version change in a later release costs an
 open page one reload.
@@ -186,10 +187,11 @@ _NO_SIGNING_KEY_MSG = (
 
 
 # How long a State token stays valid when ``_max_age`` is unset, in both
-# storage modes. A server-stored entry needs a lifetime because every render
-# and every State change writes a new one and nothing else removes the old
-# ones. A signed token needs one because anyone who copied it could otherwise
-# send it back for as long as the signing secret stays in use.
+# storage modes. A server-stored entry needs a lifetime because every render,
+# every State change, and every renewal writes a new one and nothing else
+# removes the old ones. A signed token needs one because anyone who copied it
+# and stopped calling could otherwise send it back for as long as the signing
+# secret stays in use.
 _STATE_DEFAULT_MAX_AGE = timedelta(hours=24)
 
 
@@ -217,8 +219,8 @@ class VerifiedState:
             match the component the call is dispatching to.
         renew_after: The time (epoch seconds) when the token is half way
             through its lifetime. A call that arrives after it gets a new
-            token (see ``state_renewal_due``). ``None`` when the result did
-            not come from a token.
+            token (see ``state_renewal_due``). ``verify_state_token`` always
+            sets it; ``None`` only in a value built without a token.
 
     """
 
@@ -390,8 +392,40 @@ def mint_state_token(
         msg = f"Unknown storage mode {storage!r}; expected 'signed' or 'server'."
         raise ValueError(msg)
 
+    prepared = prepare_state_token(
+        state,
+        class_id=class_id,
+        secret=secret,
+        max_age=max_age,
+        max_bytes=max_bytes,
+        storage=storage,
+        component_name=component_name,
+    )
+    _commit_prepared_state_token(prepared, cache)
+    return prepared.token
+
+
+def prepare_state_token(
+    state: Any,
+    *,
+    class_id: str,
+    secret: str | list[str] | None,
+    max_age: timedelta | None,
+    max_bytes: int | None,
+    storage: str,
+    component_name: str | None = None,
+) -> PreparedStateToken:
+    """
+    Make a token like ``mint_state_token`` without writing to the cache yet.
+
+    A caller that may still drop the token (the dispatcher renewing a token,
+    which gives up when the public values cannot be sent) prepares it, checks
+    the rest of its answer, and only then writes the server-storage entry
+    with ``commit_state_token``. So a dropped token leaves no cache entry
+    that nobody will read.
+    """
     state_dict = _state_dict(state, class_id, component_name=component_name)
-    prepared = _prepare_state_token_values(
+    return _prepare_state_token_values(
         state_dict,
         class_id=class_id,
         secret=secret,
@@ -399,8 +433,11 @@ def mint_state_token(
         max_bytes=max_bytes,
         storage=storage,
     )
+
+
+def commit_state_token(prepared: PreparedStateToken, cache: CitryCache | None) -> None:
+    """Write the server-storage entry of a token from ``prepare_state_token``; a signed token writes nothing."""
     _commit_prepared_state_token(prepared, cache)
-    return prepared.token
 
 
 def _prepare_state_token_values(
@@ -472,7 +509,8 @@ def _warn_unbounded_state_cache(cache: CitryCache) -> None:
     _WARNED_UNBOUNDED_CACHES.add(id(cache))
     logger.warning(
         "Server-stored State (_storage = 'server') is kept in an InMemoryCache with state_max_bytes=None."
-        " Each render and each State change adds an entry that lasts until it expires (24 hours unless"
+        " Each render, each State change, and each token renewal adds an entry that lasts until it expires"
+        " (24 hours unless"
         " _max_age is set), so the process memory grows with traffic. Keep the default budget, set"
         " InMemoryCache(state_max_bytes=...), or use a shared backend with a size limit."
     )
@@ -754,7 +792,7 @@ def verify_state_token(
 
     # A page in use gets a new token once this one is half way through its
     # lifetime, counted from the token's own mint time and expiry, so a page
-    # that keeps calling never reaches the expiry.
+    # that calls at least once per half lifetime never reaches the expiry.
     minted_at = payload["t"]
     renew_after = minted_at + (_token_expiry(payload) - minted_at) / 2
     return VerifiedState(state_kwargs=payload["s"], class_id=payload["c"], renew_after=renew_after)

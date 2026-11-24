@@ -4,11 +4,13 @@
 
 ### Added
 
-- A page that is in use no longer stops working when its State token
-  expires. A call made after half the token's lifetime (12 hours by
-  default, half of `State._max_age` when you set it) now gets a new
-  token, even when the call does not change State, so only a page left
-  idle for the whole lifetime gets `stale_state`. See
+- A page that is in use no longer gets `stale_state` (the "page is out
+  of date" error) when its State token gets old. A call made once the
+  token is past half its lifetime (12 hours by default, or half your
+  `State._max_age`) now gets a new token, even when the call does not
+  change State. A component that gets no call in the second half of
+  its token's lifetime still expires. With server-stored State, each
+  new token adds one cache entry. See
   [Treat State as input](https://citry.dev/security/#treat-state-as-client-input).
 
 ## v1.2.0

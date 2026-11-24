@@ -1392,7 +1392,9 @@ class TestGetHandlers:
         assert state_action["targetRenderId"] == "i1"
         assert state_action["stateToken"] != token
 
-    def test_a_get_without_a_token_gets_none(self, monkeypatch):
+    def test_a_get_without_a_token_gets_no_new_token(self, monkeypatch):
+        # A GET to a handler that does not read State sends no token, so
+        # there is nothing to renew.
         c = _citry()
         greeter = _greeter(c)
         client = _mounted(c)

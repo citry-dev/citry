@@ -4932,16 +4932,28 @@ are whole seconds and a shorter lifetime would expire every token at once.
 A page that is in use renews its token before the expiry. When a call
 arrives with a valid token that is past half its lifetime (the server's
 clock reads at least `t + (x - t) / 2`), the server sends a new token with
-a full `_max_age` from now, even when the handler did not change State.
-Session cookies are renewed the same way. So a page that calls at least
-once per half lifetime never expires, a page left idle still expires after
-`_max_age`, and the cost is at most one extra token per half lifetime. The
-half-way point comes from the token's own `t` and `x`, so a token minted
-under an older `_max_age` (or with `"x": null`) is due by its own lifetime,
-and the new one gets the lifetime the component declares now. Each server
-compares with its own clock: a token from a server whose clock runs ahead
-is renewed later, never refused for it. The renewal is the `state` action
-of the re-sign flow below, so the v1 protocol carries it unchanged.
+a full lifetime from now, even when the handler did not change State. So
+a component that gets a call at least once per half lifetime never
+expires. A component that gets no call during the second half of its
+token's lifetime still expires, after an idle time between half and the
+whole lifetime depending on when its last call came. Renewal is per
+component: a `state` action renews only the calling instance's token.
+
+The cost is about one extra token per instance per half lifetime (two
+calls in flight with the same old token each get one). A client that
+names made-up caller instances can get one per call, up to the envelope's
+call limit, which is the same scale as a call that changes State (see the
+server storage paragraphs below).
+
+The half-way point comes from the token's own `t` and `x`, so a token
+minted under an older `_max_age` is due at half its own lifetime (12 hours
+for `"x": null`), and the new token gets the lifetime the component
+declares now. Each server compares with its own clock: a token from a
+server whose clock runs ahead is renewed later, never refused for it.
+The new token travels in the `state` action described in 4.3, so the v1
+protocol carries it unchanged. Because that action reassigns every public
+State value, browser watchers on an object or list field of `$state` fire
+once per renewal, as they do on any State refresh.
 
 The server skips the renewal when it would do harm or nobody could store
 the token:
@@ -4949,20 +4961,26 @@ the token:
 - The handler changed State, or the result renders the calling instance.
   The call already returns a new token with a full lifetime, so it returns
   exactly one.
-- The call names no caller instance (an API client or a no-JS form), or
-  the client's capabilities leave out the `state` action. The current
-  token keeps working until it expires.
+- The call names no caller instance (an API client), the client's
+  capabilities leave out the `state` action, or the call is a form posted
+  without JavaScript (the compatibility mode), whose answer drops `state`
+  actions. The current token keeps working until it expires.
 - The handler is detached (`@event(detached=True)`). The browser may send
   a detached call while queued calls are in flight, so a renewed token
-  could replace the newer token a queued call returns.
+  could replace the newer token a queued call returns. A component whose
+  calls all go to detached handlers therefore expires on schedule.
 - An earlier call in the same request already sent the caller instance a
-  token. All calls in a request carry the token from before the request,
-  so a later read-only call would otherwise replace the State an earlier
-  call changed with older State.
-- Making the token fails (the State no longer fits a lowered `_max_bytes`,
-  or a public value cannot be sent to the browser). The handler did not
-  change State, so the call still succeeds; the server logs a warning and
-  the current token keeps working until it expires.
+  token, through a `state` action or a render of that instance. All calls
+  in a request carry the token from before the request, so a later call
+  that only reads State would send a token for the State from before the
+  earlier call's change, and the browser would store that older State.
+- Making the token fails: the State no longer fits a lowered `_max_bytes`,
+  a public value cannot be sent to the browser, or the cache refuses the
+  write. The handler did not change State, so the call still succeeds.
+  The server logs a warning once per component class (debug after that),
+  and the current token keeps working until it expires. In server
+  storage the cache entry is written only after the `state` action is
+  built, so a dropped token leaves no entry behind.
 
 A call that sends no token (a GET handler that does not read State) cannot
 renew one. A render replayed from the render cache already signs its State
@@ -5065,9 +5083,9 @@ every render, after every call that changes State, and when a call renews
 a token past half its lifetime. Renewal writes a new entry under a new
 key, as a State change does, so both storage modes renew through the same
 `state` action, and an entry is never rewritten after a client received
-its key. It writes one only
-when a client receives the token, so a call with no caller instance, or
-from a client that does not accept the `state` action, stores nothing.
+its key. Server storage writes an entry only when a client receives the
+token, so a call with no caller instance, or from a client that does not
+accept the `state` action, stores nothing.
 The caller instance is a value the client sends, so this rule saves only
 honest traffic; it does not limit a client that names a made-up instance.
 
@@ -5119,12 +5137,18 @@ first key signs and every key verifies, and needs no shared runtime state or
 cache once every worker has the same ordered secret list. Its costs are
 equally deliberate: the user can decode every State field, the complete State
 rides on every call, and an old valid token remains replayable until it expires
-or its signing secret is removed. Renewal does not extend that window for
-a token nobody sends, but whoever holds a copy can keep it alive the same
-way a page does, by sending a call at least once per half lifetime. A call
-that changes State already gave a copied token a new lifetime before
-renewal existed, so renewal on read-only calls adds little. The token is bound to its component class
-and protocol version, not to a user, session, page, instance, or latest State
+or its signing secret is removed. Anyone who sends calls with a copy at
+least once per half lifetime keeps getting new tokens, as the page does.
+For a component with a handler that changes State, a `_model` field the
+browser may write, or a handler that renders the caller, a copy could
+always be kept alive that way, so renewal adds little there. For a
+component whose handlers only read State, renewal is what lets a copy
+outlive `_max_age`. The case that matters most is a GET handler that reads
+State: its token travels in the URL and can land in server and proxy
+logs, and whoever reads those logs can keep that token alive. Renewal does
+not change what a token permits, which is why every handler still checks
+permission. The token is bound to its component class and protocol
+version, not to a user, session, page, instance, or latest State
 revision. Handlers must therefore reload authoritative data and perform
 authorization regardless of whether the token verifies.
 

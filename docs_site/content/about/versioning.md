@@ -194,8 +194,8 @@ sends each component's State to the page as a signed State token.
 
 - Signed tokens and State kept on the server both expire 24 hours after
   Citry issues them, unless you set `State._max_age`.
-- A call made after half that lifetime gets a new token, so a page in
-  use keeps working and only a page left idle that long expires.
+- A call made once a token is past half its lifetime gets a new token,
+  so a component that gets a call at least that often keeps working.
 - An expired token fails the call with `stale_state`. Show visitors a
   message for it, as
   [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)

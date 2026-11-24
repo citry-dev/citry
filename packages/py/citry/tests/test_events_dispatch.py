@@ -3911,12 +3911,18 @@ class TestStateRenewal:
     """
     A call whose State token is past half its lifetime gets a new token.
 
-    The new token rides the `state` action that a State change already
-    uses, so a page that keeps calling never reaches the expiry even when
+    The new token is sent in the `state` action that a State change
+    already uses, so a page that keeps calling never reaches the expiry even when
     its calls only read State.
     """
 
     HALF_DAY = 12 * 60 * 60
+
+    @pytest.fixture(autouse=True)
+    def _fresh_failure_log(self, monkeypatch):
+        # Each test builds its own `Notes` class with the same class id, so
+        # the once-per-class warning must start empty in every test.
+        monkeypatch.setattr(dispatcher_module, "_RENEWAL_FAILURES_LOGGED", set())
 
     def _notes(self, c, **state_settings):
         state_cls = type(
@@ -3933,6 +3939,9 @@ class TestStateRenewal:
             class Events:
                 def read(self, state):
                     return {"count": state.count}
+
+                def ping(self, state):
+                    return {"pong": True}
 
                 def bump(self, state):
                     state.count += 1
@@ -4037,8 +4046,9 @@ class TestStateRenewal:
                 c, self._call(notes, "read", token), envelope_extra={"capabilities": {"actions": ["data"]}}
             )
         assert [action["action"] for action in result["results"][0]["actions"]] == ["data"]
-        # Unlike a dropped State change, nothing is lost: the current token
-        # keeps working until it expires.
+        # Unlike a State change the client cannot receive, which logs a
+        # warning, nothing is lost: the current token keeps working until it
+        # expires.
         assert caplog.records == []
 
     def test_a_detached_call_is_not_renewed(self, monkeypatch):
@@ -4107,8 +4117,8 @@ class TestStateRenewal:
 
     def test_a_token_minted_by_a_server_whose_clock_runs_ahead_still_works(self, monkeypatch):
         # This server's clock is ten minutes behind the one that minted the
-        # token, so the token looks newer than it is: it verifies and is
-        # renewed ten minutes later than on the minting server.
+        # token, so the token looks newer than it is: it verifies, and it is
+        # renewed when this clock reaches the token's half-way point.
         c = _citry()
         notes = self._notes(c)
         token = _token(notes)
@@ -4116,6 +4126,8 @@ class TestStateRenewal:
         assert len(_dispatch(c, self._call(notes, "read", token))["results"][0]["actions"]) == 1
         self._at(monkeypatch, self.HALF_DAY - 1)
         assert len(_dispatch(c, self._call(notes, "read", token))["results"][0]["actions"]) == 1
+        self._at(monkeypatch, self.HALF_DAY)
+        assert len(_dispatch(c, self._call(notes, "read", token))["results"][0]["actions"]) == 2
 
     def test_an_old_token_keeps_working_until_its_own_expiry(self, monkeypatch):
         # A signed token cannot be withdrawn, so the token the new one
@@ -4142,6 +4154,113 @@ class TestStateRenewal:
             [item] = _dispatch(c, self._call(notes, "read", token))["results"]
         assert item["actions"] == [{"action": "data", "value": {"count": 0}}]
         assert any("could not be made" in record.message for record in caplog.records)
+
+    def test_a_failed_renewal_warns_once_per_component(self, monkeypatch, caplog):
+        c = _citry()
+        notes = self._notes(c, _max_bytes=20)
+        token = _token(notes, note="x" * 40)
+        self._at(monkeypatch, self.HALF_DAY)
+        with caplog.at_level(logging.WARNING, logger="citry"):
+            _dispatch(c, self._call(notes, "read", token))
+            _dispatch(c, self._call(notes, "read", token))
+        assert len([record for record in caplog.records if "could not be made" in record.message]) == 1
+
+    def test_a_public_value_the_browser_cannot_read_keeps_its_token(self, monkeypatch):
+        # An integer wider than a browser number cannot go in `publicState`.
+        # Server storage checks it before writing, so no entry is left that
+        # nobody will read.
+        c = _citry()
+        notes = self._notes(c, _storage="server")
+        token = mint_state_token(
+            notes.State(count=10**400),
+            class_id=notes.class_id,
+            secret=SIGNING_KEY,
+            max_age=None,
+            max_bytes=None,
+            storage="server",
+            cache=c.cache,
+        )
+        entries = dict(c.cache._state)
+        self._at(monkeypatch, self.HALF_DAY)
+        [item] = _dispatch(c, self._call(notes, "ping", token))["results"]
+        assert item["ok"] is True
+        assert [action["action"] for action in item["actions"]] == ["data"]
+        assert dict(c.cache._state) == entries
+
+    def test_a_cache_that_refuses_the_write_keeps_the_token(self, monkeypatch):
+        # A call that only reads State did not write to the cache before
+        # renewal, so a backend that fails writes must not fail it now.
+        c = _citry()
+        notes = self._notes(c, _storage="server")
+        token = mint_state_token(
+            notes.State(count=1),
+            class_id=notes.class_id,
+            secret=SIGNING_KEY,
+            max_age=None,
+            max_bytes=None,
+            storage="server",
+            cache=c.cache,
+        )
+
+        def refuse(*args, **kwargs):
+            raise ConnectionError("cache is read-only")
+
+        monkeypatch.setattr(c.cache, "set", refuse)
+        self._at(monkeypatch, self.HALF_DAY)
+        [item] = _dispatch(c, self._call(notes, "read", token))["results"]
+        assert item["actions"] == [{"action": "data", "value": {"count": 1}}]
+
+    def test_a_form_posted_without_javascript_is_not_renewed(self, monkeypatch):
+        # The answer to such a form drops `state` actions, so server storage
+        # would write an entry nobody reads.
+        c = _citry()
+        notes = self._notes(c, _storage="server")
+        token = mint_state_token(
+            notes.State(count=1),
+            class_id=notes.class_id,
+            secret=SIGNING_KEY,
+            max_age=None,
+            max_bytes=None,
+            storage="server",
+            cache=c.cache,
+        )
+        entries = dict(c.cache._state)
+        self._at(monkeypatch, self.HALF_DAY)
+        ctx = TransportContext(transport="http", citry=c, response_mode="compat")
+        result = EventsDispatcher().dispatch(_envelope(self._call(notes, "read", token)), ctx)
+        assert all(action["action"] != "state" for action in result["results"][0]["actions"])
+        assert dict(c.cache._state) == entries
+
+    def test_a_render_of_another_instance_counts_as_its_new_token(self, monkeypatch):
+        # A call that renders `n2` gives it a token with a full lifetime, so
+        # a later read on `n2` in the same request does not renew it again.
+        c = _citry()
+        notes = self._notes(c)
+
+        class Board(Component):
+            citry = c
+            State = notes.State
+            template = "<div>b</div>"
+
+            class Events:
+                def refresh_other(self, state):
+                    return actions.Render(notes(), target="render:n2")
+
+        token = _token(notes)
+        board_token = _token(Board)
+        self._at(monkeypatch, self.HALF_DAY)
+        rendered, read = _dispatch(
+            c,
+            {
+                "componentClassId": Board.class_id,
+                "handlerName": "refresh_other",
+                "stateToken": board_token,
+                "callerRenderId": "b1",
+            },
+            self._call(notes, "read", token, "n2"),
+        )["results"]
+        assert any(action.get("target") == "render:n2" for action in rendered["actions"])
+        assert [action["action"] for action in read["actions"]] == ["data"]
 
     def test_server_storage_writes_a_new_entry_with_a_full_lifetime(self, monkeypatch):
         c = _citry()
