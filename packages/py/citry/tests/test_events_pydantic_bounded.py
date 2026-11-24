@@ -24,6 +24,7 @@ import gc
 import ipaddress  # noqa: TC003 - Pydantic reads the test classes' annotations at run time
 import json
 import logging
+import platform
 import random
 import re
 import subprocess
@@ -45,6 +46,7 @@ from pydantic_core import core_schema as pydantic_core_schema
 from typing_extensions import TypeAliasType, TypedDict
 
 from citry import Citry, Component
+from citry._protocol.events import MAX_JSON_DEPTH
 from citry.ext.events import _pydantic_bounded as bounded
 from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
 from citry.ext.events.errors import MAX_FIELD_ERRORS_TEXT, FieldErrors
@@ -59,6 +61,10 @@ from citry.ext.events.tokens import (
 )
 
 from ._memory import requires_tracemalloc, tracemalloc
+
+IS_PYPY = platform.python_implementation() == "PyPy"
+# The reason shared by the subprocess tests that skip on PyPy.
+PYPY_CRASHES_IN_SUBPROCESS = "PyPy's C-API layer crashes in this subprocess; see #708"
 
 SIGNING_KEY = "test-secret-key"
 
@@ -349,6 +355,7 @@ print(json.dumps(built))
 """
 
 
+@pytest.mark.skipif(IS_PYPY, reason=PYPY_CRASHES_IN_SUBPROCESS)
 def test_the_copy_of_a_chain_of_nested_models_is_built_on_a_thread_with_a_small_stack() -> None:
     # The first call to a class builds Citry's copy of its validator, and
     # the thread that serves the request can have a small stack (1 MB on
@@ -827,6 +834,9 @@ def test_a_check_thread_lets_go_of_the_request_data_once_the_check_returns() -> 
     assert pool.count == 1
 
 
+@pytest.mark.skipif(
+    IS_PYPY, reason="PyPy has no reference counting, so it frees an object only when its garbage collector runs"
+)
 def test_a_check_that_raises_lets_go_of_the_request_data_without_the_cycle_collector(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -4038,6 +4048,7 @@ print(json.dumps(answers))
 """
 
 
+@pytest.mark.skipif(IS_PYPY, reason=PYPY_CRASHES_IN_SUBPROCESS)
 def test_deep_data_checked_from_a_thread_with_a_small_stack_is_refused() -> None:
     # A server thread can have as little as 128 KiB of stack (the size
     # musl gives a thread that nobody sized; a Python thread in the
@@ -4201,7 +4212,15 @@ def test_a_signed_pydantic_v1_state_too_deep_to_restore_answers_stale_state() ->
     # at the recursion limit of the request, as when the limit was raised
     # while minting. The call answers stale_state, as for any State that no
     # longer fits, rather than as an unexpected error.
+    #
+    # The State is as deep as a token can hold, because the depth that runs
+    # out of frames differs by interpreter: Pydantic v1 uses several frames
+    # per level, and PyPy reads back more levels than CPython before it
+    # reaches the same limit. A token holds more levels than either of them
+    # reads back at the default limit.
     board, node = _deep_v1_board()
+    # The token's payload and State are two of its levels, and each node adds one.
+    nodes = MAX_JSON_DEPTH - 2
     app = _citry()
 
     class Deep(Component):
@@ -4219,7 +4238,11 @@ def test_a_signed_pydantic_v1_state_too_deep_to_restore_answers_stale_state() ->
     sys.setrecursionlimit(20_000)
     try:
         token = mint_state_token(
-            board(tree=_v1_chain(node, 150)), class_id=Deep.class_id, secret=SIGNING_KEY, max_age=None, max_bytes=10**6
+            board(tree=_v1_chain(node, nodes)),
+            class_id=Deep.class_id,
+            secret=SIGNING_KEY,
+            max_age=None,
+            max_bytes=10**6,
         )
     finally:
         sys.setrecursionlimit(limit)
