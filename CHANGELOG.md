@@ -50,7 +50,12 @@ still requires citry-core 2.1.2.
   Python at every level of such a value when Citry writes the State
   out. Remove `return_type`, annotate a `field_serializer` or
   `model_serializer` as returning `Any`, or use an `AfterValidator` or
-  `WrapValidator` in place of the `PlainValidator`.
+  `WrapValidator` in place of the `PlainValidator`. The rule also
+  refuses two shapes that would not end PyPy: a recursive return type
+  whose only serializer is on a value that does not nest, such as a
+  `field_serializer` for a date field, and a recursive Pydantic
+  dataclass whose wrap `field_serializer` is annotated as returning its
+  own type. Annotate those serializers as returning `Any`.
 
 CPython accepts and refuses the same data as before. Citry applies the
 PyPy rules on every Python implementation other than CPython, such as
