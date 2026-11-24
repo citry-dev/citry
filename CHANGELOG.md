@@ -14,6 +14,13 @@
   server-stored State, each new token adds one cache entry. See
   [Treat State as input](https://citry.dev/security/#treat-state-as-client-input).
 
+### Fixes
+
+- With `State._storage = "server"`, a call that changes State no longer
+  leaves an unused entry in your cache when its answer cannot carry the
+  new token. That covers a form posted without JavaScript, and a call
+  that fails because a public State value is one the browser cannot read.
+
 ## v1.2.0
 
 Citry 1.2.0 adds Experimental APIs for host integrations such as

@@ -797,6 +797,36 @@ class TestServerStoredState:
         assert item["ok"] is True
         assert self._entries(c) == before
 
+    def test_a_form_posted_without_javascript_writes_no_entry(self):
+        # The answer to a form posted without JavaScript drops `state`
+        # actions, so a new token would be written and never read, even
+        # though the form named its caller instance and changed State.
+        c = _citry()
+        notes = self._stored(c)
+        token = self._server_token(c, notes)
+        before = self._entries(c)
+        call = {"componentClassId": notes.class_id, "handlerName": "bump", "callerRenderId": "n1", "stateToken": token}
+        ctx = TransportContext(transport="http", citry=c, response_mode="compat")
+        [item] = EventsDispatcher().dispatch(_envelope(call), ctx)["results"]
+        assert item["ok"] is True
+        assert notes.ran == [True]
+        assert all(action["action"] != "state" for action in item["actions"])
+        assert self._entries(c) == before
+
+    def test_a_state_action_that_cannot_be_built_leaves_no_entry(self):
+        # An integer wider than a browser number cannot go in `publicState`,
+        # so the call fails after State changed. The entry is written only
+        # once the `state` action exists, so the failure leaves none behind.
+        c = _citry()
+        notes = self._stored(c)
+        token = self._server_token(c, notes, count=10**400)
+        before = self._entries(c)
+        call = {"componentClassId": notes.class_id, "handlerName": "bump", "callerRenderId": "n1", "stateToken": token}
+        [item] = _dispatch(c, call)["results"]
+        assert item["error"]["status"] == 500
+        assert item["error"]["code"] == "handler_error"
+        assert self._entries(c) == before
+
     def test_a_live_caller_still_gets_a_new_token(self):
         c = _citry()
         notes = self._stored(c)
@@ -805,6 +835,22 @@ class TestServerStoredState:
         [state_action] = _dispatch(c, call)["results"][0]["actions"]
         assert state_action["stateToken"].startswith("ces1.")
         assert len(self._entries(c)) == 2
+
+    def test_the_new_token_is_the_one_entry_a_live_caller_reads_back(self):
+        # The entry written for the `state` action holds the State the
+        # handler left, so the browser's next call reads it.
+        c = _citry()
+        notes = self._stored(c)
+        call = {
+            "componentClassId": notes.class_id,
+            "handlerName": "bump",
+            "callerRenderId": "n1",
+            "stateToken": self._server_token(c, notes, count=4),
+        }
+        [state_action] = _dispatch(c, call)["results"][0]["actions"]
+        assert state_action["publicState"]["count"] == 5
+        [item] = _dispatch(c, {**call, "handlerName": "read", "stateToken": state_action["stateToken"]})["results"]
+        assert item["actions"][-1] == {"action": "data", "value": {"count": 5}}
 
     def test_a_browser_write_over_the_cap_is_refused_before_the_handler(self):
         c = _citry()
@@ -1086,8 +1132,9 @@ class TestSignedStateCap:
         assert notes.ran == []
 
     def test_a_call_that_makes_no_new_token_is_not_capped(self):
-        # Without a caller instance, or with a client that does not accept
-        # the `state` action, Citry never signs the State again.
+        # Without a caller instance, with a client that does not accept the
+        # `state` action, or for a form posted without JavaScript (whose
+        # answer drops it), Citry never signs the State again.
         c = _citry()
         notes = self._signed(c)
         [item] = _dispatch(c, self._call(notes, "x" * 2000, caller=None))["results"]
@@ -1095,7 +1142,10 @@ class TestSignedStateCap:
         no_state = {"capabilities": {"actions": ["data"]}}
         [item] = _dispatch(c, self._call(notes, "x" * 2000), envelope_extra=no_state)["results"]
         assert item["ok"] is True
-        assert notes.ran == [True, True]
+        compat = TransportContext(transport="http", citry=c, response_mode="compat")
+        [item] = EventsDispatcher().dispatch(_envelope(self._call(notes, "x" * 2000)), compat)["results"]
+        assert item["ok"] is True
+        assert notes.ran == [True, True, True]
 
     def test_a_browser_write_within_the_cap_runs_the_handler_and_signs_the_state(self):
         c = _citry()
