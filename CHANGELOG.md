@@ -1,8 +1,6 @@
 # Release notes
 
-## v1.2.1
-
-Citry 1.2.1 is a security release. It still requires citry-core 2.1.2.
+## v1.3.0
 
 ### Fixes
 
