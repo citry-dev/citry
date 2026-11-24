@@ -223,7 +223,7 @@ def validate_bool_value(source: str, value: Any) -> bool:
 
     These knobs exist at the handler level only (design 3.5), so unlike the
     validators above, only the ``@event`` decorator calls this. A plain bool
-    matters most for ``component_guard``: a truthy stand-in such as ``0`` or
+    matters most for ``component_guard``: a stand-in such as ``0`` or
     ``"no"`` must not decide whether an authorization check runs.
     """
     if not isinstance(value, bool):
@@ -457,10 +457,10 @@ def event(
     to the component's underscore config
     (``_methods``, ``_csrf``, ``_debounce``, ``_throttle``), which itself
     falls back to ``extensions_defaults["events"]`` and then the built-in
-    defaults. Guards are the exception: a ``guard`` given here runs after
-    the component's ``_guard`` rather than in its place (see ``guard`` and
-    ``component_guard`` below). The queue knobs ``latest_wins``, ``bundle`` and
-    ``detached`` are the exception: they exist per handler only, so a call
+    defaults. Guards work differently: a ``guard`` given here runs after
+    the component's ``_guard``, in addition to it (see ``guard`` and
+    ``component_guard`` below). The queue knobs ``latest_wins``,
+    ``bundle`` and ``detached`` exist per handler only, so a call
     site that needs different queue semantics names a different handler. A
     detached handler also needs the call site to pass ``wait: false``; a
     call without it waits its turn.
@@ -472,18 +472,19 @@ def event(
         methods: The allowed HTTP methods for this handler, e.g. ``("GET",)``.
             Each must be one of GET, HEAD, POST, PUT, PATCH, DELETE, or
             OPTIONS, the methods the per-event route accepts.
-        guard: Per-handler authorization function. It runs after the
-            component's ``_guard`` (or the ``_guard`` in
-            ``extensions_defaults["events"]`` when the component sets
-            none), and either one raising ``EventError`` refuses the call.
-            It must be a plain ``def``, not ``async def``: Citry calls it
-            without awaiting it.
+        guard: Per-handler authorization function. It receives the
+            ``Events`` instance and raises ``EventError`` to refuse. It
+            runs after the component's ``_guard`` (or the app-wide
+            ``_guard`` in ``extensions_defaults["events"]`` when the
+            component defines none), and either one raising refuses the
+            call. It must be a plain ``def``, not ``async def``: Citry
+            calls it without awaiting it.
         component_guard: Pass ``False`` to skip the component's ``_guard``
-            (or the engine-wide default ``_guard``) for this handler only,
-            for a handler that must be more open than the rest of its
-            component, such as a public sign-up call. Only ``guard`` then
-            runs, if you give one. Every other handler keeps the
-            component's guard.
+            (or the app-wide ``_guard``) for this handler only, for a
+            handler that must accept callers the rest of its component
+            refuses, such as a public sign-up call. ``guard`` and
+            ``_context`` still run. Only ``True`` or ``False`` is
+            accepted.
         csrf: Per-handler CSRF policy: ``"auto"``, ``False``, or a plain
             (not async) function that raises ``EventError`` to refuse the
             request.
@@ -539,7 +540,7 @@ def event(
                 def spell_check(self, data: SpellCheckIn) -> dict:
                     return {"typos": find_typos(data.text)}
 
-                # Runs after the component's _guard.
+                # Runs after the component's _guard, if it has one.
                 @event(guard=require_owner)
                 def delete(self, state: DocState):
                     delete_document(state.doc_id)

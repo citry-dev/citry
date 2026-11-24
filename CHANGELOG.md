@@ -15,12 +15,13 @@
   that returns a coroutine. See
   [GHSA-gj9m-wwqx-m37j](https://github.com/citry-dev/citry/security/advisories/GHSA-gj9m-wwqx-m37j).
 - Security: a handler's own `@event(guard=...)` now runs after the
-  component's `_guard` instead of replacing it, as the security guide
-  always said. Calls that the component's `_guard` (or the `_guard` in
-  `extensions_defaults["events"]`) refuses are now refused on handlers
-  that have their own guard too. A handler that must be more open than
-  its component skips the component's guard with
-  `@event(component_guard=False)`. See
+  component's `_guard` (or the app-wide `_guard` in
+  `extensions_defaults["events"]`) instead of replacing it, and either
+  one can refuse the call. A call the component's guard refuses now
+  fails on every handler of the component, including handlers with
+  their own guard. A handler that must accept callers the rest of its
+  component refuses sets `@event(component_guard=False)`, which skips
+  the component's or app-wide `_guard` for that handler only. See
   [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
 
 ## v1.2.0

@@ -1186,9 +1186,8 @@ class EventsDispatcher:
                         f"The component guard of event {handler.name!r} on {comp_cls.__name__}",
                         handler.component_guard(events),
                     )
-                # The same function set at both levels runs once, as it did
-                # when the handler's guard replaced the component's, so a
-                # guard that counts calls (a rate limit) does not count twice.
+                # The same function set at both levels runs once, so a guard
+                # that counts calls (a rate limit) counts each call once.
                 if handler.guard is not None and handler.guard is not handler.component_guard:
                     refuse_deferred_result(
                         f"The guard of event {handler.name!r} on {comp_cls.__name__}", handler.guard(events)

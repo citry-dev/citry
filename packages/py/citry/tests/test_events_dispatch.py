@@ -38,6 +38,7 @@ from citry.ext.events.dispatcher import (
     TransportContext,
 )
 from citry.ext.events.errors import EventError
+from citry.ext.events.handlers import EVENT_OPTIONS_ATTR, EventOptions
 from citry.ext.events.results import HTML_RENDER_ENCODER
 from citry.ext.events.tokens import mint_state_token, verify_state_token
 from citry.extension import Extension
@@ -2924,6 +2925,31 @@ class TestComponentAndHandlerGuardsBothRun:
         log.clear()
         assert self._call(Page, "put")["ok"] is True
         assert log == ["handler", "put"]
+
+    def test_a_component_guard_that_crashes_refuses_a_handler_with_its_own_guard(self):
+        log = []
+
+        def crash(events):
+            log.append("component")
+            raise RuntimeError("boom")
+
+        comp = self._component(_citry(), log, component_guard=crash, handler_guard=self._logging_guard(log, "handler"))
+        assert self._call(comp, "go")["error"]["code"] == "handler_error"
+        assert log == ["component"]
+
+    def test_only_false_skips_the_component_guard(self):
+        # The decorator accepts only a bool; an options record built some
+        # other way with a falsy stand-in still runs the component guard.
+        log = []
+
+        def go(self):
+            log.append("go")
+
+        setattr(go, EVENT_OPTIONS_ATTR, EventOptions(component_guard=0))
+        events_cls = type("Events", (), {"_guard": self._logging_guard(log, "component", refuse=True), "go": go})
+        comp = type("Guarded", (Component,), {"citry": _citry(), "Events": events_cls, "template": "\n<div>g</div>\n"})
+        assert self._call(comp, "go")["error"]["status"] == 403
+        assert log == ["component"]
 
     @pytest.mark.parametrize("value", [0, 1, "no", None])
     def test_component_guard_must_be_a_bool(self, value):

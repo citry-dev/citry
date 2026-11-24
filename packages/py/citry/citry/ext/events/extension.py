@@ -800,12 +800,12 @@ class EventsExtension(Extension):
                     )
                     raise ValueError(msg)
                 return_type_display, return_type_fidelity, description = capture_handler_introspection(func)
-                # Guards add up rather than replace: the component-level
+                # Guards add up: the component-level
                 # guard (its own _guard, else the engine default) runs for
                 # every handler, and a per-handler guard is an extra check on
                 # top. Only an explicit component_guard=False drops it, so a
                 # handler is never more open than its component by accident.
-                skips_component_guard = options is not None and not options.component_guard
+                skips_component_guard = options is not None and options.component_guard is False
                 handlers[wire_name] = EventHandler(
                     name=wire_name,
                     method_name=method_name,

@@ -139,8 +139,8 @@ the page. Check that the current user may perform the action, in one of
 three places:
 
 - `_guard` on `Events`, which runs before every handler of the component;
-- `@event(guard=...)`, which adds a check for one handler and runs
-  after `_guard`;
+- `@event(guard=...)`, which adds a second check for one handler and
+  runs after `_guard`;
 - a check inside the handler body.
 
 A guard rejects a call by raising `EventError`:
@@ -173,18 +173,32 @@ Use a guard for a rule every handler shares. Put a check that depends on
 the submitted data in the handler body, where the data has already been
 validated.
 
-A handler's own guard adds to the component's `_guard`; it does not
-replace it. Citry runs `_context` first, then `_guard`, then the
-handler's guard, and either guard can refuse the call. When the
-component sets no `_guard`, the `_guard` in
-`extensions_defaults["events"]` runs in its place. A component that
-sets its own `_guard` replaces the app-wide one, so call the app-wide
-check from it when both must run.
+A handler's own guard runs in addition to the component's `_guard`.
+Citry first builds `self.context` with `_context`, so both guards can
+read it. It then runs `_guard`, then the handler's guard. The first one
+that raises `EventError` refuses the call, and nothing after it runs.
 
-A handler that must be more open than the rest of its component, such
-as a public sign-up call on a component that otherwise needs a login,
-skips the component's guard with `component_guard=False`. Only that
-handler skips it, and its own guard, if you give one, still runs:
+To check every component the same way, set an app-wide guard once:
+
+```python
+citry = Citry(
+    extensions_defaults={"events": {"_guard": require_login}},
+)
+```
+
+It runs wherever a component's `Events` class does not define `_guard`.
+A component that defines its own `_guard`, even `_guard = None`,
+replaces the app-wide one, so call `require_login(self)` from the
+component's `_guard` when both must run.
+
+A handler that must accept callers the rest of its component refuses,
+such as a public sign-up call on a component that needs a login, sets
+`@event(component_guard=False)`. That skips the component's `_guard`,
+or the app-wide one when the component has none, for that handler
+only. A `guard=` on the same handler still runs, and so does
+`_context`. With no `guard=`, anyone who can reach the page can call
+that handler, so check inside it. `component_guard` takes only `True`
+or `False`:
 
 ```citry
 from citry.ext.events import event
@@ -515,11 +529,11 @@ these names still receives it.
 FastAPI, Starlette, Flask, and plain ASGI or WSGI apps have no standard
 CSRF token. If your app uses one, check it with a function set as `_csrf`
 on `Events` for the whole component, or with `@event(csrf=...)` for one
-handler. A handler's `csrf=` replaces the component's `_csrf` for that
-handler, because one call carries one token. The function receives the
-request and raises `EventError` to reject the call. Like a guard, it
-must be a plain `def` function, and Citry refuses an `async def` one
-when the component class is defined:
+handler. The function receives the request and raises `EventError` to
+reject the call. A handler's `csrf=` replaces the component's `_csrf`
+for that handler; unlike guards, the two do not both run. Like a guard,
+the function must be a plain `def` function, and Citry refuses an
+`async def` one when the component class is defined:
 
 ```citry
 from citry.ext.events import EventError, event
