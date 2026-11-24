@@ -5298,6 +5298,18 @@ traversal of any object graph; extra arg keys are rejected, not absorbed.
   type, and flat `application/json` alike (so an external API client
   sends one static header); a form post without the header takes the
   compat path (6.2).
+  The `Origin` check compares the origin's host and port with the
+  request's `Host` header. Each adapter also reports the scheme the
+  request arrived over (`RouteRequest.scheme`: the ASGI scope's
+  `scheme`, WSGI's `wsgi.url_scheme`, Django's `request.scheme`); when
+  it is `https`, an `Origin` that is not `https:` is refused, so a page
+  served over plain http on the same host cannot call the app. An http
+  request does not require the schemes to match: behind a proxy that
+  ends TLS the app sees `http` while the browser sends an `https:`
+  origin. A `RouteRequest` with an empty `scheme` (a hand-built one,
+  or an adapter that does not know it) skips the scheme comparison.
+  An `Origin` that Python's `urlsplit` cannot read is refused like a
+  mismatched one.
 - **Host token by default.** Under Django the routes are plain views, so
   Django's CSRF middleware applies untouched; the client runtime
   auto-attaches the token (by default it reads Django's `csrftoken`

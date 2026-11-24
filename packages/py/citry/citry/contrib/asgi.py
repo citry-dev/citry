@@ -132,6 +132,8 @@ def _build_request(scope: Scope, method: str, full_path: str, body: bytes) -> Ro
         body=body,
         content_type=headers.get("content-type", ""),
         native=scope,
+        # The ASGI spec makes `scheme` optional with "http" as its default.
+        scheme=str(scope.get("scheme") or "http").lower(),
     )
 
 
