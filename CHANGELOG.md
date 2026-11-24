@@ -25,6 +25,11 @@
   your server reports it. The ASGI, WSGI and Django adapters fill it in.
   If you build a `RouteRequest` yourself, set it, because Events skip
   the https `Origin` check when it is empty.
+- `citry check` now knows the `switch` attribute of `<input>`. It
+  reports `switch="false"`, which still turns the switch on
+  (`rule_invalid_attribute_value`), and suggests `switch` for a typo
+  such as `swich` (`rule_misspelled_attribute`). Both rules are errors
+  by default, so a template with either now fails `citry check`.
 
 ### Changed
 
