@@ -2117,8 +2117,9 @@ Error modes:
           runs Python code, or when the cycle collector next runs. The
           caller drops a failed check's error (whose traceback reaches
           the request data) and a check's result after the check thread
-          has gone idle. So with the GIL off, an idle check thread waits
-          in 60 waits of one second (`_CHECK_THREAD_WAKE_SECONDS`), and
+          has gone idle. So with the GIL off, an idle check thread splits
+          its 60 seconds of idle time into 60 waits of one second
+          (`_CHECK_THREAD_WAKE_SECONDS`), and
           each wake frees what callers dropped since the last one. The
           idle time is counted in waits, so code that replaces
           `time.monotonic` (such as freezegun) does not change it. A kept

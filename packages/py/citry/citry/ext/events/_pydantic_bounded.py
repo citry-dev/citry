@@ -2844,10 +2844,11 @@ class _CheckThreads:
                 short_waits = _short_waits()
                 while next_job is None:
                     # Without the GIL, the idle time is split into short
-                    # waits; with it, one wait covers it. A kept thread past
-                    # its idle time also waits long, rather than wake every
-                    # second for as long as the process runs: most callers
-                    # drop a check's data within a minute.
+                    # waits; with it, one wait covers it. Once its idle time
+                    # is used up, a kept thread waits the whole idle time at
+                    # once on any build, rather than wake every second for
+                    # as long as the process runs; most callers drop a
+                    # check's data within a minute.
                     short = short_waits > 0 and _gil_is_off()
                     wait = (
                         min(_CHECK_THREAD_WAKE_SECONDS, _CHECK_THREAD_IDLE_SECONDS)
