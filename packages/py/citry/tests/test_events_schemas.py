@@ -9,6 +9,7 @@ UploadedFile type (docs/design/events.md sections 3.3 and 6.2).
 import gc
 import io
 import json
+import platform
 import subprocess
 import sys
 import textwrap
@@ -51,6 +52,8 @@ except ImportError:
     pydantic = None  # type: ignore[assignment]
 
 requires_pydantic = pytest.mark.skipif(pydantic is None, reason="pydantic is not installed")
+
+IS_PYPY = platform.python_implementation() == "PyPy"
 
 # Literal copies of the validation messages, locked independently of the
 # module's constants so a wording change shows up as a deliberate test update.
@@ -2216,6 +2219,10 @@ class TestPydanticPathText:
         Tree.model_rebuild(_types_namespace={"Tree": Tree})
         assert schemas_module._model_costs(Tree).reports_per_value >= 1
 
+    # On PyPy, pydantic-core runs through cpyext (PyPy's emulation of
+    # CPython's C interface) and keeps every Pydantic class made at run
+    # time alive. Citry cannot change that.
+    @pytest.mark.skipif(IS_PYPY, reason="PyPy's pydantic-core keeps every Pydantic class made at run time alive")
     def test_a_class_made_at_run_time_can_be_freed(self):
         made = pydantic.create_model("Made", value=(int, 0))
         schemas_module._model_costs(made)

@@ -24,6 +24,7 @@ import gc
 import ipaddress  # noqa: TC003 - Pydantic reads the test classes' annotations at run time
 import json
 import logging
+import platform
 import random
 import re
 import subprocess
@@ -46,6 +47,7 @@ from typing_extensions import TypeAliasType, TypedDict
 
 from citry import Citry, Component
 from citry.ext.events import _pydantic_bounded as bounded
+from citry.ext.events import state as state_module
 from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
 from citry.ext.events.errors import MAX_FIELD_ERRORS_TEXT, FieldErrors
 from citry.ext.events.schemas import validate_args
@@ -59,6 +61,10 @@ from citry.ext.events.tokens import (
 )
 
 from ._memory import requires_tracemalloc, tracemalloc
+
+IS_PYPY = platform.python_implementation() == "PyPy"
+# The reason shared by the subprocess tests that skip on PyPy.
+PYPY_CRASHES_IN_SUBPROCESS = "PyPy's C-API layer crashes in this subprocess; see #708"
 
 SIGNING_KEY = "test-secret-key"
 
@@ -349,6 +355,7 @@ print(json.dumps(built))
 """
 
 
+@pytest.mark.skipif(IS_PYPY, reason=PYPY_CRASHES_IN_SUBPROCESS)
 def test_the_copy_of_a_chain_of_nested_models_is_built_on_a_thread_with_a_small_stack() -> None:
     # The first call to a class builds Citry's copy of its validator, and
     # the thread that serves the request can have a small stack (1 MB on
@@ -827,6 +834,9 @@ def test_a_check_thread_lets_go_of_the_request_data_once_the_check_returns() -> 
     assert pool.count == 1
 
 
+@pytest.mark.skipif(
+    IS_PYPY, reason="PyPy has no reference counting, so it frees an object only when its garbage collector runs"
+)
 def test_a_check_that_raises_lets_go_of_the_request_data_without_the_cycle_collector(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -4038,6 +4048,7 @@ print(json.dumps(answers))
 """
 
 
+@pytest.mark.skipif(IS_PYPY, reason=PYPY_CRASHES_IN_SUBPROCESS)
 def test_deep_data_checked_from_a_thread_with_a_small_stack_is_refused() -> None:
     # A server thread can have as little as 128 KiB of stack (the size
     # musl gives a thread that nobody sized; a Python thread in the
@@ -4196,12 +4207,8 @@ def test_the_lone_surrogate_scan_ends_on_a_value_that_holds_itself() -> None:
     assert _holds_lone_surrogate(["\ud800", holder]) is True
 
 
-def test_a_signed_pydantic_v1_state_too_deep_to_restore_answers_stale_state() -> None:
-    # A token Citry signed can hold a v1 State that Python cannot read back
-    # at the recursion limit of the request, as when the limit was raised
-    # while minting. The call answers stale_state, as for any State that no
-    # longer fits, rather than as an unexpected error.
-    board, node = _deep_v1_board()
+def _state_reader(board: type) -> type[Component]:
+    """Return a component whose State is ``board`` and whose ``read`` handler does nothing."""
     app = _citry()
 
     class Deep(Component):
@@ -4215,16 +4222,53 @@ def test_a_signed_pydantic_v1_state_too_deep_to_restore_answers_stale_state() ->
             def read(self, state: Any) -> None:
                 pass
 
+    return Deep
+
+
+@pytest.mark.skipif(
+    IS_PYPY,
+    reason="PyPy may or may not run out of frames on a deep State, depending on how warm its JIT is",
+)
+def test_a_signed_pydantic_v1_state_too_deep_to_restore_answers_stale_state() -> None:
+    # A token Citry signed can hold a v1 State that Python cannot read back
+    # at the recursion limit of the request, as when the limit was raised
+    # while minting. The call answers stale_state, as for any State that no
+    # longer fits, rather than as an unexpected error. The next test checks
+    # the same answer where this one cannot count on running out of frames.
+    board, node = _deep_v1_board()
+    deep = _state_reader(board)
+
     limit = sys.getrecursionlimit()
     sys.setrecursionlimit(20_000)
     try:
         token = mint_state_token(
-            board(tree=_v1_chain(node, 150)), class_id=Deep.class_id, secret=SIGNING_KEY, max_age=None, max_bytes=10**6
+            board(tree=_v1_chain(node, 150)), class_id=deep.class_id, secret=SIGNING_KEY, max_age=None, max_bytes=10**6
         )
     finally:
         sys.setrecursionlimit(limit)
 
-    item = _dispatch(Deep, stateToken=token, sendSequence=1, callerRenderId="r0")
+    item = _dispatch(deep, stateToken=token, sendSequence=1, callerRenderId="r0")
+
+    assert item["ok"] is False
+    assert (item["error"]["status"], item["error"]["code"]) == (409, "stale_state")
+
+
+def test_a_restore_that_runs_out_of_python_frames_answers_stale_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Where a restore runs out of frames depends on the interpreter, and on
+    # PyPy on how warm its JIT is, so the test above cannot run on PyPy.
+    # Here the restore raises RecursionError itself, as it does when Python
+    # runs out of frames, so the answer is checked on every interpreter.
+    def out_of_frames(*args: Any, **kwargs: Any) -> None:
+        raise RecursionError
+
+    board, node = _deep_v1_board()
+    deep = _state_reader(board)
+    token = mint_state_token(
+        board(tree=_v1_chain(node, 3)), class_id=deep.class_id, secret=SIGNING_KEY, max_age=None, max_bytes=10**6
+    )
+    monkeypatch.setattr(state_module, "_restore_or_reuse_state", out_of_frames)
+
+    item = _dispatch(deep, stateToken=token, sendSequence=1, callerRenderId="r0")
 
     assert item["ok"] is False
     assert (item["error"]["status"], item["error"]["code"]) == (409, "stale_state")
