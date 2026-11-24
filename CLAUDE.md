@@ -397,6 +397,16 @@ brief use that list:
   it, through `tr()`, `<c-trans>` and the browser i18n runtime.
 - **Markers for Citry's browser code.** Render ids, root markers and
   hydration markers. Data must not be able to write one.
+- **Event names in `Dispatch` actions.** An Events `Dispatch` action
+  fires a bubbling `CustomEvent` on the calling component's first
+  element, so every listener for that name runs on the element, its
+  ancestors, `document` and `window`, including Vue `@click` handlers
+  and `@c-*` bindings that call the server. A name such as `click`, or
+  one starting with `citry:`, `vue:` or `vnode-`, would run listeners
+  the app never meant to call, so `Dispatch` refuses those names in any
+  ASCII letter case, and the browser refuses them again before it fires
+  the event. The name must come from app code, never from request data,
+  because a custom name still picks which of the app's listeners run.
 - **Addresses and keys the browser code takes from the server.** Fragment
   and definition scripts, Events request URLs, and State and locale
   names, which the browser code must look up so that a name such as
