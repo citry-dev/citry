@@ -269,20 +269,17 @@ return actions.Dispatch("TaskRow:saved", {"title": title})
 ```
 
 Start the name with your component's name, as in `TaskRow:saved`.
-`actions.Dispatch` raises `ValueError` for a name that the page, Vue, or
-Citry already listens for:
+`actions.Dispatch` raises `ValueError` for two kinds of name, in any
+letter case:
 
-- The name of a standard DOM event, such as `click`, `submit`, `input`,
-  `change`, `keydown`, or `focus`, in any letter case. The event would
-  run the page's own listeners for it, including
+- The name of a standard DOM event, such as `click`, `submit`,
+  `input`, `keydown`, `load`, or `message`. This includes common words
+  such as `close`, `toggle`, `error`, `select`, and `progress`. The
+  event would run the page's own listeners for it, including
   [`@c-*` bindings](/events/bindings/) that call the server.
-- A name that starts with `citry:`, which Citry uses for its own events,
-  or with `vue:` or `vnode-`, which Vue uses for its lifecycle hooks.
-
-Citry's browser code refuses the same names before it fires the event,
-so an action list that reaches the page another way, such as through
-[`Citry.events.applyActions`](/reference/browser-apis/#citry-events-apply-actions), fails the same
-way.
+- A name that starts with `citry:`, which Citry uses for its own
+  events, or with `vue:` or `vnode-`, which Vue keeps for its element
+  lifecycle hooks.
 
 The event starts at the first element of the component whose handler ran and
 bubbles up to `document`. It fires once, even when the component has several
@@ -309,9 +306,16 @@ script, listen on an ancestor element, on `document`, or with
 !!! warning "Choose the event name yourself"
 
     Never build the name from request data (a query parameter, form
-    field, or header). Citry refuses the standard event names, but
-    the page may also listen for your own names, and a name taken
-    from a request would pick which of those listeners run.
+    field, or header). Citry refuses only standard DOM event names and
+    the prefixes above.
+    Your page code may listen for other names, such as
+    `TaskRow:saved`, and a name taken from a request would choose
+    which of those listeners run.
+
+If you pass actions to
+[`Citry.events.applyActions`](/reference/browser-apis/#citry-events-apply-actions)
+yourself, Citry's browser code refuses the same names: the event does
+not fire, and the returned Promise rejects.
 
 ## `Data` for JavaScript { #send-data-to-javascript }
 

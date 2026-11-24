@@ -228,15 +228,14 @@ SUPPLEMENTAL_EVENT_NAMES = (
     # target changes.
     "scrollsnapchange",
     "scrollsnapchanging",
-    # The names below are fired at the Document or the Window, never at an
-    # element, so a template listener rarely names them. They are listed
-    # because `actions.Dispatch` refuses every name here: its event bubbles
-    # up to `document` and `window`, where a page's own listeners for these
-    # names wait.
-    # HTML Standard, "The end" (13.2.7) fires DOMContentLoaded at the
-    # Document, and "Current document readiness" (3.1.4) fires
-    # readystatechange there. The table holds lowercase names, and
-    # `actions.Dispatch` compares names in lowercase.
+    # The names below are listed because `actions.Dispatch` and the browser
+    # runtime refuse every name in this table: a dispatched event bubbles up
+    # to `document` and `window`, so a page's own listeners for any event the
+    # browser fires, there or on an element, would run. The table holds
+    # lowercase names, and both checks compare names in lowercase, so a
+    # mixed-case name such as DOMContentLoaded is listed as domcontentloaded.
+    # HTML Standard, "The end" fires DOMContentLoaded at the Document, and
+    # "Current document readiness" fires readystatechange there.
     "domcontentloaded",
     "readystatechange",
     # Pointer Lock 2.0, the `onpointerlockchange` and `onpointerlockerror`
@@ -249,11 +248,53 @@ SUPPLEMENTAL_EVENT_NAMES = (
     "deviceorientationabsolute",
     # Compatibility Standard, the `onorientationchange` handler on Window.
     "orientationchange",
-    # Web App Manifest, the `onappinstalled` handler on Window, and the
-    # `beforeinstallprompt` event Chromium fires at the Window before it
-    # offers to install the app (WICG Manifest Incubations).
+    # WICG Manifest Incubations, the `onappinstalled` and
+    # `onbeforeinstallprompt` handlers Chromium has on Window.
     "appinstalled",
     "beforeinstallprompt",
+    # Gamepad, the handlers it adds to WindowEventHandlers.
+    "gamepadconnected",
+    "gamepaddisconnected",
+    # Picture-in-Picture, fired at the <video>.
+    "enterpictureinpicture",
+    "leavepictureinpicture",
+    # Encrypted Media Extensions, fired at a media element.
+    "waitingforkey",
+    # Page Lifecycle (Chromium), fired at the Document, and Prerendering
+    # Revamped, fired at the Document when a prerendered page is shown.
+    "freeze",
+    "resume",
+    "prerenderingchange",
+    # WebXR DOM Overlays, fired at an element in the overlay.
+    "beforexrselect",
+    # Names browsers still fire, or pages still listen for, without a current
+    # standard: the prefixed animation, transition and fullscreen events, the
+    # `search` event of `<input type=search>`, the clipboard `before*` events,
+    # the old wheel events, and the DOM Level 3 mutation and focus events.
+    "beforecopy",
+    "beforecut",
+    "beforepaste",
+    "domactivate",
+    "domattrmodified",
+    "domcharacterdatamodified",
+    "domfocusin",
+    "domfocusout",
+    "dommousescroll",
+    "domnodeinserted",
+    "domnodeinsertedintodocument",
+    "domnoderemoved",
+    "domnoderemovedfromdocument",
+    "domsubtreemodified",
+    "mousewheel",
+    "mozfullscreenchange",
+    "mozfullscreenerror",
+    "search",
+    "webkitanimationend",
+    "webkitanimationiteration",
+    "webkitanimationstart",
+    "webkitfullscreenchange",
+    "webkitfullscreenerror",
+    "webkittransitionend",
 )
 
 # Names each table must hold. A guard that only rejects an empty table misses
@@ -266,7 +307,19 @@ REQUIRED_NAMES: dict[str, tuple[str, ...]] = {
     "ARIA_ATTRIBUTES": ("aria-braillelabel", "aria-expanded", "aria-grabbed", "aria-hidden", "aria-label"),
     "SVG_ELEMENTS": ("altGlyph", "foreignObject", "path", "svg"),
     "OBSOLETE_ELEMENTS": ("applet", "frame", "marquee"),
-    "DOM_EVENT_NAMES": ("afterprint", "click", "compositionstart", "pointerdown"),
+    # `actions.Dispatch` refuses every name here, so a source that loses a
+    # common one would silently start letting it through.
+    "DOM_EVENT_NAMES": (
+        "afterprint",
+        "change",
+        "click",
+        "compositionstart",
+        "input",
+        "keydown",
+        "message",
+        "pointerdown",
+        "submit",
+    ),
 }
 
 # SVG names may use camelCase, such as `clipPath`, and hyphens, such as
@@ -734,7 +787,8 @@ def render(pages: Mapping[str, str], vue_types: str, *, retrieved: str, vue_sour
         f"SVG_ELEMENTS: Final[frozenset[str]] = frozenset({pformat(svg, width=110, compact=True)})\n\n"
         "# Elements the HTML Standard tells authors not to use (16.2 Non-conforming features).\n"
         f"OBSOLETE_ELEMENTS: Final[frozenset[str]] = frozenset({pformat(obsolete, width=110, compact=True)})\n\n"
-        "# Lowercase DOM event names a listener such as @click may name, without the on prefix.\n"
+        "# Lowercase DOM event names, without the on prefix: the ones a listener such as @click may\n"
+        "# name, and the ones the browser fires at document or window, which Dispatch refuses too.\n"
         f"DOM_EVENT_NAMES: Final[frozenset[str]] = frozenset({pformat(events, width=110, compact=True)})\n"
     )
 

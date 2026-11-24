@@ -16,21 +16,25 @@
 
 ### Changed
 
-- Security: `actions.Dispatch` now raises `ValueError` for the name of a
-  standard DOM event, such as `click`, `submit`, `input`, `change`,
-  `keydown` or `focus`, in any letter case, and for a name that starts
-  with `vue:` or `vnode-`. The bubbling event would run the page's own
-  listeners for that event, including `@c-*` bindings that call the
-  server. Citry's browser code refuses the same names, so
-  `Citry.events.applyActions` rejects them too. If you dispatch such a
-  name, prefix it with your component's name:
+- Security: `actions.Dispatch` now raises `ValueError` for the name of
+  a standard DOM event, such as `click`, `submit`, `input`, `change`,
+  `keydown` or `focus`, because the event would run the page's own
+  listeners for it, including `@c-*` bindings that call the server.
+  This includes common words that are also browser events, such as
+  `close`, `toggle`, `error`, `load`, `message`, `select` and
+  `progress`. It also refuses names that start with `vue:` or `vnode-`,
+  and it now refuses `citry:` names in any letter case. Letter case is
+  ignored in every check. Citry's browser code refuses the same names,
+  so `Citry.events.applyActions` rejects them too. If you dispatch such
+  a name, prefix it with your component's name and listen for the new
+  name:
 
-  ```python
-  actions.Dispatch("click")          # now raises ValueError
-  actions.Dispatch("TaskRow:click")  # works
-  ```
+    ```python
+    actions.Dispatch("click")          # now raises ValueError
+    actions.Dispatch("TaskRow:click")  # works
+    ```
 
-  See [`Dispatch` browser events](https://citry.dev/events/actions/#notify-browser-code-that-something-happened).
+    See [`Dispatch` browser events](https://citry.dev/events/actions/#notify-browser-code-that-something-happened).
 
 ## v1.2.0
 

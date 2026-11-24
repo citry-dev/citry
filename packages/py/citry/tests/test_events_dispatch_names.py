@@ -43,13 +43,13 @@ if TYPE_CHECKING:
     ],
 )
 def test_dispatch_refuses_a_standard_dom_event_name(name: str) -> None:
-    with pytest.raises(ValueError, match="is the name of a standard DOM event"):
+    with pytest.raises(ValueError, match="is a standard DOM event name"):
         actions.Dispatch(name)
 
 
 @pytest.mark.parametrize("name", ["Click", "SUBMIT", "keyDown", "DOMContentLoaded"])
 def test_dispatch_refuses_a_standard_name_in_any_ascii_letter_case(name: str) -> None:
-    with pytest.raises(ValueError, match="is the name of a standard DOM event"):
+    with pytest.raises(ValueError, match="is a standard DOM event name"):
         actions.Dispatch(name)
 
 
@@ -90,7 +90,7 @@ def test_dispatch_accepts_a_custom_name(name: str) -> None:
 
 
 def test_the_refusal_message_names_the_fix() -> None:
-    with pytest.raises(ValueError, match=r"'click' is the name of a standard DOM event.*'MyCard:submit'"):
+    with pytest.raises(ValueError, match=r"'click' is a standard DOM event name.*'MyCard:submit'"):
         actions.Dispatch("click")
 
 

@@ -275,22 +275,24 @@ class Dispatch(Action):
     ``document``, and no ``$onEvent`` listener is called.
 
     Prefix the name with the component name, such as ``"MyCard:submit"``,
-    so events from different components do not collide. These names raise
-    ``ValueError``, in any letter case:
+    so events from different components do not collide.
+
+    ``ValueError`` is raised for two kinds of name, whatever their letter
+    case:
 
     - The name of a standard DOM event, such as ``click``, ``submit``,
-      ``input`` or ``keydown``. The bubbling event would run the page's own
-      listeners for it, including Vue ``@click`` handlers and ``@c-*``
-      bindings that call the server.
+      ``input``, ``keydown``, ``load`` or ``message``. The event would run
+      the page's own listeners for it, including Vue ``@click`` handlers
+      and ``@c-*`` bindings that call the server.
     - A name starting with ``citry:``, which Citry keeps for its own
-      events, or with ``vue:`` or ``vnode-``, which Vue uses for its
-      lifecycle hooks.
+      events, or with ``vue:`` or ``vnode-``, which Vue keeps for its
+      element lifecycle hooks.
 
-    The browser runtime refuses the same names before it fires the event.
+    Citry's browser code refuses the same names before it fires the event.
 
-    Choose the name in your own code, never from request data. A name the
-    page also listens for runs those listeners, so request data must not
-    pick which one is sent.
+    Choose the name in your own code, never from request data. Page code
+    may listen for any name you dispatch, so a name taken from request
+    data would let that data choose which listeners run.
 
     Attributes:
         name: The event name, dispatched verbatim.
@@ -300,9 +302,9 @@ class Dispatch(Action):
         wait: Whether later actions hold until this one has applied.
 
     Raises:
-        ValueError: If ``name`` is empty, is the name of a standard DOM
-            event, or starts with ``citry:``, ``vue:`` or ``vnode-``, or a
-            timing value is invalid.
+        ValueError: If ``name`` is empty, is a standard DOM event name, or
+            starts with ``citry:``, ``vue:`` or ``vnode-`` (letter case
+            ignored), or if a timing value is invalid.
 
     """
 
@@ -329,9 +331,9 @@ class Dispatch(Action):
 # `_vue/client.js` (`reservedEventPrefixes`); a test checks the two match.
 RESERVED_EVENT_PREFIXES = ("citry:", "vue:", "vnode-")
 
-# Lowercases A-Z only. Browsers match event names by exact code units, so
-# only ASCII case is folded: a name with a Unicode lookalike letter never
-# reaches a standard listener and needs no refusal. Python's `str.lower` and
+# Lowercases A-Z only. Browsers compare event names character for
+# character, so only ASCII case is folded: a name with a Unicode lookalike
+# letter never reaches a standard listener and needs no refusal. Python's `str.lower` and
 # JavaScript's `toLowerCase` also disagree on a few non-ASCII letters, which
 # would let the server and the browser copy of this check drift apart.
 _ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
@@ -343,19 +345,23 @@ def reserved_event_name_reason(name: str) -> str | None:
 
     A dispatched event bubbles from the component's first element to
     ``document`` and ``window``, so a standard DOM event name would run the
-    page's own listeners for that event. The comparison ignores ASCII letter
-    case. A browser matches ``Click`` only to a ``Click`` listener, but HTML
-    reads ``onClick`` as ``onclick``, Vue reads ``@Click`` as ``click``, and
-    no app needs a custom event that differs from a standard one only in
-    case, so refusing every case keeps the rule simple to state and check.
+    page's own listeners for that event. The comparison ignores ASCII
+    letter case. A browser matches ``Click`` only to a ``Click`` listener.
+    But HTML reads an ``onClick`` attribute as ``onclick``, and Vue reads
+    ``@Click`` on a component tag as a ``click`` listener. No app needs a
+    custom event that differs from a standard one only in case, so refusing
+    every case keeps the rule simple to state and to check.
     """
     folded = name.translate(_ASCII_LOWER)
     if folded in DOM_EVENT_NAMES:
-        return "is the name of a standard DOM event, which would run the page's own listeners for it"
+        return (
+            "is a standard DOM event name (letter case is ignored), and the event would run the"
+            " page's own listeners for it"
+        )
     for prefix in RESERVED_EVENT_PREFIXES:
         if folded.startswith(prefix):
-            owner = "Citry's own events" if prefix == "citry:" else "Vue's lifecycle hooks"
-            return f"starts with {prefix!r}, which is reserved for {owner}"
+            owner = "Citry's own events" if prefix == "citry:" else "Vue's element lifecycle hooks"
+            return f"starts with {prefix!r} (letter case is ignored), which is reserved for {owner}"
     return None
 
 
