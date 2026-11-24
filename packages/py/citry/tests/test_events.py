@@ -1584,7 +1584,7 @@ class TestStackedEventDecorator:
     """
 
     def test_a_second_event_call_is_refused(self):
-        with pytest.raises(ValueError, match=r"Merge the settings into one @event\(\.\.\.\)") as err:
+        with pytest.raises(ValueError, match=r"Put every setting in one @event\(\.\.\.\)") as err:
 
             class Events:
                 @event(debounce=300)
@@ -1702,6 +1702,66 @@ class TestStackedEventDecorator:
         assert base_handler.guard is _owner_only
         assert child_handler.guard is _allow
         assert child_handler.debounce == 300
+
+    @staticmethod
+    def _keeps_only_wrapped(func):
+        # Keeps __wrapped__ but not the inner function's attributes.
+        def wrapper(self):
+            return func(self)
+
+        return functools.update_wrapper(wrapper, func, updated=())
+
+    def test_a_wrapper_that_hides_an_inner_event_guard_is_refused(self):
+        app = _Citry()
+        hide = self._keeps_only_wrapped
+        with pytest.raises(ValueError, match="wraps a function that has @event settings"):
+
+            class Comp(Component):
+                citry = app
+
+                class Events:
+                    @hide
+                    @event(guard=_owner_only)
+                    def save(self):
+                        return None
+
+    def test_a_view_events_verb_that_hides_an_inner_event_guard_is_refused(self):
+        app = _Citry()
+        hide = self._keeps_only_wrapped
+        with pytest.raises(ValueError, match="wraps a function that has @event settings"):
+
+            class Page(Component):
+                citry = app
+                template = """
+                    <div>p</div>
+                """
+
+                class Events(ViewEvents):
+                    @hide
+                    @event(guard=_owner_only)
+                    def post(self):
+                        return None
+
+    def test_a_wraps_decorator_over_an_event_guard_keeps_it(self):
+        def logged(func):
+            @functools.wraps(func)
+            def wrapper(self):
+                return func(self)
+
+            return wrapper
+
+        app = _Citry()
+
+        class Comp(Component):
+            citry = app
+
+            class Events:
+                @logged
+                @event(guard=_owner_only)
+                def save(self):
+                    return None
+
+        assert _events_ext(app).resolve(Comp).handlers["save"].guard is _owner_only
 
     def test_a_view_events_verb_with_one_event_call_is_accepted(self):
         # ViewEvents fills the verb's method into the stored settings itself;

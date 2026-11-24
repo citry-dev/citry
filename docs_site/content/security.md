@@ -199,8 +199,10 @@ citry = Citry(
 
 It runs wherever a component's `Events` class does not define `_guard`.
 A component that defines its own `_guard`, even `_guard = None`,
-replaces the app-wide one, so call `require_login(self)` from the
-component's `_guard` when both must run.
+replaces the app-wide one, so return `require_login(self)` from the
+component's `_guard` when both must run. Return its result rather than
+only calling it: a guard that refuses by returning `False` refuses
+nothing when its caller drops that value.
 
 Some handlers must accept callers the rest of the component refuses,
 such as a public `ping` on a component that needs a login. The
@@ -213,7 +215,7 @@ class Dashboard(Component):
         def _guard(self):
             if self.event.name == "ping":  # public
                 return
-            require_login(self)
+            return require_login(self)
 
         def ping(self):
             return {"ok": True}
@@ -255,9 +257,10 @@ a check of its own, as in
 `@event(component_guard=False, guard=rate_limit)`.
 
 Put every setting for a handler in one `@event(...)`. Citry raises an
-error when a second `@event(...)` decorates the same handler, because
+error when a second `@event(...)` decorates the same function, because
 the second one would replace the first one's settings, its `guard=`
-among them.
+among them. It also raises one when a decorator above `@event(...)`
+hides its settings; write such a decorator with `functools.wraps`.
 
 Write guards and `_context` as plain `def` functions, not `async def`.
 Citry calls them without awaiting them, on WSGI and ASGI servers alike,

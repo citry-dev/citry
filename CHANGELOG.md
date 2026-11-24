@@ -24,10 +24,13 @@
   `@event(component_guard=False)` on the handler, which skips the
   component's or app-wide `_guard` for that handler only. See
   [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
-- Security: stacking two `@event(...)` decorators on one handler now
-  raises an error when the class is defined. The outer one used to
-  replace the inner one's settings, so an inner `guard=` never ran.
-  Merge the settings into one `@event(...)`. See
+- Security: applying `@event(...)` to a function that already has
+  `@event` settings (two stacked decorators, or one function decorated
+  again for another class) now raises an error, and so does a decorator
+  above `@event(...)` that keeps `__wrapped__` but drops the settings.
+  Code that did this loaded in 1.2.0, but the outer settings replaced
+  the inner ones, so an inner `guard=` never ran. Put every setting in
+  one `@event(...)`, and write decorators with `functools.wraps`. See
   [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
 - Security: an event guard that returns `False` now refuses the call
   with a 403, as if it had raised `EventError`. Before, a guard written

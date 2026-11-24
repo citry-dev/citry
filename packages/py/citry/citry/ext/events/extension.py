@@ -40,6 +40,7 @@ from citry.ext.events.handlers import (
     defers_its_body,
     event_options,
     is_def_like,
+    refuse_hidden_event_settings,
     resolve_data_schema,
     user_level_classes,
     validate_callable_value,
@@ -789,6 +790,10 @@ class EventsExtension(Extension):
                     nested = () if bounded.SUPPORTED else nested_pydantic_classes(data_schema)
                     bounded.check_supported(comp_name, data_schema, "event data class", nested)
                     bounded.check_data_class(comp_name, data_schema)
+                # A decorator that kept __wrapped__ but not the function's
+                # attributes hides an inner @event's settings; refuse it so
+                # an inner guard= is never dropped without an error.
+                refuse_hidden_event_settings(comp_name, method_name, func)
                 options = event_options(func)
                 wire_name = options.name if options is not None and options.name is not None else method_name
                 if wire_name in handlers:

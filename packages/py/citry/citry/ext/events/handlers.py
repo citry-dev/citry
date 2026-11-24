@@ -20,7 +20,7 @@ import re
 import sys
 import textwrap
 from collections.abc import Callable, Coroutine
-from dataclasses import dataclass, is_dataclass
+from dataclasses import dataclass, is_dataclass, replace
 from types import FunctionType
 from typing import Any, TypeVar, get_type_hints, overload
 
@@ -171,12 +171,54 @@ def refuse_stacked_event(handler: Any, handler_name: str) -> None:
             return
         if event_options(func) is not None:
             msg = (
-                f"@event(...) on handler {handler_name!r}: the handler already has @event settings,"
-                " and a second @event(...) would replace them, so the first one's guard= and other"
-                " settings would stop applying. Merge the settings into one @event(...)."
+                f"@event(...) on handler {handler_name!r}: the function already has @event settings,"
+                " from another @event(...) on it or from decorating the same function for another"
+                " class. A second @event(...) would replace them, so the first one's guard= and"
+                " other settings would stop applying. Put every setting in one @event(...), or give"
+                " each class its own function."
             )
             raise ValueError(msg)
         func = getattr(func, "__wrapped__", None)
+
+
+def refuse_hidden_event_settings(comp_name: str, method_name: str, func: Any) -> None:
+    """
+    Raise ``ValueError`` when a handler wraps a function whose ``@event`` settings it lost.
+
+    ``@event(...)`` under a decorator that keeps ``__wrapped__`` but does
+    not copy the function's attributes leaves its settings on the inner
+    function, where Citry never reads them, so an inner ``guard=`` would
+    not run. ``functools.wraps`` copies them, so its wrappers pass. The
+    ``methods`` value is left out of the comparison because ``ViewEvents``
+    fills it in on the outer function only.
+
+    Args:
+        comp_name: The component's name, as the error message shows it.
+        method_name: The handler's method name on the ``Events`` class.
+        func: The handler function Citry collected.
+
+    Raises:
+        ValueError: When a function down the ``__wrapped__`` chain has
+            ``@event`` settings that the handler itself does not carry.
+
+    """
+    outer = event_options(func)
+    outer_without_methods = replace(outer, methods=None) if outer is not None else None
+    inner_func = getattr(func, "__wrapped__", None)
+    # The bound only stops a ``__wrapped__`` that points back at itself.
+    for _ in range(32):
+        if inner_func is None:
+            return
+        inner = event_options(inner_func)
+        if inner is not None and replace(inner, methods=None) != outer_without_methods:
+            msg = (
+                f"Component {comp_name}: event handler {method_name!r} wraps a function that has"
+                " @event settings, but the wrapper does not carry them, so they would not apply"
+                " (a guard= among them). Put @event(...) above the decorator, or write the"
+                " decorator with functools.wraps so it copies the settings."
+            )
+            raise ValueError(msg)
+        inner_func = getattr(inner_func, "__wrapped__", None)
 
 
 def is_def_like(value: Any) -> bool:
