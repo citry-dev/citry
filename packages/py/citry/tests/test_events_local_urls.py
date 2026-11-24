@@ -4,8 +4,9 @@ Tests for ``is_local_url`` and ``local_url_or``, the redirect URL checks in ``ci
 Each case says whether the check accepts the URL and whether Django's
 ``url_has_allowed_host_and_scheme`` gives the same answer. Where the two
 differ on purpose, the case says why. The browser-reading cases (``\`` read
-as ``/``, extra slashes before a host) were checked against the WHATWG URL
-parser when this module was written; see the pull request for #568.
+as ``/``, extra slashes before a host) were checked in Chromium, Firefox and
+WebKit with ``new URL()`` and real 303 navigations when this module was
+written.
 """
 
 from __future__ import annotations
@@ -109,6 +110,8 @@ CASES: list[tuple[str, bool, bool]] = [
     ("java\tscript:alert(1)", False, True),
     ("/orders/\t7", False, False),  # Django drops the tab and accepts
     ("/orders/7\n", False, False),  # Django strips the newline and accepts
+    ("/a\x85b", False, False),  # a C1 control; Django accepts
+    ("?\x9f", False, False),
     # Invisible characters at the start.
     ("\u200b//other.example", False, True),
     ("\u0085//other.example", False, True),

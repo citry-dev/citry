@@ -228,11 +228,13 @@ class Events:
         return actions.Redirect(local_url_or(data.next, "/"))
 ```
 
-By default only a relative URL such as `/orders/7` or `?page=2` passes.
-To also accept a full URL on your own site, list your host names, with
-the port when it is not the default one. On a site served over HTTPS,
-also pass `require_https=True`, so the redirect cannot drop to plain
-HTTP:
+By default only a URL with no host name passes, such as `/orders/7` or
+`?page=2`. To also accept a full URL on your own site, pass your host
+names as `allowed_hosts`. Write a port as part of the name, such as
+`"shop.example:8000"`; a URL must spell the host the same way. If your
+site is served over HTTPS, also pass `require_https=True`. It refuses
+`http:` URLs and URLs that start with `//`, so a redirect cannot drop to
+plain HTTP:
 
 ```python
 target = local_url_or(
@@ -243,19 +245,35 @@ target = local_url_or(
 )
 ```
 
-The check refuses `//other.example/` and `/\other.example/`, any scheme
-other than `http:` and `https:` (such as `javascript:`), a URL with a
-user name before `@`, and a URL with a control character such as a tab.
-The fallback must pass the same check, or the call raises `ValueError`,
-so a mistyped fallback shows up in your first test. When you need a
-yes-or-no answer instead, for example to show an error, call
-[`is_local_url()`][citry.ext.events.is_local_url] with the same
-arguments.
+List your host names in code rather than reading them from the
+request's `Host` header, which the client sends and can set to
+anything.
 
-`local_url_or()` follows the rules of Django's
-`url_has_allowed_host_and_scheme`, with a few stricter ones. For
-example, Django's function accepts a URL with a tab or a newline in it,
-which `actions.Redirect` then refuses with `ValueError`.
+The check returns the fallback for:
+
+- a host that is not in `allowed_hosts`, including `//other.example/`
+  and `/\other.example/`;
+- any scheme other than `http:` and `https:`, such as `javascript:`;
+- a user name before `@`, such as `https://me@shop.example/`;
+- a control character anywhere, such as a tab or a newline.
+
+The fallback goes through the same check, with the same
+`allowed_hosts` and `require_https`. A fallback that fails it, such as
+`"https://shop.example/"` with no `allowed_hosts`, raises `ValueError` on
+every call, so a mistyped fallback fails the first time the handler
+runs.
+
+When you need `True` or `False` instead, for example to show an error,
+call [`is_local_url(data.next)`][citry.ext.events.is_local_url]. It
+takes the same `allowed_hosts` and `require_https`, and has no
+fallback.
+
+You do not need Django for this. The rules follow Django's
+`url_has_allowed_host_and_scheme`. The main differences: host names
+match regardless of ASCII letter case, and a URL with a control
+character, or with whitespace other than a space at either end, is
+refused. Django accepts a URL with a tab or a newline, which
+`actions.Redirect` then refuses with `ValueError`.
 
 ## Check URL attributes { #check-url-attributes }
 

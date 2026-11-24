@@ -1,5 +1,5 @@
 r"""
-Check that a URL taken from the request leads back to this site before a handler redirects to it.
+Check that a URL from the request stays on this site before a handler redirects to it.
 
 A login handler often sends the visitor on to a ``next`` URL that arrived
 with the request. Anyone can write that URL, so without a check a link to
@@ -11,7 +11,7 @@ The check reads the URL the way a browser does, not the way
 ``urllib.parse`` does: a browser reads ``\`` like ``/`` and loads
 ``//other.example`` from another site, so a prefix check such as
 ``url.startswith("/")`` lets both through. The rules follow Django's
-``url_has_allowed_host_and_scheme``.
+``url_has_allowed_host_and_scheme``, but Django is not needed.
 """
 
 from __future__ import annotations
@@ -26,9 +26,9 @@ if TYPE_CHECKING:
 
 __all__ = ["is_local_url", "local_url_or"]
 
-# Only these A-Z letters change under the browser's host lowercasing for an
-# ASCII host. Python's str.lower() also maps non-ASCII letters, which the
-# browser's IDNA mapping does not always map the same way.
+# Lowercase A to Z only, as the browser does for an ASCII host. str.lower()
+# also changes non-ASCII letters, which the browser's IDNA mapping may map
+# differently.
 _ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 
 
@@ -59,15 +59,17 @@ def is_local_url(
     - a URL with a control character anywhere in it, including a tab or
       a newline. [`Redirect`][citry.ext.events.actions.Redirect] refuses
       these too;
-    - a URL that starts or ends with whitespace other than a space, such
-      as a no-break space, or that starts with an invisible character
-      such as a zero-width space. Leading and trailing spaces are fine;
+    - whitespace other than a space at either end, such as a no-break
+      space. Plain spaces at either end are fine;
+    - an invisible character at the start, such as a zero-width space;
     - any scheme other than ``http:`` and ``https:``, such as
       ``javascript:`` or ``data:``;
     - ``http:`` or ``https:`` without ``//`` after the colon, such as
-      ``https:next``, and a host that starts with a third slash, such
-      as ``///other.example`` or ``https:///other.example``. Browsers
-      read some of these as a host name;
+      ``https:next``: a browser on a page with the other scheme reads
+      ``next`` as a host name;
+    - a host that starts with a third slash, such as
+      ``///other.example`` or ``https:///other.example``: the browser
+      skips the extra slashes and loads ``other.example``;
     - a host with a user name or password, such as
       ``https://me@shop.example/``.
 
@@ -75,17 +77,22 @@ def is_local_url(
     Upper and lower case ASCII letters match, but nothing else is
     rewritten: a port must match (``shop.example:8000``), and a trailing
     dot or an internationalized name in another spelling does not match,
-    so list each spelling you accept. A URL that cannot be parsed, such
-    as ``http://[::1``, returns ``False`` rather than raising, so request
-    data cannot crash the handler.
+    so list each spelling you accept. Any string gives ``True`` or
+    ``False``, so request data cannot crash the handler; a malformed
+    host such as ``http://[::1`` fails because it is not in
+    ``allowed_hosts``.
 
     Args:
         url: The URL to check, usually taken from the request.
-        allowed_hosts: The hosts an absolute URL may name, with the port
-            when it is not the default one, such as
-            ``{"shop.example"}``. A single
-            string counts as one host. When it is empty, only relative
-            URLs pass.
+            ``None`` gives ``False``.
+        allowed_hosts: The hosts an absolute URL may name, such as
+            ``{"shop.example"}``. Write a port as part of the name, such
+            as ``"shop.example:8000"``. A single string counts as one
+            host. Each entry is a host exactly as a URL writes it, so
+            ``"*"``, a leading-dot wildcard such as ``".shop.example"``,
+            or an entry with a scheme never matches. When it is empty,
+            only relative URLs pass. It must be iterable; ``None``
+            raises ``TypeError``.
         require_https: Also refuse ``http:`` URLs and URLs that start
             with ``//``, even on an allowed host. Set it when your site
             is served over HTTPS, so a redirect cannot drop to plain
@@ -138,7 +145,9 @@ def local_url_or(
 
     Args:
         url: The URL to check, usually taken from the request.
+            ``None`` gets the fallback.
         fallback: The URL to return when ``url`` fails the check.
+            Defaults to ``"/"``.
         allowed_hosts: The hosts an absolute URL may name, as in
             [`is_local_url()`][citry.ext.events.is_local_url].
         require_https: Also refuse ``http:`` URLs and URLs that start
@@ -150,8 +159,10 @@ def local_url_or(
 
     Raises:
         ValueError: If ``fallback`` fails the check itself.
-        TypeError: If ``url`` or ``fallback`` is neither a string nor
-            ``None``, or an entry of ``allowed_hosts`` is not a string.
+        TypeError: If ``url`` is neither a string nor ``None``,
+            ``fallback`` is neither a string nor ``None``, or an entry
+            of ``allowed_hosts`` is not a string. A ``None`` fallback
+            raises ``ValueError``, since it fails the check.
 
     Example:
         ```python
@@ -208,10 +219,10 @@ def _is_local(url: str | None, hosts: frozenset[str], *, require_https: bool) ->
         msg = f"The URL to check must be a string or None; got {type(url).__name__}."
         raise TypeError(msg)
     # A browser drops tab, CR and LF anywhere, which can hide "//" inside a
-    # URL, and Redirect refuses every control character. Refusing them all
-    # keeps the check simple and means local_url_or never hands Redirect a
-    # URL it raises on.
-    if any(ord(char) < 0x20 or ord(char) == 0x7F for char in url):
+    # URL, and Redirect refuses every ASCII control character, so
+    # local_url_or must never return one. The C1 controls (U+0080 to
+    # U+009F) are refused too, so "a control character" means every one.
+    if any(ord(char) < 0x20 or 0x7F <= ord(char) <= 0x9F for char in url):
         return False
     # With controls refused, the browser strips only ASCII spaces from both
     # ends, so check the text it reads.

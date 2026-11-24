@@ -18,7 +18,8 @@
   `citry.ext.events`, for example
   `actions.Redirect(local_url_or(data.next, "/"))`. They read the URL
   the way a browser does, so `//other.example` and `/\other.example`
-  fail. See
+  get the fallback. Pass `allowed_hosts` to also accept a full URL on
+  your site. See
   [Check redirect URLs](https://citry.dev/security/#check-redirect-urls).
 
 ## v1.2.0
