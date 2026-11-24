@@ -2687,6 +2687,32 @@ class TestAsyncGuardsAreRefused:
         assert item["error"]["code"] == "handler_error"
         assert ran == []
 
+    @pytest.mark.parametrize("kind", ["generator", "async-generator"])
+    def test_a_guard_that_returns_a_compiled_style_generator_refuses_the_call(self, kind):
+        # Cython generators register only with collections.abc, so
+        # inspect.isgenerator and isasyncgen miss them.
+        class CompiledGenerator(collections.abc.Generator):
+            def send(self, value):
+                raise StopIteration
+
+            def throw(self, *args):
+                raise StopIteration
+
+        class CompiledAsyncGenerator(collections.abc.AsyncGenerator):
+            async def asend(self, value):
+                raise StopAsyncIteration
+
+            async def athrow(self, *args):
+                raise StopAsyncIteration
+
+        result = CompiledGenerator() if kind == "generator" else CompiledAsyncGenerator()
+        assert not inspect.isgenerator(result)
+        assert not inspect.isasyncgen(result)
+        comp, ran = self._guarded(_citry(), _guard=lambda _events: result)
+        [item] = _dispatch(comp.citry, {"componentClassId": comp.class_id, "handlerName": "go"})["results"]
+        assert item["error"]["code"] == "handler_error"
+        assert ran == []
+
     def test_a_started_generator_from_a_guard_is_refused_but_not_closed(self):
         # The app may still use a generator it already started; Citry
         # refuses the call without closing it.
