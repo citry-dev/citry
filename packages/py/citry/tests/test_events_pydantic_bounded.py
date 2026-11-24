@@ -949,17 +949,29 @@ def test_on_pypy_json_text_without_a_recursive_type_inside_is_accepted(field_typ
 
 
 @pytest.mark.usefixtures("pypy_stack_rules")
-@pytest.mark.parametrize(
-    "field_type", [pytest.param(pydantic.JsonValue, id="JsonValue"), pytest.param(PlainPair, id="list alias")]
-)
-def test_on_pypy_a_state_read_only_as_json_accepts_a_recursive_type_outside_json(field_type: Any) -> None:
-    # The PyPy rule for any recursive type is about Json[...] text; a State
-    # read only as JSON keeps refusing only a recursive class.
+def test_on_pypy_a_state_read_only_as_json_accepts_json_value() -> None:
+    # JsonValue reads JSON input as Any; only its Python part holds itself.
     state = pydantic.create_model(
-        "StrictMeta", __config__=pydantic.ConfigDict(strict=True), meta=(field_type | None, None)
+        "StrictMeta", __config__=pydantic.ConfigDict(strict=True), meta=(pydantic.JsonValue | None, None)
     )
 
     bounded.check_state_class("Probe", state, frozenset({"meta"}))
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_a_state_read_only_as_json_refuses_a_recursive_alias() -> None:
+    # Nothing counts the levels of a JSON-only read, so Pydantic's JSON
+    # parser lets a list alias nest about 200 levels, and writing the State
+    # out again calls Python at each level, which ends PyPy.
+    state = pydantic.create_model(
+        "StrictMeta", __config__=pydantic.ConfigDict(strict=True), meta=(PlainPair | None, None)
+    )
+
+    with pytest.raises(ValueError, match=r"a recursive type \(one that can hold itself\)") as raised:
+        bounded.check_state_class("Probe", state, frozenset({"meta"}))
+
+    # A lax State is counted by its Python check, so the message offers it.
+    assert "You can also remove a strict model setting, or " in str(raised.value)
 
 
 @pytest.mark.usefixtures("pypy_stack_rules")
@@ -1076,6 +1088,73 @@ def test_on_pypy_a_state_write_counts_each_python_call_toward_the_nesting_limit(
         apply_state_updates(Forest(), {"tree": payload}, model_fields=("tree",))
 
     assert caught.value.fields == {"_state": bounded.TOO_DEEP_MESSAGE}
+
+
+def _write_unchanged(value: Any, handler: Any) -> Any:
+    return handler(value)
+
+
+SerializedNest = TypeAliasType(
+    "SerializedNest", "Annotated[list[SerializedNest | None], pydantic.WrapSerializer(_write_unchanged)]"
+)
+UnserializedNest = TypeAliasType("UnserializedNest", "list[UnserializedNest | None]")
+SequenceNest = TypeAliasType("SequenceNest", "Sequence[SequenceNest | None]")
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+@pytest.mark.parametrize(
+    ("field_type", "refused"),
+    [pytest.param(SerializedNest, True, id="serializer"), pytest.param(UnserializedNest, False, id="plain list")],
+)
+def test_on_pypy_a_state_write_counts_each_serializer_function_toward_the_nesting_limit(
+    field_type: Any, *, refused: bool
+) -> None:
+    # Writing the State out calls the serializer at every level, which
+    # stays on PyPy's stack, so the read counts each level that has one; a
+    # plain list is written out without calling Python and is not counted.
+    class NestState(pydantic.BaseModel):
+        tree: field_type | None = None  # type: ignore[valid-type]
+        _model = ("tree",)
+
+    payload: Any = []
+    for _ in range(bounded.SMALL_STACK_CHECK_DEPTH + 5):
+        payload = [payload]
+
+    with bounded.request_work():
+        if not refused:
+            apply_state_updates(NestState(), {"tree": payload}, model_fields=("tree",))
+            return
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(NestState(), {"tree": payload}, model_fields=("tree",))
+
+    assert caught.value.fields == {"_state": bounded.TOO_DEEP_MESSAGE}
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_a_state_write_counts_pydantics_own_sequence_serializer_once() -> None:
+    # Pydantic's serializer for Sequence[...] sits on a node whose own wrap
+    # function is counted already, so a level counts once, not twice.
+    class SequenceState(pydantic.BaseModel):
+        tree: SequenceNest | None = None
+        _model = ("tree",)
+
+    payload: Any = []
+    for _ in range(bounded.SMALL_STACK_CHECK_DEPTH * 2 // 3):
+        payload = [payload]
+
+    with bounded.request_work():
+        apply_state_updates(SequenceState(), {"tree": payload}, model_fields=("tree",))
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_event_data_does_not_count_serializer_functions() -> None:
+    # Citry never writes event data out, so its serializers take no stack.
+    data = pydantic.create_model("Data", tree=(SerializedNest | None, None))
+    payload: Any = []
+    for _ in range(bounded.SMALL_STACK_CHECK_DEPTH + 5):
+        payload = [payload]
+
+    assert validate_args(data, {"tree": payload}).ok
 
 
 @pydantic.dataclasses.dataclass

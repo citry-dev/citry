@@ -109,7 +109,9 @@ schema as a level. Defining a component on PyPy also raises
 `ValueError` for some event data and State classes that CPython
 accepts: those with a recursive type inside `Json[...]`, such as a
 model that can hold itself (a class that Citry first meets at a call
-gets a 422 for that call instead). Both rules keep deeply nested data
+gets a 422 for that call instead), and a State checked only as JSON
+text whose writable field holds a recursive list alias or other
+recursive type. Both rules keep deeply nested data
 from ending the server process in the cases measured; see
 [Event data on PyPy](/security/#event-data-on-pypy). Citry applies
 them on every Python implementation other than CPython.

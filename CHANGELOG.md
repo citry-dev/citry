@@ -11,8 +11,10 @@ still requires citry-core 2.1.2.
   browser writes to State may nest so that PyPy's stack can hold the
   check, and data nested deeply enough to end the server process in
   earlier releases gets a 422 instead. The limit there is now 32 levels
-  (it was 64), and wrap validators, unions, `Sequence[...]` fields and
-  `OnErrorOmit` items each count as more than one level, so on PyPy
+  (it was 64), wrap validators, unions, `Sequence[...]` fields and
+  `OnErrorOmit` items each count as more than one level, and each level
+  of a recursive State field with a `WrapSerializer` or other
+  serializer function counts too, so on PyPy
   some data that earlier releases accepted gets a 422 that says it is
   nested too deeply. A schema with many validators at each level,
   especially with a free-form field deep inside it, or your own code
@@ -30,6 +32,12 @@ still requires citry-core 2.1.2.
   validator of its own, or use `Json[Any]` or `Json[JsonValue]` for
   free-form JSON. In a `data` class you can instead change `Json[Tree]`
   to `Tree`; the field then takes the value itself, not JSON text.
+- Security: on PyPy, a State that Citry checks only as JSON text, such
+  as one with `strict=True`, now raises `ValueError` when a field the
+  browser may write holds a recursive type of any kind, such as a
+  recursive list alias; earlier releases refused only a recursive
+  class there. Make the State lax, leave the field out of `_model`, or
+  give the recursive type a wrap validator of its own.
 
 CPython accepts and refuses the same data as before. Citry applies the
 PyPy rules on every Python implementation other than CPython, such as

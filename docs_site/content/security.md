@@ -784,10 +784,13 @@ because counting each class would change how the class reads JSON. So
 defining the component raises `ValueError` when a field the browser may
 write holds a recursive model, dataclass, or TypedDict (one that can
 hold itself) with no wrap validator on the way back to itself. A loop
-that passes through an `Iterable` field is still such a loop. Fix it by
+that passes through an `Iterable` field is still such a loop. On PyPy
+the same goes for a recursive type of any other kind, such as a list
+alias: Pydantic reads up to 200 levels of it there, and writing the
+State back out calls Python at each level, which ends PyPy. Fix it by
 removing what makes Citry check the State only as JSON, by leaving the
 field out of `_model`, or by adding a wrap validator to the recursive
-class.
+type.
 
 Citry stops checking a request's data once its checks have used about 1
 second of CPU time. The call then fails with a 422 that says the data
@@ -841,15 +844,19 @@ one level. A level is one model, dataclass, TypedDict, wrap validator
 or union that the data passes through. On PyPy a wrap validator counts
 three levels, so a model with one counts four, and a union counts two.
 Each `Sequence[...]` or `defaultdict` field and each `OnErrorOmit` item
-adds one more. So recursive data can nest fewer levels on PyPy than on
-CPython. Measured on PyPy 7.3.23, a tree of models was accepted up to
+adds one more, and so does each level of a recursive type that has a
+serializer function such as `WrapSerializer`, because Pydantic calls
+that function at each level when Citry writes the State back out. So
+recursive data can nest fewer levels on PyPy than on CPython. Measured on PyPy 7.3.23, a tree of models was accepted up to
 about 30 levels when each model held its children in a `list`, 15 in a
 `Sequence`, and 10 in `list[OnErrorOmit[list[OnErrorOmit[Tree]]]]`.
 
 Defining a component also raises `ValueError` on PyPy when its event
 `data` class, or a State field the browser may write, holds a recursive
 type inside `Json[...]`, as described in
-[Fix a refused schema](#schemas-citry-refuses).
+[Fix a refused schema](#schemas-citry-refuses), and when a State that
+Citry checks only as JSON text lets the browser write a recursive type
+of any kind (see [Check event data](#check-event-data)).
 
 These rules kept the ordinary schemas in our tests on PyPy 7.3.23 from
 ending the process, but two things can still use up PyPy's stack and
@@ -1056,7 +1063,8 @@ can check the write only as JSON text when the State has one of these:
 Without any of these, Citry checks the write as Python values first.
 When that check accepts the write, Citry then reads it as JSON text.
 A State checked only as JSON text cannot let the browser write a
-recursive class ([nesting limit](#check-event-data)).
+recursive class, or on PyPy a recursive type of any kind
+([nesting limit](#check-event-data)).
 
 ### Use Pydantic in events { #pydantic-classes-in-events }
 

@@ -1783,10 +1783,11 @@ class _Schema:
           since only a wrapper counts how deeply the check nests
           (``MAX_CHECK_DEPTH``). This is the rule for a model State that
           Citry reads only as JSON, where the JSON read is the only check.
-
-        - with ``class_loops`` under the PyPy rules, also any type that can
-          hold itself again inside ``Json[...]`` text
-          (``uncounted_loop_reason``).
+        - with ``class_loops`` under the PyPy rules, also any other type that
+          can hold itself without such a wrap validator, such as a list alias
+          (``uncounted_loop_reason``), inside ``Json[...]`` text and in a
+          State read only as JSON alike: Pydantic's JSON parser lets it nest
+          200 levels, and writing the State out again calls Python at each.
 
         A wrap validator lets wrappers back in below it, so the walk treats
         everything below one as counted, as the copy does.
@@ -1828,10 +1829,6 @@ class _Schema:
             if kind == "definition-ref":
                 ref = str(node.get("schema_ref", ""))
                 loop_reason = self.uncounted_loop_reason(ref) if class_loops and not reached[0] else None
-                if loop_reason == _JSON_LOOP_REASON and json_at is None:
-                    # A State read only as JSON keeps its rule for classes:
-                    # the PyPy rule for other types is about JSON text.
-                    loop_reason = None
                 if loop_reason is not None:
                     # Nothing would count the levels of this loop, so the
                     # data would choose how deep the check goes on the stack.
@@ -2364,6 +2361,11 @@ class _Rewriter:
     that parses it, even when the schema itself never checks a value twice,
     for a class that Citry's own union check may check again.
 
+    ``count_serializers=True`` builds the copy for a State, which Citry
+    writes out again with Pydantic's serializer: under the PyPy rules each
+    node with a serializer function that leads into recursion counts a
+    level, since writing the State out calls that function at every level.
+
     ``by_name=True`` builds the copy that checks browser writes to a model
     State, whose keys are field names. pydantic-core 2.46 (Pydantic 2.13.0)
     forgets the call's ``by_name`` setting below a wrap validator's handler,
@@ -2374,11 +2376,20 @@ class _Rewriter:
     reads keys as the class does.
     """
 
-    def __init__(self, schema: _Schema, *, wrapped: bool, by_name: bool = False, text_wrappers: bool = False) -> None:
+    def __init__(
+        self,
+        schema: _Schema,
+        *,
+        wrapped: bool,
+        by_name: bool = False,
+        text_wrappers: bool = False,
+        count_serializers: bool = False,
+    ) -> None:
         self.schema = schema
         self.wrapped = wrapped
         self.by_name = by_name
         self.text_wrappers = text_wrappers
+        self.count_serializers = count_serializers
         self._names: dict[tuple[str, _Context], str] = {}
 
     def label(self, choice: Any) -> str | None:
@@ -2480,6 +2491,12 @@ class _Rewriter:
     def finish(self, node: dict[str, Any], copied: dict[str, Any], context: _Context) -> Any:
         """Apply this module's change to one schema node whose children are already copied."""
         result = self._change(node, copied, context)
+        # Writing a State out calls the app's serializer function at every
+        # level of a recursive value, and on PyPy each call stays on the
+        # stack, so the read counts the level that the write-out will take.
+        counts_serializer = context[0] and self.count_serializers and STACK_SET_BY_RECURSION_LIMIT
+        if counts_serializer and _has_authors_serializer(node) and self.schema.reaches_recursion(node):
+            result = _wrap(result, _counted)
         if context[0] and (self.text_wrappers or self.schema.repeats_anywhere()):
             text_steps = self.schema.text_steps(node)
             if text_steps > TEXT_STEPS["plain"]:
@@ -2680,6 +2697,22 @@ def _is_authors_wrap(node: Any) -> bool:
     another function counts.
     """
     return _kind(node) == "function-wrap" and not _is_pydantic_own(node, follow=False)
+
+
+def _has_authors_serializer(node: Any) -> bool:
+    """
+    Whether a schema node writes its value out through an app's Python function, such as a ``WrapSerializer``.
+
+    Pydantic's own serializer functions (for ``Sequence[...]`` and
+    ``defaultdict``) sit on types whose check already runs Pydantic's own
+    wrap function, which the copy counts at the same level.
+    """
+    serialization = node.get("serialization") if type(node) is dict else None
+    if type(serialization) is not dict or serialization.get("type") not in ("function-wrap", "function-plain"):
+        return False
+    function = serialization.get("function")
+    module = getattr(getattr(function, "func", function), "__module__", "") or ""
+    return module.split(".")[0] not in _OWN_PACKAGES
 
 
 def _wrap(schema: Any, function: Callable[[Any, Any], Any]) -> dict[str, Any]:
@@ -3156,9 +3189,13 @@ def _on_a_check_thread(function: Callable[..., Any]) -> Callable[..., Any]:
     return moved
 
 
-def _build(schema: _Schema, *, wrapped: bool, by_name: bool = False, text_wrappers: bool = False) -> Any:
+def _build(
+    schema: _Schema, *, wrapped: bool, by_name: bool = False, text_wrappers: bool = False, state: bool = False
+) -> Any:
     def build() -> Any:
-        rewriter = _Rewriter(schema, wrapped=wrapped, by_name=by_name, text_wrappers=text_wrappers)
+        rewriter = _Rewriter(
+            schema, wrapped=wrapped, by_name=by_name, text_wrappers=text_wrappers, count_serializers=state
+        )
         copied = rewriter.rewrite(schema.root)
         return pydantic_core.SchemaValidator(copied, _top_config(schema.root), _use_prebuilt=False)
 
@@ -3230,12 +3267,12 @@ def checker_for(cls: type, *, state: bool = False, by_name: bool = False, repeat
     try:
         # Without wrappers nothing forgets the by-name setting, so that copy keeps its aliases.
         if repeated:
-            validator = _build(schema, wrapped=True, by_name=by_name, text_wrappers=True)
+            validator = _build(schema, wrapped=True, by_name=by_name, text_wrappers=True, state=state)
             checker = Checker(validator, wrapped=True, **common)
         elif _needs_no_wrappers(schema, common["longest_message"]):
             checker = Checker(_build(schema, wrapped=False), wrapped=False, **common)
         else:
-            checker = Checker(_build(schema, wrapped=True, by_name=by_name), wrapped=True, **common)
+            checker = Checker(_build(schema, wrapped=True, by_name=by_name, state=state), wrapped=True, **common)
     except Exception:  # noqa: BLE001 - a call must never fail because the copy could not be built
         logger.exception(
             f"Citry could not build its copy of the validator for {cls.__qualname__}. It falls back to a simpler"
@@ -4233,8 +4270,8 @@ def check_state_class(comp_name: str, cls: Any, writable: frozenset[str]) -> Non
         return
     why = schema.json_mode_differs()
     # Read only as JSON, the State gets no counting wrappers, so a recursive
-    # class there is refused; a State read as Python values is limited by its
-    # Python check before the JSON read.
+    # class there is refused (on PyPy any recursive type); a State read as
+    # Python values is limited by its Python check before the JSON read.
     found = _unbounded_field(
         schema, root, _UNWRAPPED, writable, discarded_only=why is None, class_loops=why is not None
     )
@@ -4248,9 +4285,9 @@ def check_state_class(comp_name: str, cls: Any, writable: frozenset[str]) -> Non
         )
     else:
         # Reading the State as Python values fixes the extra keys and a
-        # recursive class, which the Python check counts; a lax State still
+        # recursive type, which the Python check counts; a lax State still
         # refuses such a union.
-        mode = f"remove {why}, or " if reason in (_EXTRAS_REASON, _RECURSIVE_CLASS_REASON) else ""
+        mode = f"remove {why}, or " if reason in (_EXTRAS_REASON, _RECURSIVE_CLASS_REASON, _JSON_LOOP_REASON) else ""
         msg = (
             f"Component {comp_name}: Citry reads browser writes to the State {cls.__qualname__} only as JSON,"
             f" because it has {why}, and its writable field {name!r} holds {reason}. {_fix_for(reason, loop_type)} You"

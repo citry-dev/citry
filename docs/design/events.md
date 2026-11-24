@@ -2047,7 +2047,8 @@ Error modes:
       `Iterable` read count a level there. Registration therefore
       refuses a writable field that reaches a class able to hold itself
       without an author's wrap validator on the way
-      (`_RECURSIVE_CLASS_REASON`).
+      (`_RECURSIVE_CLASS_REASON`), and under the PyPy rules any other
+      type able to hold itself (`_JSON_LOOP_REASON`, below).
     - Where checks run: every validation runs on a check thread, one of
       a small set of threads with a 16 MiB stack (`CHECK_STACK_BYTES`)
       that Citry starts as needed (`run_on_check_thread`). The entry
@@ -2166,7 +2167,17 @@ Error modes:
       functions (wrapped in `_counted`), `_discarded`,
       `_discarded_spending`, the wrappers from `_spending` and
       `_text_spending`. Left out of the count, these calls let data
-      nested within the limit end the process. Parts that pydantic-core
+      nested within the limit end the process. A node with an app's
+      serializer function (`WrapSerializer`, `PlainSerializer`:
+      `_has_authors_serializer`) that leads into recursion also counts
+      a level in the copy for a State (`count_serializers`), though the
+      read calls no Python there: writing a State
+      out (`state_wire_values`, `model_dump`) calls the function at each
+      level (Pydantic's own, for `Sequence[...]` and `defaultdict`, sit
+      on a node whose own wrap function is counted already), and a
+      recursive list alias with a `WrapSerializer` on its
+      uncounted list levels passed the read at 150 levels in a lax State
+      and then ended PyPy 7.3.23 there, as on 1.2.0. Parts that pydantic-core
       checks without calling Python still take stack uncounted, so a
       schema with dozens of them at each level can still end PyPy below
       the limit, as Pydantic alone does. Inside `Json[...]` no wrapper
@@ -2177,8 +2188,12 @@ Error modes:
       (`class_loops`, `_Schema.uncounted_loop_reason`) when the loop
       passes through a class (model, dataclass, TypedDict, NamedTuple:
       `_RECURSIVE_CLASS_REASON`), and any other such loop too
-      (`_JSON_LOOP_REASON`) when the walk has passed a `json` node (a
-      State read only as JSON keeps only the class rule). The loop graph
+      (`_JSON_LOOP_REASON`), below a `json` node and in a State read
+      only as JSON alike: in such a State nothing counts the JSON read,
+      so a `Sequence[Sequence[Sequence[SS]]]` alias 150 levels deep
+      (640 bytes) passed the read and then ended PyPy 7.3.23 in
+      `state_wire_values`, where `model_dump` calls a Python function
+      for each `Sequence` level. The loop graph
       follows only the `json_schema` of a `json-or-python` node there
       (`json_only`), since a JSON read never takes the Python part, so
       `pydantic.JsonValue` reads as `Any` and is accepted. One JSON
