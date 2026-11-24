@@ -7,6 +7,7 @@ import time
 import pytest
 from scripts.generate_html_attribute_values import (
     OUTPUT_PATH,
+    SUPPLEMENTAL_EVENT_NAMES,
     _keywords,
     build_aria_attributes,
     build_attribute_names,
@@ -23,6 +24,7 @@ from citry._html_attribute_values import (
     ARIA_ATTRIBUTES,
     BOOLEAN_ATTRIBUTES,
     DOM_EVENT_NAMES,
+    ELEMENT_ATTRIBUTES,
     OBSOLETE_ELEMENTS,
     SVG_ELEMENTS,
 )
@@ -297,6 +299,13 @@ def test_generated_boolean_attributes_leave_enumerated_ones_out():
         assert name not in BOOLEAN_ATTRIBUTES
 
 
+def test_generated_tables_know_the_input_switch_attribute():
+    # `switch` turns a checkbox into a switch control; the HTML Standard's
+    # attribute index lists it as a boolean attribute of `input` only.
+    assert "switch" in ELEMENT_ATTRIBUTES["input"]
+    assert BOOLEAN_ATTRIBUTES["switch"] == ("input",)
+
+
 def test_generated_aria_attributes_include_draft_names():
     assert {"aria-expanded", "aria-description"} <= ARIA_ATTRIBUTES
     assert "aria-expandd" not in ARIA_ATTRIBUTES
@@ -310,3 +319,9 @@ def test_generated_element_sets_cover_svg_and_obsolete_html():
 def test_generated_event_names_include_vue_and_html_events():
     assert {"click", "dblclick", "scrollend", "focusin"} <= DOM_EVENT_NAMES
     assert "clik" not in DOM_EVENT_NAMES
+
+
+def test_generated_event_names_keep_every_name_the_script_lists_by_hand():
+    # `Dispatch` refuses these names, so a refresh from the sources must keep
+    # them even when no source lists them.
+    assert set(SUPPLEMENTAL_EVENT_NAMES) <= DOM_EVENT_NAMES
