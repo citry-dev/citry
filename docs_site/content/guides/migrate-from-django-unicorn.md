@@ -196,8 +196,9 @@ page decides what to show:
 In the component's JavaScript, listen with the `onEvent` function that
 `onServerRender` receives (see
 [Event actions](/events/actions/#notify-browser-code-that-something-happened)),
-or with `addEventListener` on an element above it. Start the name with the component's name, as here. Names that start
-with `citry:` are reserved, and `actions.Dispatch` rejects them.
+or with `addEventListener` on an element above it. Start the name with the component's name, as here. `actions.Dispatch`
+rejects the name of a standard DOM event, such as `click`, and names
+that start with `citry:`, `vue:`, or `vnode-`.
 [Event actions](/events/actions/) lists everything a handler can return.
 
 ## Change State locally

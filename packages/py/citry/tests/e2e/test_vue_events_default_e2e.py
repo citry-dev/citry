@@ -2005,6 +2005,70 @@ def test_dispatch_uses_one_canonical_live_root_for_every_vue_root_shape(page: An
 
 
 @pytest.mark.e2e
+def test_the_browser_refuses_a_standard_event_name_on_a_mounted_component(page: Any, serve_live: Any) -> None:
+    engine = Citry(secret="vue-dispatch-names-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class ProbeEvents:
+        def ping(self):
+            # `actions.Dispatch` refuses `click` when it builds the action.
+            # Changing the name afterwards stands in for a server that skips
+            # that check, so the browser's own check is what decides.
+            dispatch = actions.Dispatch("Probe:ping")
+            object.__setattr__(dispatch, "name", "click")
+            return dispatch
+
+    class Probe(Component):
+        citry = engine
+        Events = ProbeEvents
+        template = """
+            <button id="probe">probe</button>
+        """
+        js = """
+            $component({
+              onServerRender({ component, onEvent }) {
+                onEvent("click", () => globalThis.__heard.push("onEvent"));
+                globalThis.__send = () =>
+                  component.$sendEvent("ping").then(
+                    () => "resolved",
+                    (error) => String(error && error.message),
+                  );
+              },
+            });
+        """
+
+    dispatcher_for(engine)
+    page.add_init_script(
+        """globalThis.__heard=[];
+        document.addEventListener('click',()=>__heard.push('document'));"""
+    )
+    html = Probe().render().serialize()
+    render_id = re.search(r'"renderId":"([^"]+)"', html)
+    assert render_id is not None
+    page.goto(serve_live(engine, html, "") + "/")
+    page.wait_for_function("typeof globalThis.__send === 'function'")
+    page.evaluate("document.querySelector('#probe').addEventListener('click',()=>__heard.push('element'))")
+
+    # A server result for the mounted component goes through the bridge's
+    # own dispatch, which runs the `onEvent` listeners and then fires the
+    # DOM event; neither may run.
+    outcome = page.evaluate("globalThis.__send()")
+    assert "refused to dispatch" in outcome
+    # Page code that applies an action list aimed at the mounted component
+    # hands it to the Events bridge, which fires an untargeted event in that
+    # list with its page-wide dispatch.
+    applied = page.evaluate(
+        """target=>Citry.events.applyActions([
+          {action:'event',eventName:'Probe:noop',target},
+          {action:'event',eventName:'Click'},
+        ]).then(()=>'resolved',error=>String(error.message))""",
+        f"render:{render_id.group(1)}",
+    )
+    assert "refused to dispatch" in applied
+    assert page.evaluate("globalThis.__heard") == []
+
+
+@pytest.mark.e2e
 def test_a_removed_component_comes_back_with_its_stylesheet(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     page.set_default_timeout(5_000)
     engine = Citry(secret="vue-returning-style-owner-secret", autodiscover=False)  # noqa: S106

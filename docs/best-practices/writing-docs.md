@@ -213,10 +213,10 @@ A message such as "Invalid name" leaves the reader to work out all three.
 This one, from `actions.Dispatch`, says all three:
 
 ```text
-actions.Dispatch: event names starting with 'citry:' are reserved
-for the citry runtime; got 'citry:saved'. Pick another name (the
-convention is prefixing with the component name, e.g.
-'MyCard:submit').
+actions.Dispatch: 'citry:saved' starts with 'citry:' (letter case
+is ignored), which is reserved for Citry's own events. Pick another
+name; the convention is prefixing it with the component name, e.g.
+'MyCard:submit'.
 ```
 
 Keep internals out of the message, the same as on a page. When there are

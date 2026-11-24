@@ -96,7 +96,6 @@ from citry.ext.events.tokens import (
     StateUpdateError,
     apply_state_updates,
     commit_state_token,
-    mint_state_token,
     oversized_state_decimals,
     prepare_state_token,
     state_bytes,
@@ -114,6 +113,7 @@ if TYPE_CHECKING:
     from citry.citry import Citry
     from citry.component import Component
     from citry.ext.events.extension import EventHandler, EventsInfo
+    from citry.ext.events.state import StateMeta
 
 __all__ = [
     "CAPABILITIES_BASELINE_V1",
@@ -560,6 +560,23 @@ def _log_failed_renewal(comp_cls: type[Component], err: Exception) -> None:
     # explained by the message. Anything else may be a bug in Citry, which
     # would otherwise show only as pages expiring, so it keeps its traceback.
     logger.warning(message, exc_info=not isinstance(err, (ValueError, OSError)))
+
+
+def _can_send_state_action(ctx: TransportContext, capabilities: dict[str, frozenset[str]]) -> bool:
+    """
+    Whether the answer to this call can hand the browser a new State token.
+
+    Every place in the dispatcher that makes a token after a call asks this
+    first, before it makes one: in server storage a token is a cache entry,
+    and an entry that no browser receives is never read.
+    """
+    if ctx.response_mode == "compat":
+        # A form posted without JavaScript, or another request that asks for
+        # HTML, is answered with plain HTML, a redirect, or a status, so it
+        # drops `state` actions even though the baseline capabilities list
+        # the kind.
+        return False
+    return "state" in capabilities["actions"]
 
 
 def _instances_given_a_token(wire_actions: list[dict[str, Any]]) -> set[str]:
@@ -1119,14 +1136,12 @@ class EventsDispatcher:
                 if meta.storage != "server":
                     # Signed State is signed again only for a caller instance
                     # that accepts the `state` action (see `_resign_state`).
-                    # A call that makes no token, such as an API call, keeps
-                    # working with a State it never sends back.
-                    accepted = (
-                        CAPABILITIES_BASELINE_V1["actions"]
-                        if ctx.response_mode == "compat"
-                        else capabilities["actions"]
+                    # A call that makes no token, such as an API call or a
+                    # form posted without JavaScript, keeps working with a
+                    # State it never sends back.
+                    capped = (
+                        capped and call.get("callerRenderId") is not None and _can_send_state_action(ctx, capabilities)
                     )
-                    capped = capped and call.get("callerRenderId") is not None and "state" in accepted
                 # Server storage may hold a State the server itself made
                 # larger than the cap, which the browser may still change
                 # as long as it does not grow it. A signed State over the cap
@@ -1625,7 +1640,7 @@ class EventsDispatcher:
         meta = plan.info.state_meta
         if meta is None:  # pragma: no cover - a state instance implies its meta
             return wire_actions
-        # Both checks below come before the token is made: for server storage,
+        # The checks below come before any token is made: for server storage,
         # making one writes a cache entry, and an entry no client receives is
         # never read, so it would only fill the cache.
         if plan.instance_id is None:
@@ -1636,28 +1651,56 @@ class EventsDispatcher:
                 f" instance to address the token refresh to; the response omits it."
             )
             return wire_actions
-        if "state" not in capabilities["actions"]:
-            # The client explicitly advertised a set without the state kind;
-            # emitting one anyway would violate the capability contract.
-            logger.warning(
-                f"Event handler {plan.handler.name!r} mutated state, but the client's advertised"
-                f" capabilities exclude the 'state' action; the State refresh is dropped."
-            )
+        if not _can_send_state_action(ctx, capabilities):
+            if ctx.response_mode == "compat":
+                # Expected for every such form, so it is not worth a warning.
+                logger.debug(
+                    f"Event handler {plan.handler.name!r} mutated state, but the call is answered as plain HTML"
+                    f" (a form posted without JavaScript, for example), which drops 'state' actions; the response"
+                    f" omits the token refresh."
+                )
+            else:
+                # The client explicitly advertised a set without the state kind;
+                # emitting one anyway would violate the capability contract.
+                logger.warning(
+                    f"Event handler {plan.handler.name!r} mutated state, but the client's advertised"
+                    f" capabilities exclude the 'state' action; the State refresh is dropped."
+                )
             return wire_actions
-        token = mint_state_token(
+        # The browser shows public State through `$state` and State bindings, and
+        # nothing else will refresh them: the caller is not rendered again here.
+        return [self._new_state_action(plan, ctx, meta), *wire_actions]
+
+    @staticmethod
+    def _new_state_action(plan: _CallPlan, ctx: TransportContext, meta: StateMeta) -> dict[str, Any]:
+        """
+        Make a new token from the call's State, and the ``state`` action that carries it.
+
+        A State change and a renewal both come through here, so both write a
+        server-storage entry in the same order: the token is prepared first,
+        the action is built from it, and the entry is written last. A token
+        that cannot be made, or an action that cannot be built, then leaves no
+        entry behind that no browser will read. A failure after the write,
+        such as an ``on_event_result`` hook that adds an action the client did
+        not advertise, still leaves the entry until it expires. The caller has
+        already checked that the answer can carry a ``state`` action
+        (``_can_send_state_action``).
+        """
+        if plan.instance_id is None or plan.state is None:  # pragma: no cover - checked by the callers
+            msg = "A state action needs a caller instance and a State."
+            raise ValueError(msg)
+        prepared = prepare_state_token(
             plan.state,
             class_id=plan.comp_cls.class_id,
             secret=ctx.citry.settings.secret,
             max_age=meta.max_age,
             max_bytes=meta.max_bytes,
             storage=meta.storage,
-            cache=ctx.citry.cache,
             component_name=plan.comp_cls.__name__,
         )
-        # The browser shows public State through `$state` and State bindings, and
-        # nothing else will refresh them: the caller is not rendered again here.
-        state_action = build_state_action(plan.instance_id, token, public_state_values(plan.state, meta))
-        return [state_action, *wire_actions]
+        state_action = build_state_action(plan.instance_id, prepared.token, public_state_values(plan.state, meta))
+        commit_state_token(prepared, ctx.citry.cache)
+        return state_action
 
     @staticmethod
     def _renewal_wanted(plan: _CallPlan, token_sent_to: set[str]) -> bool:
@@ -1691,26 +1734,14 @@ class EventsDispatcher:
         if any(action.get("action") == "render" and action.get("target") == self_target for action in wire_actions):
             # A render of the caller already carries a token with a full lifetime.
             return wire_actions
-        if "state" not in capabilities["actions"] or ctx.response_mode == "compat":
+        if not _can_send_state_action(ctx, capabilities):
             # The client cannot store a token from a `state` action: it said
             # so in its capabilities, or it is a form posted without
             # JavaScript, whose answer drops the action. Its current token
             # keeps working until it expires.
             return wire_actions
         try:
-            prepared = prepare_state_token(
-                plan.state,
-                class_id=plan.comp_cls.class_id,
-                secret=ctx.citry.settings.secret,
-                max_age=meta.max_age,
-                max_bytes=meta.max_bytes,
-                storage=meta.storage,
-                component_name=plan.comp_cls.__name__,
-            )
-            state_action = build_state_action(plan.instance_id, prepared.token, public_state_values(plan.state, meta))
-            # Written last, so a token dropped by the checks above leaves no
-            # server-storage entry behind.
-            commit_state_token(prepared, ctx.citry.cache)
+            state_action = self._new_state_action(plan, ctx, meta)
         except Exception as err:  # noqa: BLE001 - a renewal is optional and must not fail the call
             # The handler did not change State, so the call itself succeeded.
             # A State that cannot be signed again (one over a `_max_bytes`

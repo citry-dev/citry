@@ -1920,6 +1920,41 @@ class TestCompatMode:
         assert "citry-vue-" not in response.text
         assert "data-citry-vue-document" not in response.text
 
+    def test_a_form_that_changes_server_stored_state_writes_no_cache_entry(self):
+        # The 303 carries no State token, so a new entry would never be read.
+        c = _citry()
+
+        class Notes(Component):
+            citry = c
+            template = "<div>n</div>"
+
+            class State:
+                count: int = 0
+                _storage = "server"
+
+            class Events:
+                def bump(self, state):
+                    state.count += 1
+                    return actions.Redirect("/done")
+
+        token = mint_state_token(
+            Notes.State(),
+            class_id=Notes.class_id,
+            secret=SIGNING_KEY,
+            max_age=None,
+            max_bytes=None,
+            storage="server",
+            cache=c.cache,
+        )
+        entries = dict(c.cache._state)
+        response = _mounted(c).post(
+            _event_url(Notes, "bump"),
+            data={"_citry_state_token": token, "_citry_caller_render_id": "i1"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert dict(c.cache._state) == entries
+
     def test_redirect_becomes_a_303(self):
         c = _citry()
         greeter = _greeter(c)

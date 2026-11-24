@@ -590,7 +590,7 @@ Actions are a closed v1 vocabulary:
 | `render` | `target`, `swap`, and `html` or `prepared` | `renderer`, `delay`, `wait` | Update one component occurrence, or one marked region inside the caller, with newly rendered content, as `swap` says. |
 | `data` | `value` | `delay` | Resolve the caller with any JSON value, including `null`. A result has at most one data action. |
 | `state` | `targetRenderId`, `stateToken`, `publicState` | `delay`, `wait` | Replace one rendered component occurrence's State token and the public State values the browser shows. |
-| `event` | `eventName` | `detail`, `target`, `delay`, `wait` | Dispatch a bubbling DOM `CustomEvent`. Names beginning `citry:` are reserved. |
+| `event` | `eventName` | `detail`, `target`, `delay`, `wait` | Dispatch a bubbling DOM `CustomEvent`. Names beginning `citry:` are reserved. Citry's server and browser code also refuse a standard DOM event name such as `click`, which would run the page's own listeners for it, and a name beginning `vue:` or `vnode-`, ignoring ASCII letter case. The reference validators accept these names. |
 | `redirect` | `url` | `delay`, `wait` | Navigate the page. |
 | `url` | `url`, `mode` | `delay`, `wait` | Push or replace browser history without navigation. `mode` is `push` or `replace`. |
 
