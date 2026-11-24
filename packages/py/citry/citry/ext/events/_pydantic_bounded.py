@@ -87,6 +87,7 @@ import _thread
 import contextlib
 import contextvars
 import functools
+import math
 import os
 import re
 import sys
@@ -2837,18 +2838,32 @@ class _CheckThreads:
                 # caller does not wait for the interpreter lock while this
                 # thread does its bookkeeping.
                 job.done.release()
-                # The idle time after this job ends here, and with it the
-                # short wakes that free what the caller drops meanwhile.
-                idle_until = time.monotonic() + _CHECK_THREAD_IDLE_SECONDS
+                # The idle time is counted in waits, not read from a clock,
+                # so code that replaces `time.monotonic` (such as freezegun
+                # in an app's tests) cannot stretch or end it.
+                short_waits = _short_waits()
                 while next_job is None:
-                    if idle.wake.acquire(timeout=_idle_wait(idle_until)):
+                    # Without the GIL, the idle time is split into short
+                    # waits; with it, one wait covers it. A kept thread past
+                    # its idle time also waits long, rather than wake every
+                    # second for as long as the process runs: most callers
+                    # drop a check's data within a minute.
+                    short = short_waits > 0 and _gil_is_off()
+                    wait = (
+                        min(_CHECK_THREAD_WAKE_SECONDS, _CHECK_THREAD_IDLE_SECONDS)
+                        if short
+                        else _CHECK_THREAD_IDLE_SECONDS
+                    )
+                    if idle.wake.acquire(timeout=wait):
                         next_job, idle.job = idle.job, None
                         waiting = next_job
                         continue
-                    if time.monotonic() < idle_until:
-                        # A short wake: running this loop frees what the
-                        # caller dropped, and the thread waits again.
-                        continue
+                    if short:
+                        short_waits -= 1
+                        if short_waits:
+                            # Running this loop frees what callers dropped
+                            # since the last wake; then the thread waits again.
+                            continue
                     with self.lock:
                         # Still idle and not needed: end. A thread that a
                         # caller picked meanwhile has its wake-up coming.
@@ -2885,19 +2900,16 @@ class _CheckThreads:
                         left.done.release()
 
 
-def _idle_wait(idle_until: float) -> float:
-    """Return how long an idle check thread waits for its next job before it wakes, given when its idle time ends."""
-    left = idle_until - time.monotonic()
-    if left <= 0:
-        # A kept thread past its idle time. Callers have mostly dropped what
-        # it made by then, so it waits long rather than wake every second
-        # for as long as the process runs.
-        return _CHECK_THREAD_IDLE_SECONDS
-    if _IS_GIL_ENABLED is not None and not _IS_GIL_ENABLED():
-        # Read on each wait, since an extension module imported later can
-        # turn the GIL back on.
-        return min(left, _CHECK_THREAD_WAKE_SECONDS)
-    return left
+def _short_waits() -> int:
+    """Return how many short waits make up a check thread's idle time when the GIL is off."""
+    return max(1, math.ceil(_CHECK_THREAD_IDLE_SECONDS / _CHECK_THREAD_WAKE_SECONDS))
+
+
+def _gil_is_off() -> bool:
+    """Return whether Python runs without the GIL right now."""
+    # Read on each wait, since an extension module imported later (such as
+    # `citry_core`) can turn the GIL back on.
+    return _IS_GIL_ENABLED is not None and not _IS_GIL_ENABLED()
 
 
 _CHECK_THREADS = _CheckThreads()

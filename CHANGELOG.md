@@ -44,8 +44,8 @@
 
 - On free-threaded Python with the GIL off, the request data from an
   Events check that failed, and the result of one that passed, are now
-  freed within about a second after your code lets go of them. Before,
-  they could stay in memory for up to 60 seconds.
+  freed about a second after your code lets go of them, not up to 60
+  seconds later.
 
 ## v1.2.0
 
