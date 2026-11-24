@@ -5325,11 +5325,13 @@ traversal of any object graph; extra arg keys are rejected, not absorbed.
   `Vary`.
   The per-handler descriptor carries `usesState: true` only when the handler
   declares the State injectable, so the browser sends the token only to such
-  a handler. When a header-only call answers `invalid_state` without listing the
-  header in `Vary` (a server from before 1.3.0 reads only the query), the
-  browser sends it once more with the token in the query. When a call sends the header and a handler's own
-  response sets a cache policy, the server makes it `private`, because the
-  URL does not carry the token and some CDNs ignore `Vary`.
+  a handler. When a header-only call answers `invalid_state` without
+  listing the header in `Vary` (a server from before 1.3.0 reads only the
+  query), the browser sends it once more with the token in the query.
+  When a call sends the header and a handler's own response sets a cache
+  policy, the server keeps only the directives a browser cache follows,
+  adds `private`, and drops CDN-only cache headers, because the URL does
+  not carry the token and some CDNs ignore `Vary`.
   The built-in browser transport selects GET for a single call to a
   GET-declared handler. It serializes scalar string, boolean, and finite
   number args, and non-empty arrays of those values as repeated query

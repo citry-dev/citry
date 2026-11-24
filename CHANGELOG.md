@@ -27,12 +27,13 @@
   on another origin and your CORS setup lists the allowed request
   headers, add `X-Citry-State-Token`. When a GET call sends the header
   and the handler sets its own `Cache-Control`, Citry makes the policy
-  `private`, so a CDN that ignores `Vary` cannot give one visitor's
-  answer to another. See
+  `private` and drops `public`, `s-maxage`, and CDN-only headers such as
+  `CDN-Cache-Control`, so a CDN that ignores `Vary` cannot give one
+  visitor's answer to another. See
   [Allow GET requests](https://citry.dev/events/routes/#expose-a-read-only-get-endpoint).
-- A GET event call whose header and query parameter carry different
-  State tokens is now refused with a `400` error, so a URL cannot choose
-  a token other than the one the browser sent.
+- Security: a GET event call whose header and query parameter carry
+  different State tokens is now refused with a `400` error, so a URL
+  cannot choose a token other than the one the browser sent.
 
 ## v1.2.0
 

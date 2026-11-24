@@ -99,8 +99,9 @@ same. The `_citry_state_token` query parameter also works, but it puts
 the token in those logs. If the header and the query parameter carry
 different tokens, the call gets a `400` error and the handler does not
 run. When the call sends the header and the handler sets its own
-`Cache-Control`, Citry makes that policy `private`, because the URL
-does not show which visitor's token the call sent.
+`Cache-Control`, Citry makes that policy `private` and drops `public`,
+`s-maxage`, and CDN-only headers such as `CDN-Cache-Control`, because
+the URL does not show which visitor's token the call sent.
 
 !!! note "Which HTTP methods a handler accepts"
 

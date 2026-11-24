@@ -977,7 +977,9 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
         const vary = response.headers?.get?.("Vary") ?? "";
         const readsTokenHeader = vary
           .split(",")
-          .some((name) => name.trim().toLowerCase() === CARRIER_HEADERS.stateToken.toLowerCase());
+          .map((name) => name.trim().toLowerCase())
+          // `*` says the answer depends on every request header, the token header included.
+          .some((name) => name === "*" || name === CARRIER_HEADERS.stateToken.toLowerCase());
         return readsTokenHeader ? { raw, readsTokenHeader: true } : { raw };
       } catch (error) {
         if (response.ok) throw new Error("A successful raw Event response must be an attachment.");
@@ -987,9 +989,9 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     const operation = (async () => {
       const first = await attempt(requestUrl, requestHeaders, envelope);
       // A server from before Citry 1.3.0, still running during a deploy or after a rollback,
-      // reads the token only from the query and answers invalid_state without it. So do a
-      // proxy that drops the header and a custom transport that forwards only the URL. One
-      // retry with the token in the query keeps such a call working. The first answer refused
+      // reads the token only from the query and answers invalid_state without it, and so does
+      // a custom transport that forwards only the URL. One retry with the token in the query
+      // keeps such a call working. The first answer refused
       // the call before its handler ran, so sending it again is safe.
       if (
         queryTokenUrl === null ||

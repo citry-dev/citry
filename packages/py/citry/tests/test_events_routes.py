@@ -1539,19 +1539,36 @@ class TestGetHandlers:
             ("public, s-maxage=600, max-age=10, must-revalidate", "private, max-age=10, must-revalidate"),
             # A field-qualified private still lets a shared cache keep the rest.
             ('private="Set-Cookie", max-age=60', "private, max-age=60"),
-            # A comma inside quotes does not make a bare `private`.
-            ('public, max-age=60, no-cache="X, private, Y"', "private, max-age=60"),
+            # A comma inside quotes does not make a bare `private`, and a
+            # `no-cache` that names fields becomes the stricter bare form.
+            ('public, max-age=60, no-cache="X, private, Y"', "private, max-age=60, no-cache"),
             ("max-age=0, NO-CACHE", "private, max-age=0, no-cache"),
             ("no-store", "no-store"),
+            ("max-age=60, no-store=1", "no-store"),
+            # Malformed directives are dropped rather than passed on.
+            ("max-age=, immutable=1, public max-age=60", "private"),
+            ("", "private"),
         ],
     )
     def test_a_handler_cache_policy_keeps_only_what_a_browser_cache_follows(self, policy, expected):
         assert events_routes._private_cache_control(policy) == expected
 
+    def test_a_split_of_a_long_cache_policy_takes_time_in_step_with_its_length(self):
+        # A handler may build the value from request data.
+        started = time.perf_counter()
+        events_routes._private_cache_control("a" * 200_000 + " b, " + '"' * 200_000)
+        assert time.perf_counter() - started < 1.0
+
     def test_a_cdn_only_cache_policy_is_dropped_when_the_token_rides_a_header(self):
         response = RouteResponse(
             content="x",
-            headers=(("CDN-Cache-Control", "max-age=600"), ("Surrogate-Control", "max-age=600")),
+            headers=(
+                ("CDN-Cache-Control", "max-age=600"),
+                ("Cloudflare-CDN-Cache-Control", "max-age=600"),
+                ("Surrogate-Control", "max-age=600"),
+                ("Edge-Control", "max-age=600"),
+                ("X-Accel-Expires", "600"),
+            ),
         )
         request = RouteRequest(method="GET", path="/", headers=RouteHeaders([("X-Citry-State-Token", "t")]))
         marked = events_routes._with_cache_marks(response, request)

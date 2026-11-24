@@ -1224,18 +1224,20 @@ the handler sees. Some shared caches ignore `Vary`, so when a `GET` call
 sends `X-Citry-State-Token` and the handler's own response sets a cache
 policy, the server limits it to the visitor's browser. It replaces
 `Cache-Control` with `private` followed by the directives a browser
-cache follows (`max-age`, a bare `no-cache`, `must-revalidate`,
+cache follows (`max-age`, `no-cache`, `must-revalidate`,
 `no-transform`, `immutable`, `stale-while-revalidate`), or with
-`no-store` when the policy holds it, and it drops `CDN-Cache-Control`
-and `Surrogate-Control`. A refusal sent before the handler runs also
+`no-store` when the policy holds it. It drops every other directive,
+such as `public` and `s-maxage`, and the headers that only a CDN reads:
+`CDN-Cache-Control` and any `<vendor>-CDN-Cache-Control`,
+`Surrogate-Control`, `Edge-Control`, and `X-Accel-Expires`. A refusal sent before the handler runs also
 lists these headers in `Vary`, and on a `GET` call it carries
 `Cache-Control: no-store`.
 
 Citry's browser code sends `X-Citry-Events` and the three `X-Citry-Vue-*`
 headers on every call, and `X-Citry-State-Token` on a `GET` call to a
 handler that reads State, except on the one retry that
-[State tokens on GET](#state-tokens-on-get) describes. It sends the CSRF token header on a call that is
-not `GET` when the page has a token and the event URL is on the page's
+[State tokens on GET](#state-tokens-on-get) describes. It sends the
+CSRF token header on a call that is not `GET` when the page has a token and the event URL is on the page's
 origin. Browser code that sends calls some other
 way, such as a transport registered with `Citry.events.registerTransport`,
 must send the headers it is given. Server code that runs calls itself,
@@ -1296,15 +1298,20 @@ A server that only reads the query field, such as one running Citry
 1.2.0 or earlier, does not see a token sent in the header and answers
 `invalid_state`. This happens when a page that a newer release rendered
 calls a server that still runs an older one, for example during a
-rolling deploy or a rollback, or behind a proxy that drops the header.
+rolling deploy or a rollback. A proxy in front of the server must
+forward the header: a server that reads it but does not receive it
+answers `invalid_state`, and the browser does not retry.
+
 A server that reads the header lists `X-Citry-State-Token` in `Vary` on
 every `GET` answer, and an older server does not. So when a `GET` call
 that sent the token only in the header gets a single `invalid_state`
 error without that `Vary` entry, Citry's browser code sends the same
 call once more with the token in the query field and without the
-header, and uses that answer. A browser cannot read `Vary` on an answer
-from another origin, or through a custom transport, so there it retries
-on any such `invalid_state`. A client that sends the header should do
+header, and uses that answer. A browser can read `Vary` on an answer
+from another origin only when the server lists it in
+`Access-Control-Expose-Headers`, and a custom transport returns no
+headers. In those cases the browser retries on any such
+`invalid_state`. A client that sends the header should do
 the same while it may reach an older server.
 
 A header sent more than once reaches the server as one value joined

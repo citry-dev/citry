@@ -92,11 +92,11 @@ Four things can still put a token in a log. The server also reads a
 token from the `_citry_state_token` query parameter, so a client of your
 own that sends it there logs it. Logs written before 1.3.0 hold the
 tokens that Citry's browser code sent in the URL. When a GET call
-answers `invalid_state` from a server that does not read the header,
-such as one from before 1.3.0 or one behind a proxy that drops the
-header, Citry's browser code sends the call once more with the token in
-the URL. A log or tracing tool
-that records request headers also records `X-Citry-State-Token`, so
+gets an `invalid_state` answer from a server from before 1.3.0, or from
+any server when the event URL is on another origin or the call goes
+through a custom transport, Citry's browser code sends the call once
+more with the token in the URL. A log or tracing tool that records
+request headers also records `X-Citry-State-Token`, so
 leave that header out of it. Whoever can read a logged token can keep
 it alive by calling with it, as described above. A token grants no
 permission, so check permissions in every handler.

@@ -499,18 +499,14 @@ def _with_cache_marks(response: RouteResponse, request: RouteRequest) -> RouteRe
     return _with_page_nonce_marks(response, sent=PAGE_NONCE_HEADER in request.headers, varied=varied)
 
 
-# Cache-Control directives a browser's own cache may follow. Everything else,
-# such as `public`, `s-maxage`, or a `private` or `no-cache` that names fields
-# (which still lets a shared cache keep the rest), is dropped.
-_PRIVATE_CACHE_DIRECTIVES = frozenset(
-    {"max-age", "no-cache", "no-store", "must-revalidate", "no-transform", "immutable", "stale-while-revalidate"}
-)
-# Headers that set the policy of a CDN alone (RFC 9213 and the older
-# Surrogate-Control); a CDN that reads them ignores Cache-Control.
-_CDN_CACHE_HEADERS = frozenset({"cdn-cache-control", "surrogate-control"})
-# One Cache-Control directive: a name, then an optional token or quoted value,
-# so a comma inside quotes does not split it.
-_CACHE_DIRECTIVE = re.compile(r'\s*([^\s=,]+)(?:\s*=\s*("(?:[^"\\]|\\.)*"|[^,]*))?\s*(?:,|$)')
+# Cache-Control directives a browser's own cache may follow, without and with
+# a number of seconds. Everything else is dropped: `public`, `s-maxage`, and a
+# `private` that names fields, which still lets a shared cache keep the rest.
+_BROWSER_CACHE_FLAGS = frozenset({"must-revalidate", "no-transform", "immutable"})
+_BROWSER_CACHE_SECONDS = frozenset({"max-age", "stale-while-revalidate"})
+# Headers that set the policy of a CDN alone; a CDN that reads one ignores
+# Cache-Control. RFC 9213 also lets a CDN name its own `<vendor>-CDN-Cache-Control`.
+_CDN_CACHE_HEADERS = frozenset({"surrogate-control", "edge-control", "x-accel-expires"})
 
 
 def _private_cache_policy(response: RouteResponse) -> RouteResponse:
@@ -518,7 +514,7 @@ def _private_cache_policy(response: RouteResponse) -> RouteResponse:
     headers: list[tuple[str, str]] = []
     for name, value in response.headers:
         lowered = name.lower()
-        if lowered in _CDN_CACHE_HEADERS:
+        if lowered in _CDN_CACHE_HEADERS or lowered.endswith("cdn-cache-control"):
             continue
         if lowered == "cache-control":
             headers.append((name, _private_cache_control(value)))
@@ -535,16 +531,49 @@ def _private_cache_policy(response: RouteResponse) -> RouteResponse:
 def _private_cache_control(value: str) -> str:
     """The ``Cache-Control`` value ``private`` plus the handler's directives a browser cache may follow."""
     kept: list[str] = []
-    for match in _CACHE_DIRECTIVE.finditer(value):
-        directive, argument = match.group(1).lower(), match.group(2)
-        # A field-qualified `no-cache="X"` is a shared-cache instruction; only
-        # the bare form applies to the whole answer.
-        if directive not in _PRIVATE_CACHE_DIRECTIVES or (directive == "no-cache" and argument is not None):
-            continue
-        kept.append(directive if argument is None else f"{directive}={argument.strip()}")
-    if "no-store" in kept:
-        return "no-store"
+    for item in _split_cache_directives(value):
+        name, has_argument, argument = item.partition("=")
+        directive = name.strip().lower()
+        argument = argument.strip()
+        if directive == "no-store":
+            return "no-store"
+        if directive == "no-cache":
+            # A `no-cache` that names fields binds every cache, and browsers
+            # often read it as the bare form; the bare form is never looser.
+            if "no-cache" not in kept:
+                kept.append("no-cache")
+        elif directive in _BROWSER_CACHE_FLAGS and not has_argument:
+            kept.append(directive)
+        elif directive in _BROWSER_CACHE_SECONDS and argument.isascii() and argument.isdigit():
+            kept.append(f"{directive}={argument}")
     return ", ".join(["private", *kept])
+
+
+def _split_cache_directives(value: str) -> list[str]:
+    """
+    Split a ``Cache-Control`` value at the commas outside quoted strings.
+
+    One pass over the characters, so a long value a handler built costs
+    time in step with its length.
+    """
+    items: list[str] = []
+    current: list[str] = []
+    quoted = False
+    escaped = False
+    for char in value:
+        if escaped:
+            escaped = False
+        elif quoted and char == "\\":
+            escaped = True
+        elif char == '"':
+            quoted = not quoted
+        elif char == "," and not quoted:
+            items.append("".join(current))
+            current = []
+            continue
+        current.append(char)
+    items.append("".join(current))
+    return [item for item in items if item.strip()]
 
 
 def _encode_envelope(envelope: Mapping[str, Any]) -> tuple[str, Mapping[str, Any]]:

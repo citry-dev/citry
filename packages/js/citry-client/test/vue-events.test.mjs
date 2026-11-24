@@ -1649,6 +1649,7 @@ test("GET does not retry an answer other than invalid_state, nor a second invali
 
 test("GET does not retry an invalid_state from a server that reads the token header", async () => {
   let fetched = 0;
+  let vary = "";
   const bridge = bridgeModule.createVueEventsBridge({
     endpoint: "/events",
     eventBaseUrl: "/events/e/",
@@ -1656,12 +1657,15 @@ test("GET does not retry an invalid_state from a server that reads the token hea
     fetch: async (url) => {
       fetched += 1;
       const response = errorResponse(queryEnvelope(url), invalidStateError);
-      response.headers.set("Vary", "X-Citry-Page-Nonce, X-Citry-State-Token");
+      response.headers.set("Vary", vary);
       return response;
     },
   });
-  await assert.rejects(bridge.send({ source: { stableId: "board", generation: 1 }, handler: "search", args: {} }));
-  assert.equal(fetched, 1);
+  for (vary of ["X-Citry-Page-Nonce, X-Citry-State-Token", "*"]) {
+    fetched = 0;
+    await assert.rejects(bridge.send({ source: { stableId: "board", generation: 1 }, handler: "search", args: {} }));
+    assert.equal(fetched, 1, vary);
+  }
 });
 
 test("a custom transport that forwards only the URL gets the retry with the token in it", async () => {
