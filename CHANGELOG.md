@@ -57,9 +57,6 @@
 - Security: a GET event call whose header and query parameter carry
   different State tokens is now refused with a `400` error, so a URL
   cannot choose a token other than the one the browser sent.
-
-### Changed
-
 - Security: `actions.Dispatch` now raises `ValueError` for the name of
   a standard DOM event, such as `click`, `submit`, `input`, `change`,
   `keydown` or `focus`, because the event would run the page's own
@@ -79,6 +76,17 @@
     ```
 
     See [`Dispatch` browser events](https://citry.dev/events/actions/#notify-browser-code-that-something-happened).
+
+### Fixes
+
+- On free-threaded Python with the GIL off, the request data from an
+  Events check that failed, and the result of one that passed, are now
+  freed about a second after your code lets go of them, not up to 60
+  seconds later.
+- With `State._storage = "server"`, a call that changes State no longer
+  leaves an unused entry in your cache when its answer cannot carry the
+  new token. That covers a form posted without JavaScript, and a call
+  that fails because a public State value is one the browser cannot read.
 
 ## v1.2.0
 

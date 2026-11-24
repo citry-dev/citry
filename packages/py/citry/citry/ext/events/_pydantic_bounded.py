@@ -87,6 +87,7 @@ import _thread
 import contextlib
 import contextvars
 import functools
+import math
 import os
 import re
 import sys
@@ -2631,6 +2632,17 @@ _KEPT_CHECK_THREADS = 2
 # How long, in seconds, an idle check thread past those waits for work
 # before it ends.
 _CHECK_THREAD_IDLE_SECONDS = 60.0
+# How often, in seconds, an idle check thread wakes during that time when
+# Python runs without the GIL. There, an object one thread made and another
+# thread drops is freed only when the thread that made it next runs Python
+# code. A check thread makes a failed check's error and traceback (which
+# reach the request data) and a check's result, and the caller drops them
+# after the check thread has gone idle, so each wake frees what the caller
+# dropped since the last one.
+_CHECK_THREAD_WAKE_SECONDS = 1.0
+# `sys._is_gil_enabled` exists from Python 3.13 on; before that the GIL is
+# always on.
+_IS_GIL_ENABLED: Callable[[], bool] | None = getattr(sys, "_is_gil_enabled", None)
 # Keeps Citry's own thread starts from setting the process-wide stack size
 # at the same time.
 _STACK_SIZE_LOCK = threading.Lock()
@@ -2826,11 +2838,33 @@ class _CheckThreads:
                 # caller does not wait for the interpreter lock while this
                 # thread does its bookkeeping.
                 job.done.release()
+                # The idle time is counted in waits, not read from a clock,
+                # so code that replaces `time.monotonic` (such as freezegun
+                # in an app's tests) cannot stretch or end it.
+                short_waits = _short_waits()
                 while next_job is None:
-                    if idle.wake.acquire(timeout=_CHECK_THREAD_IDLE_SECONDS):
+                    # Without the GIL, the idle time is split into short
+                    # waits; with it, one wait covers it. Once its idle time
+                    # is used up, a kept thread waits the whole idle time at
+                    # once on any build, rather than wake every second for
+                    # as long as the process runs; most callers drop a
+                    # check's data within a minute.
+                    short = short_waits > 0 and _gil_is_off()
+                    wait = (
+                        min(_CHECK_THREAD_WAKE_SECONDS, _CHECK_THREAD_IDLE_SECONDS)
+                        if short
+                        else _CHECK_THREAD_IDLE_SECONDS
+                    )
+                    if idle.wake.acquire(timeout=wait):
                         next_job, idle.job = idle.job, None
                         waiting = next_job
                         continue
+                    if short:
+                        short_waits -= 1
+                        if short_waits:
+                            # Running this loop frees what callers dropped
+                            # since the last wake; then the thread waits again.
+                            continue
                     with self.lock:
                         # Still idle and not needed: end. A thread that a
                         # caller picked meanwhile has its wake-up coming.
@@ -2865,6 +2899,18 @@ class _CheckThreads:
                         left.outcome = (False, RuntimeError("Citry's check thread stopped unexpectedly."))
                     with suppress(RuntimeError):
                         left.done.release()
+
+
+def _short_waits() -> int:
+    """Return how many short waits make up a check thread's idle time when the GIL is off."""
+    return max(1, math.ceil(_CHECK_THREAD_IDLE_SECONDS / _CHECK_THREAD_WAKE_SECONDS))
+
+
+def _gil_is_off() -> bool:
+    """Return whether Python runs without the GIL right now."""
+    # Read on each wait, since an extension module imported later (such as
+    # `citry_core`) can turn the GIL back on.
+    return _IS_GIL_ENABLED is not None and not _IS_GIL_ENABLED()
 
 
 _CHECK_THREADS = _CheckThreads()
