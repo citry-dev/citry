@@ -46,8 +46,8 @@ from pydantic_core import core_schema as pydantic_core_schema
 from typing_extensions import TypeAliasType, TypedDict
 
 from citry import Citry, Component
-from citry._protocol.events import MAX_JSON_DEPTH
 from citry.ext.events import _pydantic_bounded as bounded
+from citry.ext.events import state as state_module
 from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
 from citry.ext.events.errors import MAX_FIELD_ERRORS_TEXT, FieldErrors
 from citry.ext.events.schemas import validate_args
@@ -4207,20 +4207,8 @@ def test_the_lone_surrogate_scan_ends_on_a_value_that_holds_itself() -> None:
     assert _holds_lone_surrogate(["\ud800", holder]) is True
 
 
-def test_a_signed_pydantic_v1_state_too_deep_to_restore_answers_stale_state() -> None:
-    # A token Citry signed can hold a v1 State that Python cannot read back
-    # at the recursion limit of the request, as when the limit was raised
-    # while minting. The call answers stale_state, as for any State that no
-    # longer fits, rather than as an unexpected error.
-    #
-    # The State is as deep as a token can hold, because the depth that runs
-    # out of frames differs by interpreter: Pydantic v1 uses several frames
-    # per level, and PyPy reads back more levels than CPython before it
-    # reaches the same limit. A token holds more levels than either of them
-    # reads back at the default limit.
-    board, node = _deep_v1_board()
-    # The token's payload and State are two of its levels, and each node adds one.
-    nodes = MAX_JSON_DEPTH - 2
+def _state_reader(board: type) -> type[Component]:
+    """Return a component whose State is ``board`` and whose ``read`` handler does nothing."""
     app = _citry()
 
     class Deep(Component):
@@ -4234,20 +4222,53 @@ def test_a_signed_pydantic_v1_state_too_deep_to_restore_answers_stale_state() ->
             def read(self, state: Any) -> None:
                 pass
 
+    return Deep
+
+
+@pytest.mark.skipif(
+    IS_PYPY,
+    reason="PyPy's recursion check depends on how warm its JIT is, so no State is reliably too deep to restore",
+)
+def test_a_signed_pydantic_v1_state_too_deep_to_restore_answers_stale_state() -> None:
+    # A token Citry signed can hold a v1 State that Python cannot read back
+    # at the recursion limit of the request, as when the limit was raised
+    # while minting. The call answers stale_state, as for any State that no
+    # longer fits, rather than as an unexpected error. The next test checks
+    # the same answer where this one cannot count on running out of frames.
+    board, node = _deep_v1_board()
+    deep = _state_reader(board)
+
     limit = sys.getrecursionlimit()
     sys.setrecursionlimit(20_000)
     try:
         token = mint_state_token(
-            board(tree=_v1_chain(node, nodes)),
-            class_id=Deep.class_id,
-            secret=SIGNING_KEY,
-            max_age=None,
-            max_bytes=10**6,
+            board(tree=_v1_chain(node, 150)), class_id=deep.class_id, secret=SIGNING_KEY, max_age=None, max_bytes=10**6
         )
     finally:
         sys.setrecursionlimit(limit)
 
-    item = _dispatch(Deep, stateToken=token, sendSequence=1, callerRenderId="r0")
+    item = _dispatch(deep, stateToken=token, sendSequence=1, callerRenderId="r0")
+
+    assert item["ok"] is False
+    assert (item["error"]["status"], item["error"]["code"]) == (409, "stale_state")
+
+
+def test_a_restore_that_runs_out_of_python_frames_answers_stale_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Where a restore runs out of frames depends on the interpreter, and on
+    # PyPy on how warm its JIT is, so the test above cannot run on PyPy.
+    # Here the restore raises RecursionError itself, as it does at the end of
+    # the frames, so the answer is checked on every interpreter.
+    def out_of_frames(*args: Any, **kwargs: Any) -> None:
+        raise RecursionError
+
+    board, node = _deep_v1_board()
+    deep = _state_reader(board)
+    token = mint_state_token(
+        board(tree=_v1_chain(node, 3)), class_id=deep.class_id, secret=SIGNING_KEY, max_age=None, max_bytes=10**6
+    )
+    monkeypatch.setattr(state_module, "_restore_or_reuse_state", out_of_frames)
+
+    item = _dispatch(deep, stateToken=token, sendSequence=1, callerRenderId="r0")
 
     assert item["ok"] is False
     assert (item["error"]["status"], item["error"]["code"]) == (409, "stale_state")
