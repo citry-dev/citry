@@ -1552,13 +1552,36 @@ test("GET uses the exact per-event URL and flat metadata without consuming State
   assert.equal(parsed.pathname, "/prefix/ext/events/e/Board_1/search");
   assert.deepEqual(parsed.searchParams.getAll("tags"), ["x", "y"]);
   assert.equal(parsed.searchParams.get("q"), "a/b");
-  assert.equal(parsed.searchParams.get("_citry_state_token"), "state-token");
+  // The token rides a header, so the URL that access logs record carries none.
+  assert.equal(parsed.searchParams.has("_citry_state_token"), false);
+  assert.equal(request.init.headers["X-Citry-State-Token"], "state-token");
   assert.equal(parsed.searchParams.get("_citry_protocol"), "citry-events/1");
   assert.deepEqual(JSON.parse(parsed.searchParams.get("_citry_capabilities")), {
     actions: ["render", "data", "state", "event", "redirect", "url"],
     renderers: ["vue-prepared/1"],
     swaps: ["morph"],
   });
+});
+
+test("GET to a handler that does not read State sends no State token", async () => {
+  const getDescriptor = { componentClassId: "Board_1", eventHandlers: { search: { httpMethod: "GET" } } };
+  let request;
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    eventBaseUrl: "/events/e/",
+    host: basicHost(() => ({ ...contextFor(), stateToken: "state-token", descriptor: getDescriptor })),
+    fetch: async (url, init) => {
+      request = { url, init };
+      const query = new URL(url, "https://example.test").searchParams;
+      return resultResponse({
+        requestId: query.get("_citry_request_id"),
+        calls: [{ sendSequence: Number(query.get("_citry_send_sequence")) }],
+      });
+    },
+  });
+  await bridge.send({ source: { stableId: "board", generation: 1 }, handler: "search", args: { q: "a" } });
+  assert.equal(new URL(request.url, "https://example.test").searchParams.has("_citry_state_token"), false);
+  assert.equal(request.init.headers["X-Citry-State-Token"], undefined);
 });
 
 test("GET rejects unrepresentable or reserved args before fetch and does not block the next call", async () => {

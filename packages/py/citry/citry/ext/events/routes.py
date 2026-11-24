@@ -58,7 +58,7 @@ from citry._protocol.events import (
 )
 from citry._urls import url_scheme_and_rest
 from citry.ext.dependencies.routes import SHARED_RUNTIME
-from citry.ext.events.codecs import decode_request
+from citry.ext.events.codecs import STATE_TOKEN_HEADER, decode_request
 from citry.ext.events.csrf import build_csrf_check
 from citry.ext.events.dispatcher import EventRequest, EventsDispatcher, TransportContext
 from citry.ext.events.errors import EventError, wire_error
@@ -449,7 +449,7 @@ def _respond(
     if isinstance(outcome, RouteResponse):
         # The RouteResponse escape hatch (per-event route only).
         response = _with_no_store(outcome) if request.method == "GET" else outcome
-        return _with_page_nonce_marks(response, sent=PAGE_NONCE_HEADER in request.headers)
+        return _with_cache_marks(response, request)
 
     if compat:
         response = _compat_response(outcome, request)
@@ -464,9 +464,21 @@ def _respond(
     # GET handlers are cacheable in principle but served no-store until GET
     # caching lands (design 3.5 and section 16).
     response = _with_no_store(response) if request.method == "GET" else response
-    # A Render in this answer may carry the nonce the call sent, which belongs
-    # to one tab of one visitor, so no cache may keep the answer for another.
-    return _with_page_nonce_marks(response, sent=PAGE_NONCE_HEADER in request.headers)
+    return _with_cache_marks(response, request)
+
+
+def _with_cache_marks(response: RouteResponse, request: RouteRequest) -> RouteResponse:
+    """
+    List in ``Vary`` every request header that changed this answer.
+
+    A Render in the answer may carry the nonce the call sent, which belongs
+    to one tab of one visitor, so no cache may keep the answer for another.
+    A GET call reads its State token from the ``X-Citry-State-Token`` header,
+    so a handler that lets caches keep its GET answer must not have one
+    visitor's answer served for another visitor's token.
+    """
+    varied = (PAGE_NONCE_HEADER, STATE_TOKEN_HEADER) if request.method == "GET" else (PAGE_NONCE_HEADER,)
+    return _with_page_nonce_marks(response, sent=PAGE_NONCE_HEADER in request.headers, varied=varied)
 
 
 def _encode_envelope(envelope: Mapping[str, Any]) -> tuple[str, Mapping[str, Any]]:
@@ -840,7 +852,9 @@ def _encode_location(url: str) -> str:
     return quote(url, safe=_LOCATION_SAFE)
 
 
-def _with_page_nonce_marks(response: RouteResponse, *, sent: bool) -> RouteResponse:
+def _with_page_nonce_marks(
+    response: RouteResponse, *, sent: bool, varied: tuple[str, ...] = (PAGE_NONCE_HEADER,)
+) -> RouteResponse:
     """
     Mark an answer so that no cache gives the nonce of one page to another.
 
@@ -850,21 +864,23 @@ def _with_page_nonce_marks(response: RouteResponse, *, sent: bool) -> RouteRespo
     call ``sent`` the header, ``no-store`` also keeps every cache from storing
     the answer, unless the handler set its own cache policy. Any ``Vary`` the
     handler set is extended rather than repeated, because the Django adapter
-    refuses a repeated header name.
+    refuses a repeated header name. ``varied`` names the request headers to
+    list, ``X-Citry-Page-Nonce`` first.
     """
     with_no_store = _with_no_store(response) if sent else response
     headers: list[tuple[str, str]] = []
-    varied = False
+    has_vary = False
     for name, value in with_no_store.headers:
         merged = value
         if name.lower() == "vary":
-            varied = True
+            has_vary = True
             listed = {item.strip().lower() for item in value.split(",")}
-            if "*" not in listed and PAGE_NONCE_HEADER.lower() not in listed:
-                merged = f"{value}, {PAGE_NONCE_HEADER}"
+            if "*" not in listed:
+                missing = [header for header in varied if header.lower() not in listed]
+                merged = ", ".join([value, *missing])
         headers.append((name, merged))
-    if not varied:
-        headers.append(("Vary", PAGE_NONCE_HEADER))
+    if not has_vary:
+        headers.append(("Vary", ", ".join(varied)))
     return RouteResponse(
         content=with_no_store.content,
         content_type=with_no_store.content_type,

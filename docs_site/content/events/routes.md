@@ -90,6 +90,13 @@ Build the URL while rendering with
 not change anything on the server. Its arguments arrive in the query string,
 which holds strings, booleans, numbers, and non-empty lists of those.
 
+When a GET handler reads State (it declares a `state` parameter),
+Citry's browser code sends the component's State token in the
+`X-Citry-State-Token` request header, so the token stays out of the URL
+that server and proxy logs record. Your own client can send the token in
+that header, or in the `_citry_state_token` query parameter. A call that
+sends different tokens in the two gets a `400` error.
+
 !!! note "Which HTTP methods a handler accepts"
 
     `methods` accepts `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, and

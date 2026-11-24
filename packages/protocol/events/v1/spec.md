@@ -1199,6 +1199,7 @@ Citry's HTTP routes read these request headers:
 | `X-Citry-Vue-Occurrence` | The ID the browser keeps for the calling component across renders. It is not the component's `renderId`. |
 | `X-Citry-Vue-Revision` | The revision of the Vue app that the browser has applied, in ASCII digits, at most 2^53 - 1. |
 | CSRF token header | `X-CSRFToken` unless the app's `_csrf_header` setting or the page names another. Read by a host framework that checks a token, such as Django, or by a component's own `_csrf` check. |
+| `X-Citry-State-Token` | Optional, read only on a `GET` call to a handler that reads State. The call's `stateToken`, sent here rather than in the URL, which server and proxy access logs record. See [State tokens on a GET call](#state-tokens-on-a-get-call). |
 | `X-Citry-Page-Nonce` | Optional. The CSP nonce of the page that sends the call, as `Citry.pageNonce()` returns it. When the app sets no `_csp_nonce`, an `html-fragment/1` render carries this nonce if it has the shape of one (CSP base64, at most 256 characters). Experimental. |
 
 A `vue-prepared/1` render needs all three `X-Citry-Vue-*` headers; without
@@ -1210,6 +1211,7 @@ not `same-origin` or `none`, with `csrf_failed`.
 
 Whether a call sends `X-Citry-Page-Nonce` changes its answer, so every
 answer lists `X-Citry-Page-Nonce` in its `Vary` header. The answer to a
+`GET` call also lists `X-Citry-State-Token`. The answer to a
 call that sends it holds the nonce of one page, so the server also sends
 it with `Cache-Control: no-store`, unless a handler's own response sets a
 cache policy. Citry's own browser code does
@@ -1217,7 +1219,8 @@ not send the header: its `vue-prepared/1` renders take the nonce from
 the page itself.
 
 Citry's browser code sends `X-Citry-Events` and the three `X-Citry-Vue-*`
-headers on every call. It sends the CSRF token header on a call that is
+headers on every call, and `X-Citry-State-Token` on a `GET` call to a
+handler that reads State. It sends the CSRF token header on a call that is
 not `GET` when the page has a token and the event URL is on the page's
 origin. Browser code that sends calls some other
 way, such as a transport registered with `Citry.events.registerTransport`,
@@ -1241,6 +1244,41 @@ Adapters remove these reserved fields before validating handler arguments. A
 hand-authored GET URL may omit all of them. The adapter supplies the current
 protocol, a transport-local request ID, baseline capabilities, and no caller,
 token, or send sequence.
+
+### State tokens on a GET call
+
+A `GET` call's token counts only when the handler reads State; for any
+other handler the server ignores it, wherever it is sent. Such a call can
+send its token in two places:
+
+- the `X-Citry-State-Token` request header, which Citry's browser code
+  uses, because server and proxy access logs record the URL of every
+  request;
+- the `_citry_state_token` query field, which the server also reads, so
+  clients that send the token there keep working.
+
+The server reads the two as one value:
+
+| The call sends | The server uses |
+|---|---|
+| Only the header, or the header and an empty query field | The header |
+| Only the query field, or the query field and an empty header | The query field |
+| The same token in both | That token |
+| Different values in the header and the query field, including a query field sent more than once | Nothing: it answers `400` with code `protocol_mismatch` before it runs the handler |
+
+The server then checks the token as [State tokens](#state-tokens)
+describes, wherever it came from, so a malformed header answers
+`invalid_state` like a malformed query field. A header sent more than
+once reaches the server as one value joined with commas, which is not a
+token the server can read. A token longer than the host server accepts
+in one header gets that server's own error, such as `431`, before Citry
+sees the call.
+
+A server that only reads the query field, such as one running Citry
+1.2.0 or earlier, does not see a token sent in the header and answers
+`invalid_state`. This happens only while a deploy runs, when a page that
+the newer release rendered calls a server still running the older one.
+[Versioning](#versioning) says why calls in that direction can fail.
 
 ## Versioning
 

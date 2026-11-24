@@ -1392,6 +1392,119 @@ class TestGetHandlers:
         assert state_action["targetRenderId"] == "i1"
         assert state_action["stateToken"] != token
 
+    def test_state_declaring_get_reads_the_token_header(self):
+        # Citry's browser code sends the token in a header, so it stays out
+        # of the URL that access logs record.
+        c = _citry()
+        greeter = _greeter(c)
+        client = _mounted(c)
+        token = _token(greeter, text="stored")
+        response = client.get(_event_url(greeter, "peek"), headers={"X-Citry-State-Token": token})
+        assert response.status_code == 200
+        assert response.json()["results"][0]["actions"][0]["value"] == {"text": "stored"}
+
+    def test_the_same_token_in_header_and_query_is_accepted(self):
+        c = _citry()
+        greeter = _greeter(c)
+        client = _mounted(c)
+        token = _token(greeter, text="stored")
+        response = client.get(
+            _event_url(greeter, "peek"),
+            params={"_citry_state_token": token},
+            headers={"X-Citry-State-Token": token},
+        )
+        assert response.status_code == 200
+        assert response.json()["results"][0]["actions"][0]["value"] == {"text": "stored"}
+
+    @pytest.mark.parametrize(
+        "query",
+        [
+            pytest.param({"_citry_state_token": "other"}, id="different"),
+            pytest.param([("_citry_state_token", "a"), ("_citry_state_token", "b")], id="repeated"),
+        ],
+    )
+    def test_different_tokens_in_header_and_query_are_refused(self, query):
+        # Choosing one would let whoever wrote the URL pick the State the
+        # call runs with, so the call is refused before any handler runs.
+        c = _citry()
+        greeter = _greeter(c)
+        client = _mounted(c)
+        response = client.get(
+            _event_url(greeter, "peek"), params=query, headers={"X-Citry-State-Token": _token(greeter)}
+        )
+        assert response.status_code == 400
+        error = response.json()["results"][0]["error"]
+        assert error["code"] == "protocol_mismatch"
+        assert "X-Citry-State-Token" in error["message"]
+
+    def test_an_empty_token_header_falls_back_to_the_query(self):
+        c = _citry()
+        greeter = _greeter(c)
+        client = _mounted(c)
+        token = _token(greeter, text="stored")
+        response = client.get(
+            _event_url(greeter, "peek"),
+            params={"_citry_state_token": token},
+            headers={"X-Citry-State-Token": ""},
+        )
+        assert response.status_code == 200
+        assert response.json()["results"][0]["actions"][0]["value"] == {"text": "stored"}
+
+    def test_a_malformed_token_header_answers_invalid_state(self):
+        c = _citry()
+        greeter = _greeter(c)
+        client = _mounted(c)
+        response = client.get(_event_url(greeter, "peek"), headers={"X-Citry-State-Token": "not-a-token"})
+        assert response.status_code == 403
+        assert response.json()["results"][0]["error"]["code"] == "invalid_state"
+
+    def test_a_stateless_get_ignores_the_token_header(self):
+        # As with the query parameter, a token on a handler that does not
+        # read State is not part of the call, even a conflicting one.
+        c = _citry()
+        greeter = _greeter(c)
+        client = _mounted(c)
+        response = client.get(
+            _event_url(greeter, "echo"),
+            params={"text": "hi", "_citry_state_token": "a"},
+            headers={"X-Citry-State-Token": "b"},
+        )
+        assert response.status_code == 200
+        assert response.json()["results"][0]["actions"] == [{"action": "data", "value": {"echo": "hi"}}]
+
+    def test_a_get_with_an_old_header_token_gets_a_new_one(self, monkeypatch):
+        c = _citry()
+        greeter = _greeter(c)
+        client = _mounted(c)
+        token = _token(greeter, text="stored")
+        monkeypatch.setattr("citry.ext.events.tokens._now", lambda: FIXED_NOW + 12 * 60 * 60)
+        response = client.get(
+            _event_url(greeter, "peek"),
+            params={"_citry_caller_render_id": "i1"},
+            headers={"X-Citry-State-Token": token},
+        )
+        state_action, data_action = response.json()["results"][0]["actions"]
+        assert data_action["value"] == {"text": "stored"}
+        assert state_action["action"] == "state"
+        assert state_action["targetRenderId"] == "i1"
+        assert state_action["stateToken"] != token
+
+    def test_get_answers_vary_on_the_token_header_and_post_answers_do_not(self):
+        # A cache that keys a GET answer only on its URL must not hand one
+        # visitor's State answer to a call that sent another token.
+        c = _citry()
+        greeter = _greeter(c)
+        client = _mounted(c)
+        response = client.get(_event_url(greeter, "peek"), headers={"X-Citry-State-Token": _token(greeter)})
+        assert response.headers["vary"] == "X-Citry-Page-Nonce, X-Citry-State-Token"
+        # A GET handler that sets its own public cache policy is the case
+        # where a shared cache would otherwise keep the answer.
+        response = client.get(_event_url(greeter, "cached"))
+        assert response.headers["cache-control"] == "public, max-age=60"
+        assert response.headers["vary"] == "X-Citry-Page-Nonce, X-Citry-State-Token"
+        response = client.post(_event_url(greeter, "quiet"), data={"_citry_state_token": _token(greeter)})
+        assert response.headers["vary"] == "X-Citry-Page-Nonce"
+
     def test_a_get_without_a_token_gets_no_new_token(self, monkeypatch):
         # A GET to a handler that does not read State sends no token, so
         # there is nothing to renew.

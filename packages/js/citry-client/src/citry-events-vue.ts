@@ -2,6 +2,7 @@
 
 import {
   assertValidActionList as assertProtocolActionList,
+  CARRIER_HEADERS,
   buildOkResult,
   buildCall,
   buildCallEnvelope,
@@ -885,9 +886,12 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       query.append("_citry_capabilities", JSON.stringify(envelope.capabilities));
       query.append("_citry_caller_render_id", call.callerRenderId ?? "");
       query.append("_citry_send_sequence", String(call.sendSequence));
-      if (handlerOptions.usesState === true && call.stateToken !== undefined)
-        query.append("_citry_state_token", call.stateToken);
       requestUrl += `?${query.toString()}`;
+      // The token goes in a header rather than the query, because servers and proxies write
+      // the URL to their access logs. It still goes only to a handler that reads State, so a
+      // read-only GET answer does not depend on it.
+      if (handlerOptions.usesState === true && call.stateToken !== undefined)
+        headers[CARRIER_HEADERS.stateToken] = call.stateToken;
     }
     const requestHeaders = useGet
       ? Object.fromEntries(Object.entries(headers).filter(([name]) => name !== "Content-Type"))

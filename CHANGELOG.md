@@ -14,6 +14,18 @@
   server-stored State, each new token adds one cache entry. See
   [Treat State as input](https://citry.dev/security/#treat-state-as-client-input).
 
+### Changed
+
+- Citry's browser code now sends the State token of a GET event call in
+  the `X-Citry-State-Token` header instead of the URL, so it no longer
+  lands in server and proxy access logs. The server still reads the
+  `_citry_state_token` query parameter, so links and clients that send
+  it keep working, but a call that sends different tokens in the two
+  now gets a `400` error. During a deploy, a GET call that reads State
+  from a page rendered by 1.3.0 fails with `invalid_state` if it
+  reaches a server still running an earlier release. See
+  [Allow GET requests](https://citry.dev/events/routes/#expose-a-read-only-get-endpoint).
+
 ## v1.2.0
 
 Citry 1.2.0 adds Experimental APIs for host integrations such as

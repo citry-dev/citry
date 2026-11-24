@@ -62,6 +62,7 @@ from citry._protocol.events import (
     REQUEST_ID_FIELD,
     SEND_SEQUENCE_FIELD,
     STATE_TOKEN_FIELD,
+    STATE_TOKEN_HEADER,
     JsonNestingError,
     build_partial_call_envelope,
     build_query_envelope,
@@ -85,6 +86,7 @@ __all__ = [
     "REQUEST_ID_FIELD",
     "SEND_SEQUENCE_FIELD",
     "STATE_TOKEN_FIELD",
+    "STATE_TOKEN_HEADER",
     "DecodedPayload",
     "EnvelopeCodec",
     "FlatJsonCodec",
@@ -262,10 +264,13 @@ def decode_query_request(request: RouteRequest, *, state_declared: bool) -> dict
     """
     The GET codec: args ride as query parameters (design 6.2).
 
-    The state token rides the ``_citry_state_token`` parameter only when the
-    handler declares ``state`` in its signature; a read-only GET URL stays
-    pasteable and token-free, and a stray token parameter on a stateless
-    handler is simply not part of the call. ``_citry_caller_render_id`` maps
+    The State token counts only when the handler declares ``state`` in its
+    signature; a read-only GET URL stays pasteable and token-free, and a
+    stray token on a stateless handler is simply not part of the call.
+    Citry's browser code sends the token in the ``X-Citry-State-Token``
+    header, which access logs do not record; the ``_citry_state_token``
+    query parameter is still read for clients that send it there. A call
+    that sends both with different values is refused. ``_citry_caller_render_id`` maps
     onto the call's ``callerRenderId`` either way. Browser sends also carry
     their integer out-of-order guard as ``_citry_send_sequence``. Browser
     calls preserve the flattened envelope's protocol, request ID, and JSON capabilities
@@ -281,13 +286,51 @@ def decode_query_request(request: RouteRequest, *, state_declared: bool) -> dict
     Returns:
         The single-call envelope the query string means.
 
+    Raises:
+        EventError: With status 400 when the header and the query parameter
+            carry different tokens.
+
     """
     args: dict[str, Any] = StringArgs(
         {key: values[0] if len(values) == 1 else list(values) for key, values in request.query.items()}
     )
+    if state_declared:
+        args = _merge_header_state_token(args, request)
     fields = split_query_fields(args, state_declared=state_declared)
     fields.call["args"] = StringArgs(fields.call["args"])
     return build_query_envelope(fields)
+
+
+def _merge_header_state_token(args: dict[str, Any], request: RouteRequest) -> dict[str, Any]:
+    """
+    Put the ``X-Citry-State-Token`` header's token where the query codec reads it.
+
+    The header and the query parameter are two ways to send one token, so
+    the rest of the codec reads a single place. An empty header counts as
+    absent, matching an empty query parameter.
+
+    Raises:
+        EventError: With status 400 when both carry a token and they differ.
+            Picking one would let a URL someone else wrote decide which
+            State a call runs with, so the call is refused instead.
+
+    """
+    header = request.headers.get(STATE_TOKEN_HEADER) or ""
+    if not header:
+        return args
+    query = args.get(STATE_TOKEN_FIELD)
+    # A repeated query parameter arrives as a list, which never equals the
+    # header's string, so it is refused like any other mismatch.
+    if query not in (None, "", header):
+        msg = (
+            f"The call sends a State token in both the {STATE_TOKEN_HEADER} header and the"
+            f" {STATE_TOKEN_FIELD} query parameter, and they differ. Send it in one place."
+        )
+        raise EventError(msg, status=400)
+    # StringArgs marks the args as text for binding; keep that type.
+    merged = StringArgs(args)
+    merged[STATE_TOKEN_FIELD] = header
+    return merged
 
 
 def decode_request(
