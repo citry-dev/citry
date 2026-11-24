@@ -2361,10 +2361,10 @@ class _Rewriter:
     that parses it, even when the schema itself never checks a value twice,
     for a class that Citry's own union check may check again.
 
-    ``count_serializers=True`` builds the copy for a State, which Citry
-    writes out again with Pydantic's serializer: under the PyPy rules each
-    node with a serializer function that leads into recursion counts a
-    level, since writing the State out calls that function at every level.
+    Under the PyPy rules, each node with an app's serializer function that
+    leads into recursion counts a level (``_counts_serializer``): writing a
+    State out calls that function at every level, and a handler may store
+    checked event data in State as it is.
 
     ``by_name=True`` builds the copy that checks browser writes to a model
     State, whose keys are field names. pydantic-core 2.46 (Pydantic 2.13.0)
@@ -2376,20 +2376,11 @@ class _Rewriter:
     reads keys as the class does.
     """
 
-    def __init__(
-        self,
-        schema: _Schema,
-        *,
-        wrapped: bool,
-        by_name: bool = False,
-        text_wrappers: bool = False,
-        count_serializers: bool = False,
-    ) -> None:
+    def __init__(self, schema: _Schema, *, wrapped: bool, by_name: bool = False, text_wrappers: bool = False) -> None:
         self.schema = schema
         self.wrapped = wrapped
         self.by_name = by_name
         self.text_wrappers = text_wrappers
-        self.count_serializers = count_serializers
         self._names: dict[tuple[str, _Context], str] = {}
 
     def label(self, choice: Any) -> str | None:
@@ -2476,7 +2467,10 @@ class _Rewriter:
             copied.pop("ref", None)
             if kind == "definition-ref":
                 copied["schema_ref"] = reference(str(node.get("schema_ref", "")), context)
-                target[key] = copied
+                # A serializer on a reference, as in Annotated[Tree, WrapSerializer(f)]
+                # inside Tree, runs at every level like one on the definition.
+                counted = self._counts_serializer(node, _node_context(node, context))
+                target[key] = _wrap(copied, _counted) if counted else copied
                 continue
             stack.append(("finish", (node, copied), _node_context(node, context), target, key))
             below = _child_context(node, context)
@@ -2491,11 +2485,7 @@ class _Rewriter:
     def finish(self, node: dict[str, Any], copied: dict[str, Any], context: _Context) -> Any:
         """Apply this module's change to one schema node whose children are already copied."""
         result = self._change(node, copied, context)
-        # Writing a State out calls the app's serializer function at every
-        # level of a recursive value, and on PyPy each call stays on the
-        # stack, so the read counts the level that the write-out will take.
-        counts_serializer = context[0] and self.count_serializers and STACK_SET_BY_RECURSION_LIMIT
-        if counts_serializer and _has_authors_serializer(node) and self.schema.reaches_recursion(node):
+        if self._counts_serializer(node, context):
             result = _wrap(result, _counted)
         if context[0] and (self.text_wrappers or self.schema.repeats_anywhere()):
             text_steps = self.schema.text_steps(node)
@@ -2505,6 +2495,22 @@ class _Rewriter:
                 long_steps = _LONG_JSON_TEXT_STEPS if _kind(node) == "json" else 0
                 return _wrap(result, _text_spending(text_steps, long_steps))
         return result
+
+    def _counts_serializer(self, node: dict[str, Any], context: _Context) -> bool:
+        """
+        Whether the copy counts a level at a node for its serializer function, under the PyPy rules.
+
+        Writing a State out calls an app's serializer function at every
+        level of a recursive value, and on PyPy each call stays on the
+        stack, so the check counts the level that writing out will take.
+        Event data counts too: a handler may store it in State as it is.
+        """
+        return (
+            context[0]
+            and STACK_SET_BY_RECURSION_LIMIT
+            and _has_authors_serializer(node)
+            and self.schema.reaches_recursion(node)
+        )
 
     def _change(self, node: dict[str, Any], copied: dict[str, Any], context: _Context) -> Any:
         wrappable, under_wrap = context
@@ -3189,13 +3195,9 @@ def _on_a_check_thread(function: Callable[..., Any]) -> Callable[..., Any]:
     return moved
 
 
-def _build(
-    schema: _Schema, *, wrapped: bool, by_name: bool = False, text_wrappers: bool = False, state: bool = False
-) -> Any:
+def _build(schema: _Schema, *, wrapped: bool, by_name: bool = False, text_wrappers: bool = False) -> Any:
     def build() -> Any:
-        rewriter = _Rewriter(
-            schema, wrapped=wrapped, by_name=by_name, text_wrappers=text_wrappers, count_serializers=state
-        )
+        rewriter = _Rewriter(schema, wrapped=wrapped, by_name=by_name, text_wrappers=text_wrappers)
         copied = rewriter.rewrite(schema.root)
         return pydantic_core.SchemaValidator(copied, _top_config(schema.root), _use_prebuilt=False)
 
@@ -3267,12 +3269,12 @@ def checker_for(cls: type, *, state: bool = False, by_name: bool = False, repeat
     try:
         # Without wrappers nothing forgets the by-name setting, so that copy keeps its aliases.
         if repeated:
-            validator = _build(schema, wrapped=True, by_name=by_name, text_wrappers=True, state=state)
+            validator = _build(schema, wrapped=True, by_name=by_name, text_wrappers=True)
             checker = Checker(validator, wrapped=True, **common)
         elif _needs_no_wrappers(schema, common["longest_message"]):
             checker = Checker(_build(schema, wrapped=False), wrapped=False, **common)
         else:
-            checker = Checker(_build(schema, wrapped=True, by_name=by_name, state=state), wrapped=True, **common)
+            checker = Checker(_build(schema, wrapped=True, by_name=by_name), wrapped=True, **common)
     except Exception:  # noqa: BLE001 - a call must never fail because the copy could not be built
         logger.exception(
             f"Citry could not build its copy of the validator for {cls.__qualname__}. It falls back to a simpler"

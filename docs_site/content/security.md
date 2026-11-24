@@ -846,7 +846,7 @@ three levels, so a model with one counts four, and a union counts two.
 Each `Sequence[...]` or `defaultdict` field and each `OnErrorOmit` item
 adds one more, and so does each level of a recursive type that has a
 serializer function such as `WrapSerializer`, because Pydantic calls
-that function at each level when Citry writes the State back out. So
+that function at each level when Citry writes State back out. So
 recursive data can nest fewer levels on PyPy than on CPython. Measured on PyPy 7.3.23, a tree of models was accepted up to
 about 30 levels when each model held its children in a `list`, 15 in a
 `Sequence`, and 10 in `list[OnErrorOmit[list[OnErrorOmit[Tree]]]]`.
@@ -866,8 +866,11 @@ deep inside it: Citry does not count the up to 200 levels of such a
 field, and its own checks use part of the stack too. In our tests a
 model with 48 validators, 31 levels deep, with 100 levels of
 `Json[Any]` below it ended the process, as it does with citry 1.2.0.
-The other is your own code that validates nested data again, such as
-a validator that calls `model_validate` on a nested value. A larger
+The other is your own code that handles nested data again: a
+validator that calls `model_validate` on a nested value, or a handler
+that stores event data in a State field of another type, such as a
+`Sequence[...]` or a type with a `WrapSerializer`, which Citry then
+writes out at every level of the data. A larger
 thread stack does not help on PyPy, and raising the recursion limit
 does not make the check safer. If your app takes deeply nested data
 from the browser, run it on CPython.

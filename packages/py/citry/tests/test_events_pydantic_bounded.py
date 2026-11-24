@@ -1098,13 +1098,21 @@ SerializedNest = TypeAliasType(
     "SerializedNest", "Annotated[list[SerializedNest | None], pydantic.WrapSerializer(_write_unchanged)]"
 )
 UnserializedNest = TypeAliasType("UnserializedNest", "list[UnserializedNest | None]")
+# The serializer sits on the reference to the alias, not on its definition.
+SerializedReference = TypeAliasType(
+    "SerializedReference", "list[Annotated[SerializedReference, pydantic.WrapSerializer(_write_unchanged)] | None]"
+)
 SequenceNest = TypeAliasType("SequenceNest", "Sequence[SequenceNest | None]")
 
 
 @pytest.mark.usefixtures("pypy_stack_rules")
 @pytest.mark.parametrize(
     ("field_type", "refused"),
-    [pytest.param(SerializedNest, True, id="serializer"), pytest.param(UnserializedNest, False, id="plain list")],
+    [
+        pytest.param(SerializedNest, True, id="serializer"),
+        pytest.param(SerializedReference, True, id="serializer on the reference"),
+        pytest.param(UnserializedNest, False, id="plain list"),
+    ],
 )
 def test_on_pypy_a_state_write_counts_each_serializer_function_toward_the_nesting_limit(
     field_type: Any, *, refused: bool
@@ -1147,14 +1155,15 @@ def test_on_pypy_a_state_write_counts_pydantics_own_sequence_serializer_once() -
 
 
 @pytest.mark.usefixtures("pypy_stack_rules")
-def test_on_pypy_event_data_does_not_count_serializer_functions() -> None:
-    # Citry never writes event data out, so its serializers take no stack.
+def test_on_pypy_event_data_counts_serializer_functions_too() -> None:
+    # A handler may store the checked data in State as it is, and Citry then
+    # writes it out through the same serializer at every level.
     data = pydantic.create_model("Data", tree=(SerializedNest | None, None))
     payload: Any = []
     for _ in range(bounded.SMALL_STACK_CHECK_DEPTH + 5):
         payload = [payload]
 
-    assert validate_args(data, {"tree": payload}).ok
+    assert validate_args(data, {"tree": payload}).fields == {"_args": bounded.TOO_DEEP_MESSAGE}
 
 
 @pydantic.dataclasses.dataclass

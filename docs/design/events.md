@@ -2168,16 +2168,21 @@ Error modes:
       `_discarded_spending`, the wrappers from `_spending` and
       `_text_spending`. Left out of the count, these calls let data
       nested within the limit end the process. A node with an app's
-      serializer function (`WrapSerializer`, `PlainSerializer`:
-      `_has_authors_serializer`) that leads into recursion also counts
-      a level in the copy for a State (`count_serializers`), though the
-      read calls no Python there: writing a State
-      out (`state_wire_values`, `model_dump`) calls the function at each
-      level (Pydantic's own, for `Sequence[...]` and `defaultdict`, sit
-      on a node whose own wrap function is counted already), and a
-      recursive list alias with a `WrapSerializer` on its
-      uncounted list levels passed the read at 150 levels in a lax State
-      and then ended PyPy 7.3.23 there, as on 1.2.0. Parts that pydantic-core
+      serializer function (`WrapSerializer`, `PlainSerializer`), on a
+      definition or on a reference to one, that leads into recursion
+      also counts a level (`_Rewriter._counts_serializer`), though the
+      read calls no Python there: writing a State out
+      (`state_wire_values`, `model_dump`) calls the function at each
+      level. Pydantic's own serializers, for `Sequence[...]` and
+      `defaultdict`, sit on a node whose own wrap function is counted
+      already. Event data counts too, because a handler may store the
+      checked value in State as it is. Without this, a recursive list
+      alias with a `WrapSerializer` on its uncounted list levels passed
+      the check at 150 levels, as a State write and as event data that
+      the handler stored in State, and then ended PyPy 7.3.23 when the
+      State was written out, as on 1.2.0. A handler that stores data in
+      a State field of another type, whose serializer function or
+      `Sequence[...]` the check never saw, is not counted. Parts that pydantic-core
       checks without calling Python still take stack uncounted, so a
       schema with dozens of them at each level can still end PyPy below
       the limit, as Pydantic alone does. Inside `Json[...]` no wrapper

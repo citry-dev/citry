@@ -13,8 +13,8 @@ still requires citry-core 2.1.2.
   earlier releases gets a 422 instead. The limit there is now 32 levels
   (it was 64), wrap validators, unions, `Sequence[...]` fields and
   `OnErrorOmit` items each count as more than one level, and each level
-  of a recursive State field with a `WrapSerializer` or other
-  serializer function counts too, so on PyPy
+  of a recursive type with a `WrapSerializer` or other serializer
+  function counts too, so on PyPy
   some data that earlier releases accepted gets a 422 that says it is
   nested too deeply. A schema with many validators at each level,
   especially with a free-form field deep inside it, or your own code
