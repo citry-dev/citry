@@ -190,8 +190,8 @@ mistake needs (section 7); `none` means the current page is enough.
 | m26-browser-input-missing | Missing required input on a browser-side component | H5 required | neutral | Ref A |
 | m27-browser-input-type | Wrong-typed input on a browser-side component | H5 type | neutral | Ref A |
 | m28-input-written-by-child | Child component changes an input it received | H5 structure | neutral | Ref A |
-| m29-listener-name | Parent listens for a misspelled event | H6 name | neutral | none |
-| m30-event-payload-type | Event sent with a payload of the wrong type | H6 type | neutral | none |
+| m29-listener-name | Parent listens for a misspelled event from its child | H6 name | neutral | none |
+| m30-event-payload-type | Child component's event carries a value of the wrong type | H6 type | neutral | none |
 | m31-dom-event-name | Misspelled browser event name on an element | H6 name | neutral | none |
 | m32-payload-type | Request payload field of the wrong type | H7 type | neutral | none |
 | m33-payload-missing-field | Request payload leaves out a required field | H7 required | neutral | none |
@@ -199,8 +199,8 @@ mistake needs (section 7); `none` means the current page is enough.
 | m35-required-slot-missing | Required slot left unfilled | H8 required | neutral | none |
 | m36-slot-data-name | Slot fill reads a misspelled slot-data field | H8b name | neutral | Ref B |
 | m37-slot-data-type | Slot fill uses slot data as the wrong type | H8b type | neutral | Ref B |
-| m38-state-read-typo | Template reads a misspelled state field | H9 name | neutral | none |
-| m39-state-type | State field given a value of the wrong type | H9 type | neutral | none |
+| m38-state-read-typo | Displayed value is read from a misspelled state field | H9 name | neutral | none |
+| m39-state-type | Server handler stores a wrong-typed value in a state field | H9 type | neutral | none |
 | m40-browser-value-name | Browser code reads a misspelled server value | H3 name | neutral | none |
 | m41-browser-value-not-json | Server passes browser code a value the browser cannot receive | H3 type | citry-inventory | none |
 | m42-secret-sent-to-browser | Server sends a secret to the browser | H3 exposure | citry-inventory | none |
@@ -257,7 +257,7 @@ correct = "Clicking Close in the status line hides the details text and the Deta
 
 [[mistake]]
 id = "m29-listener-name"
-title = "Parent listens for a misspelled event"
+title = "Parent listens for a misspelled event from its child"
 category = "events"
 origin = "neutral"
 description = "The card emits or calls `hide` correctly, but the page listens under a misspelled name, for example `@hdie` or `onHdie`."
@@ -265,7 +265,7 @@ correct = "Clicking Hide on the first card hides that card."
 
 [[mistake]]
 id = "m30-event-payload-type"
-title = "Event sent with a payload of the wrong type"
+title = "Child component's event carries a value of the wrong type"
 category = "events"
 origin = "neutral"
 description = "The card's `hide` event carries a number, for example the card's task count, where the page expects the card's title (a string). Where the event carries no value, because the page's listener already knows which card it belongs to, this mistake does not apply."
@@ -329,7 +329,7 @@ correct = "Each card's footer link reads `Open Alpha (3)`, `Open Beta (5)`, `Ope
 
 [[mistake]]
 id = "m38-state-read-typo"
-title = "Template reads a misspelled state field"
+title = "Displayed value is read from a misspelled state field"
 category = "naming"
 origin = "neutral"
 description = "The counter's text reads the saved total from a misspelled state field, for example `cuont`, while the code that updates it is correct."
@@ -337,7 +337,7 @@ correct = "Clicking Add changes the text from `Saved: 0` to `Saved: 1`."
 
 [[mistake]]
 id = "m39-state-type"
-title = "State field given a value of the wrong type"
+title = "Server handler stores a wrong-typed value in a state field"
 category = "types"
 origin = "neutral"
 description = "The Add handler stores the new total as text, for example `str(total)`, in a state field declared as a number."
@@ -758,7 +758,7 @@ value).
 | m57-duplicate-id | Two elements share an id | H11 | djLint H053 | none |
 | m58-loop-non-list | Loop over a value that is not a list | H1 | Reflex `ForeachVarError`, pyright, TypeScript | none |
 | m59-unknown-helper | Unknown template filter or helper function | H1 | Django and Jinja when the template loads, djls | Ref H |
-| m60-handler-arguments | Handler declares arguments the event does not send | H6 | Reflex `EventFnArgMismatchError`, TypeScript | none |
+| m60-handler-arguments | Parent's handler takes more arguments than its child's event sends | H6 | Reflex `EventFnArgMismatchError`, TypeScript | none |
 | m61-route-param-type | Link passes a route parameter of the wrong type | H13 | FastHTML 404, typed routers | Ref E |
 | m62-boolean-attribute-string | Boolean attribute given the text "false" | H11 | TypeScript in JSX, Reflex prop types | none |
 | m63-binding-on-non-input | Two-way binding on an element with no value | H16 | Vue `X_V_MODEL_ON_INVALID_ELEMENT`, `vue/valid-v-model`; Citry `browser.invalid-state-binding-target` for `:c-*` bindings only (PR 5 found that it does not check `v-model`) | Ref D |
@@ -838,7 +838,7 @@ correct = "The page shows `Projects: 3`."
 
 [[mistake]]
 id = "m60-handler-arguments"
-title = "Handler declares arguments the event does not send"
+title = "Parent's handler takes more arguments than its child's event sends"
 category = "events"
 origin = "neutral"
 description = "The page's hide handler is changed to require two arguments (the title and a reason), while the card's event sends only the title."
