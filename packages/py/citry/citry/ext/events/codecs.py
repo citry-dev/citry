@@ -268,7 +268,7 @@ def decode_query_request(request: RouteRequest, *, state_declared: bool) -> dict
     signature; a read-only GET URL stays pasteable and token-free, and a
     stray token on a stateless handler is simply not part of the call.
     Citry's browser code sends the token in the ``X-Citry-State-Token``
-    header, which access logs do not record; the ``_citry_state_token``
+    header, which access logs do not record by default; the ``_citry_state_token``
     query parameter is still read for clients that send it there. A call
     that sends both with different values is refused. ``_citry_caller_render_id`` maps
     onto the call's ``callerRenderId`` either way. Browser sends also carry

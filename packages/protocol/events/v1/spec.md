@@ -991,7 +991,10 @@ answers the first problem it finds:
 
 On a component that declares State, a call needs State when its handler
 reads State, when it sends `stateUpdates`, or when it sends a token at
-all. A component without State ignores a token.
+all. A `GET` call is the exception to the last case: its token counts
+only when the handler reads State (see
+[State tokens on GET](#state-tokens-on-get)). A component without State
+ignores a token.
 
 Step 1 exists because a later release can change the token format.
 During a deploy, a page that the new release rendered can send its token
@@ -1199,7 +1202,7 @@ Citry's HTTP routes read these request headers:
 | `X-Citry-Vue-Occurrence` | The ID the browser keeps for the calling component across renders. It is not the component's `renderId`. |
 | `X-Citry-Vue-Revision` | The revision of the Vue app that the browser has applied, in ASCII digits, at most 2^53 - 1. |
 | CSRF token header | `X-CSRFToken` unless the app's `_csrf_header` setting or the page names another. Read by a host framework that checks a token, such as Django, or by a component's own `_csrf` check. |
-| `X-Citry-State-Token` | Optional, read only on a `GET` call to a handler that reads State. The call's `stateToken`, sent here rather than in the URL, which server and proxy access logs record. See [State tokens on a GET call](#state-tokens-on-a-get-call). |
+| `X-Citry-State-Token` | Optional. The call's `stateToken`. The server reads it only on a `GET` call to a handler that reads State. Citry's browser code sends it here and not in the URL, because server and proxy access logs record URLs. See [State tokens on GET](#state-tokens-on-get). |
 | `X-Citry-Page-Nonce` | Optional. The CSP nonce of the page that sends the call, as `Citry.pageNonce()` returns it. When the app sets no `_csp_nonce`, an `html-fragment/1` render carries this nonce if it has the shape of one (CSP base64, at most 256 characters). Experimental. |
 
 A `vue-prepared/1` render needs all three `X-Citry-Vue-*` headers; without
@@ -1211,12 +1214,17 @@ not `same-origin` or `none`, with `csrf_failed`.
 
 Whether a call sends `X-Citry-Page-Nonce` changes its answer, so every
 answer lists `X-Citry-Page-Nonce` in its `Vary` header. The answer to a
-`GET` call also lists `X-Citry-State-Token`. The answer to a
-call that sends it holds the nonce of one page, so the server also sends
-it with `Cache-Control: no-store`, unless a handler's own response sets a
-cache policy. Citry's own browser code does
+call that sends the nonce holds the nonce of one page, so the server also
+sends it with `Cache-Control: no-store`, unless a handler's own response
+sets a cache policy. Citry's own browser code does
 not send the header: its `vue-prepared/1` renders take the nonce from
-the page itself.
+the page itself. Every answer to a `GET` call also lists
+`X-Citry-State-Token` in `Vary`, because the token decides which State
+the handler sees. Some shared caches ignore `Vary`, so when a `GET` call
+sends `X-Citry-State-Token` and the handler's own response sets a cache
+policy, the server makes it `private`: it adds `private` and removes
+`public`, `s-maxage` and `proxy-revalidate`, unless the policy already
+holds `private` or `no-store`.
 
 Citry's browser code sends `X-Citry-Events` and the three `X-Citry-Vue-*`
 headers on every call, and `X-Citry-State-Token` on a `GET` call to a
@@ -1245,40 +1253,53 @@ hand-authored GET URL may omit all of them. The adapter supplies the current
 protocol, a transport-local request ID, baseline capabilities, and no caller,
 token, or send sequence.
 
-### State tokens on a GET call
+### State tokens on GET
 
-A `GET` call's token counts only when the handler reads State; for any
-other handler the server ignores it, wherever it is sent. Such a call can
-send its token in two places:
+A `GET` call to a handler that reads State sends its State token in one
+of two places:
 
 - the `X-Citry-State-Token` request header, which Citry's browser code
   uses, because server and proxy access logs record the URL of every
-  request;
+  request and, by default, not its headers;
 - the `_citry_state_token` query field, which the server also reads, so
   clients that send the token there keep working.
 
-The server reads the two as one value:
+A `GET` call to any other handler has no use for a token, and the server
+ignores one wherever it is sent.
+
+The server treats the header and the query field as one token. An empty
+header or query field counts as absent.
 
 | The call sends | The server uses |
 |---|---|
-| Only the header, or the header and an empty query field | The header |
-| Only the query field, or the query field and an empty header | The query field |
+| Only the header | The header |
+| Only the query field, once | The query field |
 | The same token in both | That token |
-| Different values in the header and the query field, including a query field sent more than once | Nothing: it answers `400` with code `protocol_mismatch` before it runs the handler |
+| Different tokens in the header and the query field | Neither. It answers `400` with code `protocol_mismatch`, and the handler does not run. |
+| The header, and the query field more than once | Neither, as above. |
+
+Refusing two different tokens keeps a URL that someone else wrote from
+choosing which State a call runs with. A query field sent more than once
+without the header gives no token, as for any other `GET` call.
 
 The server then checks the token as [State tokens](#state-tokens)
 describes, wherever it came from, so a malformed header answers
-`invalid_state` like a malformed query field. A header sent more than
-once reaches the server as one value joined with commas, which is not a
-token the server can read. A token longer than the host server accepts
-in one header gets that server's own error, such as `431`, before Citry
-sees the call.
+`invalid_state` like a malformed query field.
 
 A server that only reads the query field, such as one running Citry
 1.2.0 or earlier, does not see a token sent in the header and answers
-`invalid_state`. This happens only while a deploy runs, when a page that
-the newer release rendered calls a server still running the older one.
-[Versioning](#versioning) says why calls in that direction can fail.
+`invalid_state`. This happens when a page that a newer release rendered
+calls a server that still runs an older one, for example during a
+rolling deploy or a rollback. So when a `GET` call that sent the token
+only in the header gets a single `invalid_state` error, Citry's browser
+code sends the same call once more with the token in the query field
+and without the header, and uses that answer. A client that sends the
+header should do the same while it may reach such a server.
+
+A header sent more than once reaches the server as one value joined
+with commas, which is not a token the server can read, so the call
+answers `invalid_state`. A web server may refuse a header longer than
+its own limit with its own error before Citry sees the call.
 
 ## Versioning
 

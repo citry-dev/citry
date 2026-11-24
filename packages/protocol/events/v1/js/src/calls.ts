@@ -59,7 +59,7 @@ export const CARRIER_FIELDS = {
 	capabilities: "_citry_capabilities",
 } as const;
 // A GET call sends its State token in this request header, which access logs
-// do not record the way they record a query string. The server still reads
+// do not record by default, unlike the query string. The server still reads
 // CARRIER_FIELDS.stateToken from the query for clients that send it there.
 export const CARRIER_HEADERS = {
 	stateToken: "X-Citry-State-Token",

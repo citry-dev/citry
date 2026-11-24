@@ -1436,6 +1436,8 @@ class TestGetHandlers:
         error = response.json()["results"][0]["error"]
         assert error["code"] == "protocol_mismatch"
         assert "X-Citry-State-Token" in error["message"]
+        # The refusal depends on the header too, so a cache must not reuse it.
+        assert response.headers["vary"] == "X-Citry-Page-Nonce, X-Citry-State-Token"
 
     def test_an_empty_token_header_falls_back_to_the_query(self):
         c = _citry()
@@ -1455,6 +1457,19 @@ class TestGetHandlers:
         greeter = _greeter(c)
         client = _mounted(c)
         response = client.get(_event_url(greeter, "peek"), headers={"X-Citry-State-Token": "not-a-token"})
+        assert response.status_code == 403
+        assert response.json()["results"][0]["error"]["code"] == "invalid_state"
+
+    def test_a_repeated_token_header_answers_invalid_state(self):
+        # The host joins a repeated header with commas, which no token reads as.
+        c = _citry()
+        greeter = _greeter(c)
+        client = _mounted(c)
+        token = _token(greeter)
+        response = client.get(
+            _event_url(greeter, "peek"),
+            headers=[("X-Citry-State-Token", token), ("X-Citry-State-Token", token)],
+        )
         assert response.status_code == 403
         assert response.json()["results"][0]["error"]["code"] == "invalid_state"
 
@@ -1504,6 +1519,18 @@ class TestGetHandlers:
         assert response.headers["vary"] == "X-Citry-Page-Nonce, X-Citry-State-Token"
         response = client.post(_event_url(greeter, "quiet"), data={"_citry_state_token": _token(greeter)})
         assert response.headers["vary"] == "X-Citry-Page-Nonce"
+
+    def test_a_handler_cache_policy_turns_private_when_the_token_rides_a_header(self):
+        # The URL no longer separates one visitor's token from another's, and
+        # a CDN that ignores Vary would share the answer, so only the
+        # visitor's own browser may keep it.
+        c = _citry()
+        greeter = _greeter(c)
+        client = _mounted(c)
+        response = client.get(_event_url(greeter, "cached"), headers={"X-Citry-State-Token": "t"})
+        assert response.headers["cache-control"] == "private, max-age=60"
+        response = client.get(_event_url(greeter, "cached"))
+        assert response.headers["cache-control"] == "public, max-age=60"
 
     def test_a_get_without_a_token_gets_no_new_token(self, monkeypatch):
         # A GET to a handler that does not read State sends no token, so

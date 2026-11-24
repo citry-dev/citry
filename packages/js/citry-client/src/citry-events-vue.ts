@@ -2,6 +2,7 @@
 
 import {
   assertValidActionList as assertProtocolActionList,
+  CARRIER_FIELDS,
   CARRIER_HEADERS,
   buildOkResult,
   buildCall,
@@ -342,6 +343,19 @@ const flatQuery = (args: JsonObject): URLSearchParams => {
     } else append(key, value);
   }
   return query;
+};
+
+// Whether a raw per-event answer is the single `invalid_state` error a server gives a call that
+// needs State and sent no token it could read. Only the shape is checked here; the full result
+// check runs later on whichever answer the bridge keeps.
+const answersInvalidState = (raw: unknown): boolean => {
+  if (raw === null || typeof raw !== "object" || !Array.isArray((raw as { results?: unknown }).results)) return false;
+  const results = (raw as { results: unknown[] }).results;
+  if (results.length !== 1) return false;
+  const [result] = results;
+  if (result === null || typeof result !== "object") return false;
+  const error = (result as { error?: unknown }).error;
+  return error !== null && typeof error === "object" && (error as { code?: unknown }).code === "invalid_state";
 };
 
 const attachmentFilename = (value: string): string => {
@@ -879,6 +893,8 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     const controller = new AbortController();
     job.controller = controller;
     let requestUrl = target.href;
+    // The URL that carries the token in its query, used only when a server ignores the header.
+    let queryTokenUrl: string | null = null;
     if (useGet) {
       const query = flatQuery(input.args ?? {});
       query.append("_citry_protocol", envelope.protocol);
@@ -886,20 +902,25 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       query.append("_citry_capabilities", JSON.stringify(envelope.capabilities));
       query.append("_citry_caller_render_id", call.callerRenderId ?? "");
       query.append("_citry_send_sequence", String(call.sendSequence));
-      requestUrl += `?${query.toString()}`;
       // The token goes in a header rather than the query, because servers and proxies write
       // the URL to their access logs. It still goes only to a handler that reads State, so a
       // read-only GET answer does not depend on it.
-      if (handlerOptions.usesState === true && call.stateToken !== undefined)
+      if (handlerOptions.usesState === true && call.stateToken !== undefined) {
         headers[CARRIER_HEADERS.stateToken] = call.stateToken;
+        const withToken = new URLSearchParams(query);
+        withToken.append(CARRIER_FIELDS.stateToken, call.stateToken);
+        queryTokenUrl = `${requestUrl}?${withToken.toString()}`;
+      }
+      requestUrl += `?${query.toString()}`;
     }
     const requestHeaders = useGet
       ? Object.fromEntries(Object.entries(headers).filter(([name]) => name !== "Content-Type"))
       : headers;
     const requestMethod = isolated ? handlerOptions.httpMethod : "POST";
-    const operation = (async (): Promise<
-      { raw: unknown; transported?: true } | { attachment: Blob; filename: string }
-    > => {
+    const attempt = async (
+      requestUrl: string,
+      requestHeaders: Record<string, string>,
+    ): Promise<{ raw: unknown; transported?: true } | { attachment: Blob; filename: string }> => {
       if (selectedTransport) {
         // The server needs the same app, occurrence and revision headers the
         // fetch path sends to build a Render action, so a custom transport
@@ -952,6 +973,16 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
         if (response.ok) throw new Error("A successful raw Event response must be an attachment.");
         throw error;
       }
+    };
+    const operation = (async () => {
+      const first = await attempt(requestUrl, requestHeaders);
+      // A server from before Citry 1.3.0, still running during a deploy or after a rollback,
+      // reads the token only from the query and answers invalid_state without it. So does a
+      // custom transport that forwards only the URL. One retry with the token in the query
+      // keeps such a call working; a GET handler only reads, so sending it twice is safe.
+      if (queryTokenUrl === null || !("raw" in first) || !answersInvalidState(first.raw)) return first;
+      const { [CARRIER_HEADERS.stateToken]: _sentToken, ...withoutToken } = requestHeaders;
+      return attempt(queryTokenUrl, withoutToken);
     })();
     let timeoutId = 0;
     const received = await Promise.race([

@@ -16,15 +16,23 @@
 
 ### Changed
 
-- Citry's browser code now sends the State token of a GET event call in
-  the `X-Citry-State-Token` header instead of the URL, so it no longer
-  lands in server and proxy access logs. The server still reads the
-  `_citry_state_token` query parameter, so links and clients that send
-  it keep working, but a call that sends different tokens in the two
-  now gets a `400` error. During a deploy, a GET call that reads State
-  from a page rendered by 1.3.0 fails with `invalid_state` if it
-  reaches a server still running an earlier release. See
+- A GET event call's State token no longer appears in the URL, so
+  server and proxy access logs do not record it by default. Citry's
+  browser code now sends it in the `X-Citry-State-Token` header. The
+  server still reads the `_citry_state_token` query parameter, so
+  clients that send it there keep working. If a server from an earlier
+  release answers `invalid_state`, as during a deploy or after a
+  rollback, the browser sends the call once more with the token in the
+  URL. A custom transport should send `request.headers` as given. If
+  your event URL is on another origin and your CORS setup lists the
+  allowed request headers, add `X-Citry-State-Token`. See
   [Allow GET requests](https://citry.dev/events/routes/#expose-a-read-only-get-endpoint).
+- Security: a GET event call whose header and query parameter carry
+  different State tokens is now refused with a `400` error, so a URL
+  cannot choose a token other than the one the browser sent. A GET
+  handler that reads State and sets its own `Cache-Control` now has
+  that policy made `private` when the call sends the header, so a CDN
+  that ignores `Vary` cannot give one visitor's answer to another.
 
 ## v1.2.0
 

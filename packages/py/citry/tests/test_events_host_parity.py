@@ -49,6 +49,7 @@ from citry.contrib.fastapi import mount as mount_fastapi  # noqa: E402
 from citry.contrib.wsgi import wsgi_app  # noqa: E402
 from citry.ext.events import event  # noqa: E402
 from citry.ext.events.tokens import mint_state_token  # noqa: E402
+from citry.util.routing import RouteResponse  # noqa: E402
 
 SIGNING_KEY = "wp18-host-parity-secret"
 FIXED_NOW = 1_700_000_000.0
@@ -106,6 +107,14 @@ def _fixture_component(c: Citry) -> type[Component]:
             @event(methods=("GET",))
             def peek(self, state: ParityState) -> dict[str, str]:
                 return {"text": state.text}
+
+            @event(methods=("GET",), bundle=False)
+            def localized(self, state: ParityState) -> RouteResponse:
+                return RouteResponse(
+                    content=state.text,
+                    content_type="text/plain",
+                    headers=(("Vary", "Accept-Language"), ("Cache-Control", "public, s-maxage=60, max-age=10")),
+                )
 
             @event(methods=("PUT", "DELETE"))
             def replace(self, data: _TextIn) -> dict[str, str]:
@@ -346,7 +355,7 @@ def _stateless_get(host: _MountedHost) -> _Snapshot:
     return snapshot
 
 
-def _stateful_get_token_header(host: _MountedHost) -> tuple[_Snapshot, _Snapshot, tuple[str, ...]]:
+def _stateful_get_token_header(host: _MountedHost) -> tuple[Any, ...]:
     # The browser sends a GET call's State token in a header, which every
     # host must hand to Citry, and the answer must vary on it.
     token = _token(host.component, text="from header")
@@ -360,7 +369,20 @@ def _stateful_get_token_header(host: _MountedHost) -> tuple[_Snapshot, _Snapshot
     )
     assert conflict.status == 400
     assert conflict.body["results"][0]["error"]["code"] == "protocol_mismatch"
-    return snapshot, conflict, vary
+    # A handler's own Vary is extended in place, since Django refuses a
+    # repeated header, and its shared-cache policy is narrowed to the
+    # visitor's browser because the URL no longer tells tokens apart.
+    own = host.get("localized", {}, headers={"X-Citry-State-Token": token})
+    assert own.status_code == 200
+    own_marks = (
+        tuple(_header_values(own, "vary")),
+        tuple(_header_values(own, "cache-control")),
+    )
+    assert own_marks == (
+        ("Accept-Language, X-Citry-Page-Nonce, X-Citry-State-Token",),
+        ("private, max-age=10",),
+    )
+    return snapshot, conflict, vary, own_marks
 
 
 def _validation_and_unknown_errors(host: _MountedHost) -> tuple[_Snapshot, _Snapshot]:

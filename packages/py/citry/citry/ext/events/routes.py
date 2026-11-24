@@ -296,7 +296,9 @@ def _serve_call(
     """One events HTTP request through the sync dispatcher: decode, dispatch, translate back to HTTP."""
     prepared = _prepare_dispatch(request, citry, url_component=url_component, url_event=url_event)
     if isinstance(prepared, RouteResponse):
-        return prepared
+        # An early refusal also depends on the request headers, such as a
+        # State token header that differs from the query parameter.
+        return _with_cache_marks(prepared, request)
     outcome = dispatcher.dispatch(
         prepared.envelope,
         prepared.ctx,
@@ -325,7 +327,9 @@ async def _serve_call_async(
     """
     prepared = _prepare_dispatch(request, citry, url_component=url_component, url_event=url_event)
     if isinstance(prepared, RouteResponse):
-        return prepared
+        # An early refusal also depends on the request headers, such as a
+        # State token header that differs from the query parameter.
+        return _with_cache_marks(prepared, request)
     outcome = await dispatcher.dispatch_async(
         prepared.envelope,
         prepared.ctx,
@@ -469,16 +473,50 @@ def _respond(
 
 def _with_cache_marks(response: RouteResponse, request: RouteRequest) -> RouteResponse:
     """
-    List in ``Vary`` every request header that changed this answer.
+    Keep caches from giving one visitor's answer to another.
 
-    A Render in the answer may carry the nonce the call sent, which belongs
-    to one tab of one visitor, so no cache may keep the answer for another.
-    A GET call reads its State token from the ``X-Citry-State-Token`` header,
-    so a handler that lets caches keep its GET answer must not have one
-    visitor's answer served for another visitor's token.
+    ``Vary`` lists the request headers that carry one visitor's values into
+    the answer: the page nonce, which a Render may carry and which belongs
+    to one tab, and on a GET call the State token. A GET call that sends its
+    token in the ``X-Citry-State-Token`` header has no token in its URL, and
+    some CDNs ignore ``Vary`` and key on the URL alone. So when a handler
+    lets caches keep such an answer, only the visitor's own browser may.
     """
-    varied = (PAGE_NONCE_HEADER, STATE_TOKEN_HEADER) if request.method == "GET" else (PAGE_NONCE_HEADER,)
+    is_get = request.method == "GET"
+    if is_get and request.headers.get(STATE_TOKEN_HEADER):
+        response = _private_cache_policy(response)
+    varied = (PAGE_NONCE_HEADER, STATE_TOKEN_HEADER) if is_get else (PAGE_NONCE_HEADER,)
     return _with_page_nonce_marks(response, sent=PAGE_NONCE_HEADER in request.headers, varied=varied)
+
+
+# Cache-Control directives that let a shared cache, such as a CDN, keep an
+# answer; a `private` answer keeps them out.
+_SHARED_CACHE_DIRECTIVES = frozenset({"public", "s-maxage", "proxy-revalidate"})
+
+
+def _private_cache_policy(response: RouteResponse) -> RouteResponse:
+    """Turn a handler's cache policy into one that only the visitor's browser may follow."""
+    headers: list[tuple[str, str]] = []
+    for name, sent_value in response.headers:
+        value = sent_value
+        if name.lower() == "cache-control":
+            directives = [item.strip() for item in value.split(",") if item.strip()]
+            names = {item.split("=", 1)[0].strip().lower() for item in directives}
+            # `no-store` and `private` already keep shared caches out.
+            if not names & {"no-store", "private"}:
+                kept = [
+                    item
+                    for item in directives
+                    if item.split("=", 1)[0].strip().lower() not in _SHARED_CACHE_DIRECTIVES
+                ]
+                value = ", ".join(["private", *kept])
+        headers.append((name, value))
+    return RouteResponse(
+        content=response.content,
+        content_type=response.content_type,
+        status=response.status,
+        headers=tuple(headers),
+    )
 
 
 def _encode_envelope(envelope: Mapping[str, Any]) -> tuple[str, Mapping[str, Any]]:
@@ -856,7 +894,7 @@ def _with_page_nonce_marks(
     response: RouteResponse, *, sent: bool, varied: tuple[str, ...] = (PAGE_NONCE_HEADER,)
 ) -> RouteResponse:
     """
-    Mark an answer so that no cache gives the nonce of one page to another.
+    List ``varied`` in ``Vary``, and keep a nonce answer out of every cache.
 
     Every answer lists ``X-Citry-Page-Nonce`` in ``Vary``: whether the call
     sent the header changes the answer, so a cache must not give an answer

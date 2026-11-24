@@ -1584,6 +1584,96 @@ test("GET to a handler that does not read State sends no State token", async () 
   assert.equal(request.init.headers["X-Citry-State-Token"], undefined);
 });
 
+const statefulGetDescriptor = {
+  componentClassId: "Board_1",
+  eventHandlers: { search: { httpMethod: "GET", usesState: true } },
+};
+
+const invalidStateError = { status: 403, code: "invalid_state", message: "The state token is invalid." };
+
+const queryEnvelope = (url) => {
+  const query = new URL(url, "https://example.test").searchParams;
+  return {
+    requestId: query.get("_citry_request_id"),
+    calls: [{ sendSequence: Number(query.get("_citry_send_sequence")) }],
+  };
+};
+
+test("GET retries once with the token in the query when a server ignores the header", async () => {
+  // A server from before the header existed reads the token only from the query.
+  const requests = [];
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    eventBaseUrl: "/events/e/",
+    host: basicHost(() => ({ ...contextFor(), stateToken: "state-token", descriptor: statefulGetDescriptor })),
+    fetch: async (url, init) => {
+      requests.push({ url: new URL(url, "https://example.test"), headers: init.headers });
+      const envelope = queryEnvelope(url);
+      return requests.at(-1).url.searchParams.get("_citry_state_token") === "state-token"
+        ? resultResponse(envelope, [{ action: "data", value: "found" }])
+        : errorResponse(envelope, invalidStateError);
+    },
+  });
+  const result = await bridge.send({ source: { stableId: "board", generation: 1 }, handler: "search", args: {} });
+  assert.equal(result, "found");
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].headers["X-Citry-State-Token"], "state-token");
+  assert.equal(requests[0].url.searchParams.has("_citry_state_token"), false);
+  assert.equal(requests[1].headers["X-Citry-State-Token"], undefined);
+  assert.equal(requests[1].headers["X-Citry-Events"], "1");
+  assert.equal(
+    requests[1].url.searchParams.get("_citry_request_id"),
+    requests[0].url.searchParams.get("_citry_request_id"),
+  );
+});
+
+test("GET does not retry an answer other than invalid_state, nor a second invalid_state", async () => {
+  for (const [error, expected] of [
+    [staleStateError, 1],
+    [invalidStateError, 2],
+  ]) {
+    let fetched = 0;
+    const bridge = bridgeModule.createVueEventsBridge({
+      endpoint: "/events",
+      eventBaseUrl: "/events/e/",
+      host: basicHost(() => ({ ...contextFor(), stateToken: "state-token", descriptor: statefulGetDescriptor })),
+      fetch: async (url) => {
+        fetched += 1;
+        return errorResponse(queryEnvelope(url), error);
+      },
+    });
+    await assert.rejects(bridge.send({ source: { stableId: "board", generation: 1 }, handler: "search", args: {} }));
+    assert.equal(fetched, expected);
+  }
+});
+
+test("a custom transport gets the State token of a GET call in its headers", async () => {
+  const requests = [];
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    eventBaseUrl: "/events/e/",
+    host: basicHost(() => ({ ...contextFor(), stateToken: "state-token", descriptor: statefulGetDescriptor })),
+    runtimeConfig: () => ({ transport: "memory" }),
+    transport: () => ({
+      send(envelope, request) {
+        requests.push(request);
+        return {
+          protocol: "citry-events/1",
+          requestId: envelope.requestId,
+          results: [
+            { ok: true, sendSequence: envelope.calls[0].sendSequence, actions: [{ action: "data", value: 1 }] },
+          ],
+        };
+      },
+    }),
+  });
+  await bridge.send({ source: { stableId: "board", generation: 1 }, handler: "search", args: {} });
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].method, "GET");
+  assert.equal(requests[0].headers["X-Citry-State-Token"], "state-token");
+  assert.equal(new URL(requests[0].url, "https://example.test").searchParams.has("_citry_state_token"), false);
+});
+
 test("GET rejects unrepresentable or reserved args before fetch and does not block the next call", async () => {
   const getDescriptor = { componentClassId: "Board_1", eventHandlers: { search: { httpMethod: "GET" } } };
   let fetched = 0;

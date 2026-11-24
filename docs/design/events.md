@@ -5037,9 +5037,10 @@ Rules, each closing a named prior-art hole:
   is holding state that belongs in the database, and the error says so
   (keep an id in State, reload the rest in the rebuild). The one nearby
   technical budget is GET handlers, whose token rides the
-  `X-Citry-State-Token` header, which host servers commonly cap at about
-  8 KB per header (the `_citry_state_token` query parameter a client may
-  send instead meets URL limits of roughly 2 KB in some proxies).
+  `X-Citry-State-Token` header, which nginx, Apache and Gunicorn cap at
+  about 8 KB per header by default (the `_citry_state_token` query
+  parameter instead counts against the request-line limit, 4 KB in
+  Gunicorn and 8 KB in nginx).
 - Signed, not encrypted: State values are visible to their own user, like
   anything rendered into HTML. The docs lead with the symptom ("anything
   in State is visible in the page source"); the mitigations, in order: do
@@ -5323,7 +5324,12 @@ traversal of any object graph; extra arg keys are rejected, not absorbed.
   `protocol_mismatch`. A GET answer lists `X-Citry-State-Token` in
   `Vary`.
   The per-handler descriptor carries `usesState: true` only when the handler
-  declares the State injectable, so the browser can enforce that URL rule.
+  declares the State injectable, so the browser sends the token only to such
+  a handler. When a header-only call answers `invalid_state` (a server from
+  before 1.3.0 reads only the query), the browser sends it once more with
+  the token in the query. When a call sends the header and a handler's own
+  response sets a cache policy, the server makes it `private`, because the
+  URL no longer separates tokens and some CDNs ignore `Vary`.
   The built-in browser transport selects GET for a single call to a
   GET-declared handler. It serializes scalar string, boolean, and finite
   number args, and non-empty arrays of those values as repeated query
