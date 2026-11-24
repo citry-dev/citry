@@ -1444,8 +1444,14 @@ def _refs_used(node: Any) -> set[str]:
     return found
 
 
-def _refs_used_without_wrap(node: Any) -> set[str]:
-    """Return the refs a node's subtree points to, without following them or going below an author's wrap validator."""
+def _refs_used_without_wrap(node: Any, *, json_only: bool = False) -> set[str]:
+    """
+    Return the refs a node's subtree points to, without following them or going below an author's wrap validator.
+
+    With ``json_only``, the Python part of a ``json-or-python`` node is
+    left out, since pydantic-core never takes it for JSON input; that is
+    how ``pydantic.JsonValue`` reads JSON, as ``Any``.
+    """
     found: set[str] = set()
     todo = [node]
     visited: set[int] = set()
@@ -1456,9 +1462,11 @@ def _refs_used_without_wrap(node: Any) -> set[str]:
         visited.add(id(item))
         if _kind(item) == "definition-ref":
             found.add(str(item.get("schema_ref", "")))
+        if json_only and _kind(item) == "json-or-python":
+            todo.append(item.get("json_schema"))
         # The copy wraps the author's wrap validator in a counting wrapper in
         # every context, so a recursion through it is counted at each level.
-        if not _is_authors_wrap(item):
+        elif not _is_authors_wrap(item):
             todo.extend(_children(item))
     return found
 
@@ -1596,7 +1604,9 @@ class _Schema:
 
     def _find_uncounted_loops(self, *, pypy: bool) -> dict[str, str]:
         """Return the reason for each definition on a loop that no wrapper counts (see ``uncounted_loop_reason``)."""
-        bare = {ref: _refs_used_without_wrap(node) for ref, node in self.definitions.items()}
+        # The PyPy rules read only the part a JSON read takes; CPython keeps
+        # its rule as it was.
+        bare = {ref: _refs_used_without_wrap(node, json_only=pypy) for ref, node in self.definitions.items()}
         reach = {ref: _reachable(bare[ref], bare) for ref in bare}
         looping = {ref for ref in bare if ref in reach[ref]}
         found: dict[str, str] = {}
@@ -1818,6 +1828,10 @@ class _Schema:
             if kind == "definition-ref":
                 ref = str(node.get("schema_ref", ""))
                 loop_reason = self.uncounted_loop_reason(ref) if class_loops and not reached[0] else None
+                if loop_reason == _JSON_LOOP_REASON and json_at is None:
+                    # A State read only as JSON keeps its rule for classes:
+                    # the PyPy rule for other types is about JSON text.
+                    loop_reason = None
                 if loop_reason is not None:
                     # Nothing would count the levels of this loop, so the
                     # data would choose how deep the check goes on the stack.

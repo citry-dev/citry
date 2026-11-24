@@ -888,7 +888,6 @@ class WrappedJsonTree(pydantic.BaseModel):
         pytest.param(pydantic.Json[OuterChain], "a recursive type", id="two types"),
         pytest.param(PairBox, "a recursive type", id="wrap validator on the reference"),
         pytest.param(pydantic.Json[PlainPair], "a recursive type", id="recursive type without Json"),
-        pytest.param(pydantic.Json[pydantic.JsonValue], "a recursive type", id="JsonValue"),
     ],
 )
 def test_on_pypy_a_type_that_holds_itself_inside_json_is_refused(
@@ -940,11 +939,37 @@ def test_on_pypy_the_refusal_names_the_field_that_holds_the_json(field_type: Any
         pytest.param(LeafPair, id="recursive type outside Json, Json of a class that cannot nest"),
         pytest.param(pydantic.Json[Any], id="Json of Any"),
         pytest.param(pydantic.Json[list[PlainLeaf]], id="Json of a type that is not recursive"),
+        # JsonValue reads JSON input as Any; only its Python part holds itself.
+        pytest.param(pydantic.Json[pydantic.JsonValue], id="Json of JsonValue"),
     ],
 )
 def test_on_pypy_json_text_without_a_recursive_type_inside_is_accepted(field_type: Any) -> None:
     # Only a type that can nest inside the text without limit is refused.
     bounded.check_data_class("Probe", pydantic.create_model("Data", x=(field_type, ...)))
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+@pytest.mark.parametrize(
+    "field_type", [pytest.param(pydantic.JsonValue, id="JsonValue"), pytest.param(PlainPair, id="list alias")]
+)
+def test_on_pypy_a_state_read_only_as_json_accepts_a_recursive_type_outside_json(field_type: Any) -> None:
+    # The PyPy rule for any recursive type is about Json[...] text; a State
+    # read only as JSON keeps refusing only a recursive class.
+    state = pydantic.create_model(
+        "StrictMeta", __config__=pydantic.ConfigDict(strict=True), meta=(field_type | None, None)
+    )
+
+    bounded.check_state_class("Probe", state, frozenset({"meta"}))
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_the_refusal_of_a_recursive_alias_offers_json_any_for_free_form_json() -> None:
+    data = pydantic.create_model("Data", x=(pydantic.Json[PlainPair], ...))
+
+    with pytest.raises(ValueError, match=r"Give PlainPair a wrap validator of its own") as raised:
+        bounded.check_data_class("Probe", data)
+
+    assert "For free-form JSON, Json[Any] works too." in str(raised.value)
 
 
 def test_on_cpython_a_state_read_only_as_json_keeps_accepting_a_type_that_loops_through_json(

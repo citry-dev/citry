@@ -851,12 +851,16 @@ Defining a component also raises `ValueError` on PyPy when its event
 type inside `Json[...]`, as described in
 [Fix a refused schema](#schemas-citry-refuses).
 
-These rules kept every request in our tests on PyPy 7.3.23 from ending
-the process, but two things can still use up PyPy's stack and end it:
-a schema with many validators or other parts at each level, which
-Pydantic without Citry cannot check either, and your own code that
-validates nested data again, such as a validator that calls
-`model_validate` on a nested value. A larger
+These rules kept the ordinary schemas in our tests on PyPy 7.3.23 from
+ending the process, but two things can still use up PyPy's stack and
+end it. One is a schema with many validators or other parts at each
+level, more so with a `Json[Any]`, `JsonValue` or other free-form field
+deep inside it: Citry does not count the up to 200 levels of such a
+field, and its own checks use part of the stack too. In our tests a
+model with 48 validators, 31 levels deep, with 100 levels of
+`Json[Any]` below it ended the process, as it does with citry 1.2.0.
+The other is your own code that validates nested data again, such as
+a validator that calls `model_validate` on a nested value. A larger
 thread stack does not help on PyPy, and raising the recursion limit
 does not make the check safer. If your app takes deeply nested data
 from the browser, run it on CPython.
@@ -1004,15 +1008,16 @@ text, so change the browser code that sends it.
     - Refused: a model, dataclass, TypedDict or `NamedTuple` that can
       contain itself.
     - Refused: a recursive type of any other kind, such as a list or
-      tuple alias, or `pydantic.JsonValue`. Pydantic lets one JSON
-      string nest 200 lists and objects, and those levels come on top
-      of the levels Citry already checked outside the string. A JSON
-      string can also hold another JSON string, and Pydantic reads each
-      one separately, so the levels add up.
+      tuple alias. Pydantic lets one JSON string nest 200 lists and
+      objects, and those levels come on top of the levels Citry already
+      checked outside the string. A JSON string can also hold another
+      JSON string, and Pydantic reads each one separately, so the
+      levels add up.
     - Fine: a type inside `Json[...]` that cannot hold itself, such as
-      `Json[list[Item]]`, and `Json[Any]`, which Pydantic only parses.
-      For free-form JSON on PyPy, use `Json[Any]` and check the value
-      in your handler.
+      `Json[list[Item]]`, and `Json[Any]` or `Json[pydantic.JsonValue]`,
+      which Pydantic only parses when it reads JSON. For other free-form
+      JSON on PyPy, use one of these and check the value in your
+      handler.
     - Fine: a refused type with a wrap validator of its own, such as a
       `model_validator(mode="wrap")` that returns `handler(value)`, or
       `WrapValidator` in a type alias, so that each of its levels

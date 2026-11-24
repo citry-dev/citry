@@ -14,22 +14,22 @@ still requires citry-core 2.1.2.
   (it was 64), and wrap validators, unions, `Sequence[...]` fields and
   `OnErrorOmit` items each count as more than one level, so on PyPy
   some data that earlier releases accepted gets a 422 that says it is
-  nested too deeply. A schema with many validators at each level, or
-  your own code that validates nested data again, can still end the
-  process. See
+  nested too deeply. A schema with many validators at each level,
+  especially with a free-form field deep inside it, or your own code
+  that validates nested data again, can still end the process. See
   [Event data on PyPy](https://citry.dev/security/#event-data-on-pypy)
   and
   [GHSA-29wx-2wvw-8962](https://github.com/citry-dev/citry/security/advisories/GHSA-29wx-2wvw-8962).
 - Security: on PyPy, a component whose event `data` class or
   browser-writable State field holds a recursive type inside
-  `Json[...]`, such as a model that can hold itself, a recursive list
-  alias or `pydantic.JsonValue`, now raises `ValueError` when it is
-  defined, so the app fails at import. A class that Citry first meets at a call, such as a Pydantic
-  model inside a plain dataclass, gets a 422 for that call instead. Give
-  the recursive type that the error names a wrap validator of its own,
-  or use `Json[Any]` for free-form JSON. In a `data` class you can
-  instead change `Json[Tree]` to `Tree`; the field then takes the value
-  itself, not JSON text.
+  `Json[...]`, such as a model that can hold itself or a recursive list
+  alias, now raises `ValueError` when it is defined, so the app fails
+  at import. A class that Citry first meets at a call, such as a
+  Pydantic model inside a plain dataclass, gets a 422 for that call
+  instead. Give the recursive type that the error names a wrap
+  validator of its own, or use `Json[Any]` or `Json[JsonValue]` for
+  free-form JSON. In a `data` class you can instead change `Json[Tree]`
+  to `Tree`; the field then takes the value itself, not JSON text.
 
 CPython accepts and refuses the same data as before. Citry applies the
 PyPy rules on every Python implementation other than CPython, such as

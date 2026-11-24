@@ -2177,7 +2177,11 @@ Error modes:
       (`class_loops`, `_Schema.uncounted_loop_reason`) when the loop
       passes through a class (model, dataclass, TypedDict, NamedTuple:
       `_RECURSIVE_CLASS_REASON`), and any other such loop too
-      (`_JSON_LOOP_REASON`), `pydantic.JsonValue` included. One JSON
+      (`_JSON_LOOP_REASON`) when the walk has passed a `json` node (a
+      State read only as JSON keeps only the class rule). The loop graph
+      follows only the `json_schema` of a `json-or-python` node there
+      (`json_only`), since a JSON read never takes the Python part, so
+      `pydantic.JsonValue` reads as `Any` and is accepted. One JSON
       string nests up to 200 uncounted levels (pydantic-core's JSON
       parser stops there), and those come on top of what was checked
       outside the string: on PyPy 7.3.23 a list alias 198 levels deep in
@@ -2188,7 +2192,10 @@ Error modes:
       which counts only its own level; so the error names the recursive
       type that needs a wrap validator of its own. `Json[Any]` is
       accepted: pydantic-core only parses it, and 198 levels of it
-      passed in the same places. On CPython the class rule keeps its
+      passed in the same places. It still takes about a tenth of PyPy's
+      stack at 199 levels, so under the heaviest accepted schema (48
+      validators per object, 31 levels) 100 levels of it ended the
+      process, as on 1.2.0; the docs list that as a remaining limit. On CPython the class rule keeps its
       three kinds and applies only to a State read only as JSON. On
       PyPy 7.3.23 about 40 shapes were refused at the limit without
       ending the process; the heaviest ordinary ones used 30% to 70% of
