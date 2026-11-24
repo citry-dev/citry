@@ -108,8 +108,10 @@ From there, the browser does the rest, as in the earlier steps: the
 
     The dispatched event also bubbles up the page from the component's
     first element, so page scripts outside the component can listen for
-    it. Event names that start with `citry:` are reserved for Citry's own
-    events, and `actions.Dispatch` rejects them.
+    it. `actions.Dispatch` rejects the name of a standard DOM event,
+    such as `click`, and names that start with `citry:`, `vue:`, or
+    `vnode-`. See
+    [`Dispatch` browser events](/events/actions/#notify-browser-code-that-something-happened).
 
 ## Show progress
 

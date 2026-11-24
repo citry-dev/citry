@@ -564,6 +564,11 @@ Promise. The Promise rejects when:
 - a `redirect` action names a URL that Citry refuses to follow, such as
   one with a scheme other than `http:` or `https:` (for a redirect with
   `wait: false`, Citry logs the error instead);
+- an `event` action names a standard DOM event such as `click`, or a
+  name that starts with `citry:`, `vue:`, or `vnode-`, in any letter
+  case. [`Dispatch` browser events](/events/actions/#notify-browser-code-that-something-happened)
+  explains which names Citry refuses. For an action with `wait: false`,
+  Citry logs the error instead;
 - a `state` action has no `publicState`, the component's public State
   values (this rejects with a `TypeError`).
 
