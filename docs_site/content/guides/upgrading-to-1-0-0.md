@@ -93,8 +93,8 @@ Then:
 
 ## Handle State expiry { #state-tokens-expire }
 
-If a component's `State` sets no `_max_age` and its page's State has
-not changed for 24 hours:
+If a component's `State` sets no [`_max_age`](/events/state/#max-age)
+and its page's State has not changed for 24 hours:
 
 - the next event call fails with `stale_state`, without running its
   handler;
