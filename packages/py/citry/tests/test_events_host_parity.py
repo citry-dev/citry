@@ -369,9 +369,10 @@ def _stateful_get_token_header(host: _MountedHost) -> tuple[Any, ...]:
     )
     assert conflict.status == 400
     assert conflict.body["results"][0]["error"]["code"] == "protocol_mismatch"
+    assert conflict.cache_control == "no-store"
     # A handler's own Vary is extended in place, since Django refuses a
     # repeated header, and its shared-cache policy is narrowed to the
-    # visitor's browser because the URL no longer tells tokens apart.
+    # visitor's browser because the URL does not carry the token.
     own = host.get("localized", {}, headers={"X-Citry-State-Token": token})
     assert own.status_code == 200
     own_marks = (

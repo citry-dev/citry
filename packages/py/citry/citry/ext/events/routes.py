@@ -296,9 +296,7 @@ def _serve_call(
     """One events HTTP request through the sync dispatcher: decode, dispatch, translate back to HTTP."""
     prepared = _prepare_dispatch(request, citry, url_component=url_component, url_event=url_event)
     if isinstance(prepared, RouteResponse):
-        # An early refusal also depends on the request headers, such as a
-        # State token header that differs from the query parameter.
-        return _with_cache_marks(prepared, request)
+        return _early_refusal(prepared, request)
     outcome = dispatcher.dispatch(
         prepared.envelope,
         prepared.ctx,
@@ -327,9 +325,7 @@ async def _serve_call_async(
     """
     prepared = _prepare_dispatch(request, citry, url_component=url_component, url_event=url_event)
     if isinstance(prepared, RouteResponse):
-        # An early refusal also depends on the request headers, such as a
-        # State token header that differs from the query parameter.
-        return _with_cache_marks(prepared, request)
+        return _early_refusal(prepared, request)
     outcome = await dispatcher.dispatch_async(
         prepared.envelope,
         prepared.ctx,
@@ -339,6 +335,18 @@ async def _serve_call_async(
         csrf_check=prepared.csrf_check,
     )
     return _respond(request, outcome, batch=prepared.batch, compat=prepared.compat)
+
+
+def _early_refusal(response: RouteResponse, request: RouteRequest) -> RouteResponse:
+    """
+    Mark a refusal sent before dispatch like any other answer.
+
+    It can depend on the request headers, such as a State token header that
+    differs from the query parameter, and a GET answer is kept out of
+    caches, as a dispatched one is.
+    """
+    refused = _with_no_store(response) if request.method == "GET" else response
+    return _with_cache_marks(refused, request)
 
 
 def _prepare_dispatch(
@@ -477,10 +485,12 @@ def _with_cache_marks(response: RouteResponse, request: RouteRequest) -> RouteRe
 
     ``Vary`` lists the request headers that carry one visitor's values into
     the answer: the page nonce, which a Render may carry and which belongs
-    to one tab, and on a GET call the State token. A GET call that sends its
-    token in the ``X-Citry-State-Token`` header has no token in its URL, and
-    some CDNs ignore ``Vary`` and key on the URL alone. So when a handler
-    lets caches keep such an answer, only the visitor's own browser may.
+    to one tab, and on a GET call the State token. Citry's own GET URLs hold
+    a fresh request ID, so no cache shares their answers; a client of the
+    app's own may send a stable URL, though, and some CDNs ignore ``Vary``.
+    So when such a call sends its token in the ``X-Citry-State-Token``
+    header and the handler lets caches keep the answer, only the visitor's
+    own browser may.
     """
     is_get = request.method == "GET"
     if is_get and request.headers.get(STATE_TOKEN_HEADER):
@@ -489,34 +499,52 @@ def _with_cache_marks(response: RouteResponse, request: RouteRequest) -> RouteRe
     return _with_page_nonce_marks(response, sent=PAGE_NONCE_HEADER in request.headers, varied=varied)
 
 
-# Cache-Control directives that let a shared cache, such as a CDN, keep an
-# answer; a `private` answer keeps them out.
-_SHARED_CACHE_DIRECTIVES = frozenset({"public", "s-maxage", "proxy-revalidate"})
+# Cache-Control directives a browser's own cache may follow. Everything else,
+# such as `public`, `s-maxage`, or a `private` or `no-cache` that names fields
+# (which still lets a shared cache keep the rest), is dropped.
+_PRIVATE_CACHE_DIRECTIVES = frozenset(
+    {"max-age", "no-cache", "no-store", "must-revalidate", "no-transform", "immutable", "stale-while-revalidate"}
+)
+# Headers that set the policy of a CDN alone (RFC 9213 and the older
+# Surrogate-Control); a CDN that reads them ignores Cache-Control.
+_CDN_CACHE_HEADERS = frozenset({"cdn-cache-control", "surrogate-control"})
+# One Cache-Control directive: a name, then an optional token or quoted value,
+# so a comma inside quotes does not split it.
+_CACHE_DIRECTIVE = re.compile(r'\s*([^\s=,]+)(?:\s*=\s*("(?:[^"\\]|\\.)*"|[^,]*))?\s*(?:,|$)')
 
 
 def _private_cache_policy(response: RouteResponse) -> RouteResponse:
     """Turn a handler's cache policy into one that only the visitor's browser may follow."""
     headers: list[tuple[str, str]] = []
-    for name, sent_value in response.headers:
-        value = sent_value
-        if name.lower() == "cache-control":
-            directives = [item.strip() for item in value.split(",") if item.strip()]
-            names = {item.split("=", 1)[0].strip().lower() for item in directives}
-            # `no-store` and `private` already keep shared caches out.
-            if not names & {"no-store", "private"}:
-                kept = [
-                    item
-                    for item in directives
-                    if item.split("=", 1)[0].strip().lower() not in _SHARED_CACHE_DIRECTIVES
-                ]
-                value = ", ".join(["private", *kept])
-        headers.append((name, value))
+    for name, value in response.headers:
+        lowered = name.lower()
+        if lowered in _CDN_CACHE_HEADERS:
+            continue
+        if lowered == "cache-control":
+            headers.append((name, _private_cache_control(value)))
+        else:
+            headers.append((name, value))
     return RouteResponse(
         content=response.content,
         content_type=response.content_type,
         status=response.status,
         headers=tuple(headers),
     )
+
+
+def _private_cache_control(value: str) -> str:
+    """The ``Cache-Control`` value ``private`` plus the handler's directives a browser cache may follow."""
+    kept: list[str] = []
+    for match in _CACHE_DIRECTIVE.finditer(value):
+        directive, argument = match.group(1).lower(), match.group(2)
+        # A field-qualified `no-cache="X"` is a shared-cache instruction; only
+        # the bare form applies to the whole answer.
+        if directive not in _PRIVATE_CACHE_DIRECTIVES or (directive == "no-cache" and argument is not None):
+            continue
+        kept.append(directive if argument is None else f"{directive}={argument.strip()}")
+    if "no-store" in kept:
+        return "no-store"
+    return ", ".join(["private", *kept])
 
 
 def _encode_envelope(envelope: Mapping[str, Any]) -> tuple[str, Mapping[str, Any]]:

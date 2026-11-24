@@ -920,7 +920,10 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     const attempt = async (
       requestUrl: string,
       requestHeaders: Record<string, string>,
-    ): Promise<{ raw: unknown; transported?: true } | { attachment: Blob; filename: string }> => {
+      sentEnvelope: typeof envelope,
+    ): Promise<
+      { raw: unknown; transported?: true; readsTokenHeader?: true } | { attachment: Blob; filename: string }
+    > => {
       if (selectedTransport) {
         // The server needs the same app, occurrence and revision headers the
         // fetch path sends to build a Render action, so a custom transport
@@ -932,7 +935,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
           signal: controller.signal,
         };
         try {
-          return { raw: await selectedTransport.send(envelope, request), transported: true };
+          return { raw: await selectedTransport.send(sentEnvelope, request), transported: true };
         } catch (error) {
           if (error !== null && typeof error === "object") reportableFailures.add(error);
           throw error;
@@ -968,21 +971,36 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       }
       try {
         const raw: unknown = await response.json();
-        return { raw };
+        // A server that reads the token header lists it in Vary on every GET answer, so its
+        // invalid_state is about the token itself and sending the token again cannot help. The
+        // header is readable only on the page's own origin; elsewhere the retry rule stays.
+        const vary = response.headers?.get?.("Vary") ?? "";
+        const readsTokenHeader = vary
+          .split(",")
+          .some((name) => name.trim().toLowerCase() === CARRIER_HEADERS.stateToken.toLowerCase());
+        return readsTokenHeader ? { raw, readsTokenHeader: true } : { raw };
       } catch (error) {
         if (response.ok) throw new Error("A successful raw Event response must be an attachment.");
         throw error;
       }
     };
     const operation = (async () => {
-      const first = await attempt(requestUrl, requestHeaders);
+      const first = await attempt(requestUrl, requestHeaders, envelope);
       // A server from before Citry 1.3.0, still running during a deploy or after a rollback,
-      // reads the token only from the query and answers invalid_state without it. So does a
-      // custom transport that forwards only the URL. One retry with the token in the query
-      // keeps such a call working; a GET handler only reads, so sending it twice is safe.
-      if (queryTokenUrl === null || !("raw" in first) || !answersInvalidState(first.raw)) return first;
+      // reads the token only from the query and answers invalid_state without it. So do a
+      // proxy that drops the header and a custom transport that forwards only the URL. One
+      // retry with the token in the query keeps such a call working. The first answer refused
+      // the call before its handler ran, so sending it again is safe.
+      if (
+        queryTokenUrl === null ||
+        controller.signal.aborted ||
+        !("raw" in first) ||
+        first.readsTokenHeader === true ||
+        !answersInvalidState(first.raw)
+      )
+        return first;
       const { [CARRIER_HEADERS.stateToken]: _sentToken, ...withoutToken } = requestHeaders;
-      return attempt(queryTokenUrl, withoutToken);
+      return attempt(queryTokenUrl, withoutToken, structuredClone(envelope));
     })();
     let timeoutId = 0;
     const received = await Promise.race([

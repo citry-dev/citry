@@ -1647,6 +1647,57 @@ test("GET does not retry an answer other than invalid_state, nor a second invali
   }
 });
 
+test("GET does not retry an invalid_state from a server that reads the token header", async () => {
+  let fetched = 0;
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    eventBaseUrl: "/events/e/",
+    host: basicHost(() => ({ ...contextFor(), stateToken: "state-token", descriptor: statefulGetDescriptor })),
+    fetch: async (url) => {
+      fetched += 1;
+      const response = errorResponse(queryEnvelope(url), invalidStateError);
+      response.headers.set("Vary", "X-Citry-Page-Nonce, X-Citry-State-Token");
+      return response;
+    },
+  });
+  await assert.rejects(bridge.send({ source: { stableId: "board", generation: 1 }, handler: "search", args: {} }));
+  assert.equal(fetched, 1);
+});
+
+test("a custom transport that forwards only the URL gets the retry with the token in it", async () => {
+  const requests = [];
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    eventBaseUrl: "/events/e/",
+    host: basicHost(() => ({ ...contextFor(), stateToken: "state-token", descriptor: statefulGetDescriptor })),
+    runtimeConfig: () => ({ transport: "memory" }),
+    transport: () => ({
+      send(envelope, request) {
+        requests.push({ envelope, request });
+        const url = new URL(request.url, "https://example.test");
+        const ok = url.searchParams.get("_citry_state_token") === "state-token";
+        const sendSequence = envelope.calls[0].sendSequence;
+        return {
+          protocol: "citry-events/1",
+          requestId: envelope.requestId,
+          results: [
+            ok
+              ? { ok: true, sendSequence, actions: [{ action: "data", value: "found" }] }
+              : { ok: false, sendSequence, error: invalidStateError },
+          ],
+        };
+      },
+    }),
+  });
+  const result = await bridge.send({ source: { stableId: "board", generation: 1 }, handler: "search", args: {} });
+  assert.equal(result, "found");
+  assert.equal(requests.length, 2);
+  assert.equal(requests[1].request.headers["X-Citry-State-Token"], undefined);
+  // Each send gets its own envelope, so a transport that changes one cannot change the other.
+  assert.notEqual(requests[0].envelope, requests[1].envelope);
+  assert.deepEqual(requests[0].envelope, requests[1].envelope);
+});
+
 test("a custom transport gets the State token of a GET call in its headers", async () => {
   const requests = [];
   const bridge = bridgeModule.createVueEventsBridge({

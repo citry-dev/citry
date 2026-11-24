@@ -1521,9 +1521,9 @@ class TestGetHandlers:
         assert response.headers["vary"] == "X-Citry-Page-Nonce"
 
     def test_a_handler_cache_policy_turns_private_when_the_token_rides_a_header(self):
-        # The URL no longer separates one visitor's token from another's, and
-        # a CDN that ignores Vary would share the answer, so only the
-        # visitor's own browser may keep it.
+        # The URL does not carry the token, and a CDN that ignores Vary
+        # would share the answer, so only the visitor's own browser may
+        # keep it.
         c = _citry()
         greeter = _greeter(c)
         client = _mounted(c)
@@ -1531,6 +1531,44 @@ class TestGetHandlers:
         assert response.headers["cache-control"] == "private, max-age=60"
         response = client.get(_event_url(greeter, "cached"))
         assert response.headers["cache-control"] == "public, max-age=60"
+
+    @pytest.mark.parametrize(
+        ("policy", "expected"),
+        [
+            ("public, max-age=60", "private, max-age=60"),
+            ("public, s-maxage=600, max-age=10, must-revalidate", "private, max-age=10, must-revalidate"),
+            # A field-qualified private still lets a shared cache keep the rest.
+            ('private="Set-Cookie", max-age=60', "private, max-age=60"),
+            # A comma inside quotes does not make a bare `private`.
+            ('public, max-age=60, no-cache="X, private, Y"', "private, max-age=60"),
+            ("max-age=0, NO-CACHE", "private, max-age=0, no-cache"),
+            ("no-store", "no-store"),
+        ],
+    )
+    def test_a_handler_cache_policy_keeps_only_what_a_browser_cache_follows(self, policy, expected):
+        assert events_routes._private_cache_control(policy) == expected
+
+    def test_a_cdn_only_cache_policy_is_dropped_when_the_token_rides_a_header(self):
+        response = RouteResponse(
+            content="x",
+            headers=(("CDN-Cache-Control", "max-age=600"), ("Surrogate-Control", "max-age=600")),
+        )
+        request = RouteRequest(method="GET", path="/", headers=RouteHeaders([("X-Citry-State-Token", "t")]))
+        marked = events_routes._with_cache_marks(response, request)
+        assert {name.lower() for name, _ in marked.headers} == {"vary"}
+
+    def test_a_refused_get_is_kept_out_of_caches(self):
+        # A 405 is cacheable by default, and the refusal may depend on headers.
+        c = _citry()
+        greeter = _greeter(c)
+        client = _mounted(c)
+        response = client.request("PUT", _event_url(greeter, "peek"))
+        assert response.status_code == 405
+        assert response.headers["vary"] == "X-Citry-Page-Nonce"
+        response = client.get(_event_url(greeter, "save"))
+        assert response.status_code == 405
+        assert response.headers["cache-control"] == "no-store"
+        assert response.headers["vary"] == "X-Citry-Page-Nonce, X-Citry-State-Token"
 
     def test_a_get_without_a_token_gets_no_new_token(self, monkeypatch):
         # A GET to a handler that does not read State sends no token, so

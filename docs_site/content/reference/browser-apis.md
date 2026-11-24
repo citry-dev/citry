@@ -611,8 +611,9 @@ component the browser shows. Without them the call fails with
 `handler_error`, and the server log says the app, occurrence, or
 revision header is missing or invalid. A `GET` call to a handler that
 reads State carries its State token in `X-Citry-State-Token`, not in
-`url`. When such a call answers `invalid_state`, Citry calls `send` once
-more with the token in `url` and without that header. The simplest transport sends the
+`url`. When the server answers such a call with `invalid_state`, Citry
+calls `send` once more, with a copy of the envelope, the token in `url`,
+and without that header. The simplest transport sends the
 envelope and `request.headers` to `request.url`, Citry's own event
 route.
 
