@@ -33,7 +33,7 @@ import threading
 import time
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Annotated, Any, Literal, cast, get_args
+from typing import Annotated, Any, Literal, NamedTuple, cast, get_args
 from weakref import WeakKeyDictionary, ref
 
 import pydantic
@@ -105,7 +105,8 @@ def deep_checks(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def pypy_deep_checks(monkeypatch: pytest.MonkeyPatch) -> None:
-    # A test of the work budget at the real nesting limit, run on PyPy too.
+    # A test of the work budget at the real limit on CPython; on PyPy the
+    # limits are raised (see `_raise_pypy_limit`).
     _raise_pypy_limit(monkeypatch)
 
 
@@ -113,7 +114,7 @@ def _raise_pypy_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     # On PyPy a level of a recursive union counts three times or more (the
     # union, the member's wrapper and the object) and the limit is the
     # small-stack one, so a test of the work budget there raises both limits
-    # to 150. The data in these tests passed on PyPy before those rules, so
+    # to 150. The data in these tests passed on PyPy with 1.2.0's counting, so
     # it fits PyPy's stack; the rules themselves are tested on their own.
     if bounded.STACK_SET_BY_RECURSION_LIMIT:
         monkeypatch.setattr(bounded, "MAX_CHECK_DEPTH", 150)
@@ -809,6 +810,138 @@ def test_on_pypy_a_recursive_class_inside_json_is_refused_in_a_writable_state(
 
     with pytest.raises(ValueError, match=r"holds a Json\[\.\.\.\] value with a recursive class"):
         bounded.check_state_class("Probe", Forest, frozenset({"tree"}))
+
+
+class JsonTuple(NamedTuple):
+    # A NamedTuple is a class too: its schema is `named-tuple`, not `model`.
+    kids: list[JsonTuple] = []
+    blob: pydantic.Json[JsonTuple] | None = None
+
+
+# A type that is no class at all and still holds itself inside Json[...] text.
+JsonPair = TypeAliasType("JsonPair", "tuple[list[JsonPair], pydantic.Json[JsonPair] | None]")
+
+
+def _keep(value: Any, handler: Any) -> Any:
+    return handler(value)
+
+
+class WrappedJsonTree(pydantic.BaseModel):
+    # The wrap validator is the documented fix: Citry counts each level there.
+    children: list[WrappedJsonTree] = []
+    blob: pydantic.Json[WrappedJsonTree] | None = None
+
+    @pydantic.model_validator(mode="wrap")
+    @classmethod
+    def _keep(cls, value: Any, handler: Any) -> Any:
+        return handler(value)
+
+
+@pytest.mark.parametrize(
+    ("field_type", "reason"),
+    [
+        pytest.param(JsonTuple, "a recursive class", id="NamedTuple"),
+        pytest.param(JsonPair, "a recursive type that holds itself again inside Json", id="tuple alias"),
+    ],
+)
+def test_on_pypy_a_type_that_holds_itself_inside_json_is_refused(
+    monkeypatch: pytest.MonkeyPatch, field_type: Any, reason: str
+) -> None:
+    # Each JSON string starts a fresh parse, so strings nested in each other
+    # nest any type as deep as the data likes, a NamedTuple or a tuple as
+    # much as a model. CPython keeps accepting both.
+    data = pydantic.create_model("Data", x=(field_type, ...))
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", False)
+    bounded.check_data_class("Probe", data)
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", True)
+
+    with pytest.raises(ValueError, match=rf"holds a Json\[\.\.\.\] value with {reason}"):
+        bounded.check_data_class("Probe", data)
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+@pytest.mark.parametrize(
+    ("field_type", "where"),
+    [
+        pytest.param(JsonTuple, "in the field 'blob' of JsonTuple", id="Json inside the class"),
+        pytest.param(pydantic.Json[list[JsonTuple]], "in that field", id="Json on the field"),
+        pytest.param(JsonPair, "in JsonPair", id="Json inside an alias"),
+    ],
+)
+def test_on_pypy_the_refusal_names_the_field_that_holds_the_json(field_type: Any, where: str) -> None:
+    # The plain type is a fix only where Json[...] is written, which may be
+    # a field of a class deeper inside the field the message names.
+    data = pydantic.create_model("Data", x=(field_type, ...))
+
+    with pytest.raises(ValueError, match=r"the field 'x' of the event data class") as raised:
+        bounded.check_data_class("Probe", data)
+
+    assert f"You can also replace Json[...] {where} with the type inside its brackets." in str(raised.value)
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_a_recursive_class_with_a_wrap_validator_inside_json_is_accepted_and_counted() -> None:
+    data = pydantic.create_model("Data", x=(pydantic.Json[WrappedJsonTree], ...))
+    bounded.check_data_class("Probe", data)
+    shallow = {"children": [{"blob": json.dumps({"children": [{}]})}]}
+    # The levels inside the inner JSON string count as well as those outside it.
+    chain: dict[str, Any] = {}
+    for _ in range(bounded.SMALL_STACK_CHECK_DEPTH):
+        chain = {"children": [chain]}
+    deep = {"children": [{"blob": json.dumps(chain)}]}
+
+    assert validate_args(data, {"x": json.dumps(shallow)}).ok
+    assert validate_args(data, {"x": json.dumps(deep)}).fields == {"_args": bounded.TOO_DEEP_MESSAGE}
+
+
+def test_on_pypy_a_recursive_class_inside_json_found_at_the_first_call_is_refused(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    # Registration does not read a Pydantic class inside a plain dataclass,
+    # so the check at the first call must apply the same rule.
+    def holder() -> type:
+        tree_class = _json_tree_class()
+        return dataclasses.make_dataclass("TreeHolder", [("inner", tree_class)])
+
+    payload = {"inner": {"children": [{}]}}
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", False)
+    assert validate_args(holder(), payload).ok
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", True)
+
+    with caplog.at_level(logging.ERROR, logger="citry"):
+        result = validate_args(holder(), payload)
+
+    assert result.fields == {"inner": bounded.NOT_CHECKABLE_MESSAGE}
+    assert "holds a Json[...] value with a recursive class" in caplog.text
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_a_state_finished_after_registration_with_a_recursive_class_inside_json_is_refused(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class LateForest(pydantic.BaseModel):
+        tree: LateJsonTree | None = None  # type: ignore[name-defined] # noqa: F821
+        _model = ("tree",)
+
+    class Panel(Component):
+        citry = _citry()
+        State = LateForest
+        template = """
+          <p></p>
+        """
+
+    # Registration could not read the State, so its first write runs the check.
+    LateForest.model_rebuild(_types_namespace={"LateJsonTree": _json_tree_class()})
+
+    with (
+        caplog.at_level(logging.ERROR, logger="citry"),
+        bounded.request_work(),
+        pytest.raises(StateUpdateError) as caught,
+    ):
+        apply_state_updates(LateForest(), {"tree": {}}, model_fields=("tree",))
+
+    assert caught.value.fields == {"_state": bounded.NOT_CHECKABLE_MESSAGE}
+    assert "holds a Json[...] value with a recursive class" in caplog.text
 
 
 @pytest.mark.usefixtures("pypy_stack_rules")

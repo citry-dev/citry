@@ -215,10 +215,14 @@ SMALL_STACK_CHECK_DEPTH = 32
 #   the heaviest ordinary shapes measured (models whose fields nest
 #   several lists, some with validators and constraints) used more than
 #   80% of that stack at 64 levels, and 30% to 70% of it at 32;
-# - a class that can hold itself inside `Json[...]` is refused, as for a
-#   State Citry reads only as JSON (`_RECURSIVE_CLASS_REASON`): no wrapper
-#   counts its levels there, and each JSON string starts a fresh parse, so
-#   strings nested inside each other could end the process.
+# - a type that can hold itself inside `Json[...]` without an author's wrap
+#   validator on the way is refused when it is a class (a model,
+#   dataclass, TypedDict or NamedTuple), as for a State Citry reads only as JSON
+#   (`_RECURSIVE_CLASS_REASON`), or when it holds itself again inside the
+#   JSON text (`_JSON_LOOP_REASON`): no wrapper counts its levels there,
+#   and each JSON string starts a fresh parse, so strings nested inside
+#   each other could end the process, whatever the type
+#   (`_Schema.uncounted_loop_reason`).
 # Parts that pydantic-core checks without calling Python (lists, dicts,
 # optional values, the author's before and after validators) still take
 # stack at each level without counting, so a schema with dozens of such
@@ -1462,6 +1466,25 @@ def _refs_used_without_wrap(node: Any) -> set[str]:
     return found
 
 
+def _refs_used_below_json(node: Any) -> set[str]:
+    """Return the refs that a node's subtree reads inside ``Json[...]`` text, without going below a wrap validator."""
+    found: set[str] = set()
+    todo = [node]
+    visited: set[int] = set()
+    while todo:
+        item = todo.pop()
+        if id(item) in visited:
+            continue
+        visited.add(id(item))
+        if _kind(item) == "json":
+            # Each JSON string starts a fresh parse, so a ref below one can
+            # start the nesting over inside a string of its own.
+            found |= _refs_used_without_wrap(item)
+        elif not _is_authors_wrap(item):
+            todo.extend(_children(item))
+    return found
+
+
 def _reachable(start: set[str], direct: dict[str, set[str]]) -> set[str]:
     """Return every ref reachable from ``start`` through the definitions."""
     reached: set[str] = set()
@@ -1564,31 +1587,51 @@ class _Schema:
         self._strict = any(config.get("strict") for config in configs)
         self._coerce_numbers_to_str = any(config.get("coerce_numbers_to_str") for config in configs)
         self._repeats_anywhere: bool | None = None
+        # The loops no wrapper counts, by whether the PyPy rules applied (see `uncounted_loop_reason`).
+        self._loop_reasons: dict[bool, dict[str, str]] = {}
 
-    @functools.cached_property
-    def uncounted_class_loops(self) -> frozenset[str]:
+    def uncounted_loop_reason(self, ref: str) -> str | None:
         """
-        Return the definitions on a loop through a class that no wrapper of the copy for JSON text counts.
+        Return why a definition sits on a loop that no wrapper of the copy for JSON text counts, or ``None``.
 
         Where no wrapper may go (inside ``Json[...]``, in the copy for JSON
-        text), only an author's wrap validator counts a level, so a class
+        text), only an author's wrap validator counts a level, so a type
         that can reach itself without passing a wrap validator nests as deep
         as the data does. A loop that passes through an ``Iterable`` field
-        is still such a loop, because only a wrap validator ends it.
-        Computed on first use, since only a State read only as JSON needs it.
+        is still such a loop, because only a wrap validator ends it. Two
+        kinds of loop are refused:
+
+        - a loop through a class (model, dataclass, TypedDict; under the
+          PyPy rules also a NamedTuple), which takes the most stack per
+          level, so even one JSON string nests it too deeply there;
+        - under the PyPy rules, any loop through ``Json[...]``: each JSON
+          string starts a fresh parse with its own nesting limit, so
+          strings nested inside each other let the data choose the depth
+          of any type, a tuple or a list as much as a class.
         """
+        pypy = STACK_SET_BY_RECURSION_LIMIT
+        known = self._loop_reasons.get(pypy)
+        if known is None:
+            known = self._loop_reasons[pypy] = self._find_uncounted_loops(pypy=pypy)
+        return known.get(ref)
+
+    def _find_uncounted_loops(self, *, pypy: bool) -> dict[str, str]:
+        """Return the reason for each definition on a loop that no wrapper counts (see ``uncounted_loop_reason``)."""
         bare = {ref: _refs_used_without_wrap(node) for ref, node in self.definitions.items()}
         reach = {ref: _reachable(bare[ref], bare) for ref in bare}
-        looping = {ref for ref in bare if ref in reach[ref]}
-        return frozenset(
-            ref
-            for ref in looping
-            if any(
-                self._is_class(self.definitions[other])
-                for other in looping
-                if (other == ref or other in reach[ref]) and ref in reach[other]
-            )
-        )
+        # The refs each definition reads again inside its own Json[...] text.
+        in_json = {ref: _refs_used_below_json(node) for ref, node in self.definitions.items()} if pypy else {}
+        found: dict[str, str] = {}
+        for ref in bare:
+            if ref not in reach[ref]:
+                continue
+            # The definitions on a loop with this one: each reaches the other.
+            loop = {other for other in bare if (other == ref or other in reach[ref]) and ref in reach[other]}
+            if any(self._is_class(self.definitions[other], named_tuples=pypy) for other in loop):
+                found[ref] = _RECURSIVE_CLASS_REASON
+            elif any(in_json[other] & loop for other in in_json if other in loop):
+                found[ref] = _JSON_LOOP_REASON
+        return found
 
     def reaches_recursion(self, node: Any) -> bool:
         """Whether checking ``node`` can lead into a recursive definition."""
@@ -1726,6 +1769,13 @@ class _Schema:
     def unbounded_reason(
         self, start: Any, context: _Context, *, discarded_only: bool = False, class_loops: bool = False
     ) -> str | None:
+        """Return why a part of the copy that no wrapper can reach is refused, or ``None`` (see ``unbounded_part``)."""
+        found = self.unbounded_part(start, context, discarded_only=discarded_only, class_loops=class_loops)
+        return None if found is None else found[0]
+
+    def unbounded_part(
+        self, start: Any, context: _Context, *, discarded_only: bool = False, class_loops: bool = False
+    ) -> tuple[str, _FieldAt | None] | None:
         """
         Return why a part of the copy that no wrapper can reach could make too many errors or work, or ``None``.
 
@@ -1748,8 +1798,17 @@ class _Schema:
           (``MAX_CHECK_DEPTH``). This is the rule for a model State that
           Citry reads only as JSON, where the JSON read is the only check.
 
+        - with ``class_loops`` under the PyPy rules, also any type that can
+          hold itself again inside ``Json[...]`` text
+          (``uncounted_loop_reason``).
+
         A wrap validator lets wrappers back in below it, so the walk treats
         everything below one as counted, as the copy does.
+
+        With the reason comes the field that holds the outermost
+        ``Json[...]`` above the part, so the message can name it: ``(None,
+        None)`` when that is the field the walk started from, ``None`` when
+        no ``Json[...]`` is above the part.
 
         With ``discarded_only``, typed extra keys count only below a part
         whose errors the node above may throw away (a union member, a
@@ -1760,46 +1819,66 @@ class _Schema:
         # Each entry also says whether a key the payload chooses sits above
         # the node where no wrapper counts: pydantic-core copies that key into
         # the location of every error below it before anything can count them.
-        stack: list[tuple[Any, _Context, bool, bool]] = [(start, context, False, False)]
+        # Each entry also carries the class field the walk last entered
+        # and the one that holds the outermost Json[...] above it, which
+        # only the message reads, so they stay out of the `seen` key.
+        stack: list[tuple[Any, _Context, bool, bool, _FieldAt, _FieldAt | None]] = [
+            (start, context, False, False, (None, None), None)
+        ]
         seen: set[tuple[int, _Context, bool, bool]] = set()
         while stack:
-            node, reached, discarded, keyed = stack.pop()
+            node, reached, discarded, keyed, at, json_at = stack.pop()
             if (id(node), reached, discarded, keyed) in seen:
                 continue
             seen.add((id(node), reached, discarded, keyed))
             if type(node) in (list, tuple):
-                stack.extend((item, reached, discarded, keyed) for item in node)
+                stack.extend((item, reached, discarded, keyed, at, json_at) for item in node)
                 continue
             if type(node) is not dict:
                 continue
             kind = _kind(node)
             if kind == "definition-ref":
                 ref = str(node.get("schema_ref", ""))
-                if class_loops and not reached[0] and ref in self.uncounted_class_loops:
-                    # Nothing would count the levels of this class, so the
+                loop_reason = self.uncounted_loop_reason(ref) if class_loops and not reached[0] else None
+                if loop_reason is not None:
+                    # Nothing would count the levels of this loop, so the
                     # data would choose how deep the check goes on the stack.
-                    return _RECURSIVE_CLASS_REASON
+                    return loop_reason, json_at
                 target = self.definitions.get(ref)
                 if target is not None:
-                    stack.append((target, reached, discarded, keyed))
+                    # Below this the walk is inside the named type, not the
+                    # field it came from (a class sets its own name below).
+                    stack.append((target, reached, discarded, keyed, (_type_name(ref), None), json_at))
                 continue
             wrappable, under_wrap = _node_context(node, reached)
             if not wrappable:
                 if self.repeats_recursion(node):
-                    return _REPEAT_REASONS.get(kind or "") or self._union_reason(node)
+                    return _REPEAT_REASONS.get(kind or "") or self._union_reason(node), json_at
                 if (discarded or not discarded_only) and self._extras_unbounded(node):
-                    return _DISCARDED_EXTRAS_REASON if discarded_only else _EXTRAS_REASON
+                    return (_DISCARDED_EXTRAS_REASON if discarded_only else _EXTRAS_REASON), json_at
                 if under_wrap and kind in _FAIL_FAST_TYPES and not self._items_fail_once(node, counted_only=keyed):
                     # Below a dict's values the rule is narrower, and its fix differs.
                     if keyed and self._items_fail_once(node):
-                        return _KEYED_ITEMS_REASON
-                    return _WRAPPED_ITEMS_REASON
+                        return _KEYED_ITEMS_REASON, json_at
+                    return _WRAPPED_ITEMS_REASON, json_at
+            at = _field_at(node, kind, at)
+            if kind == "json" and json_at is None:
+                json_at = at
             below = _child_context(node, reached)
             # Below a dict's values the key is in every error's location.
             keyed_below = keyed or (not wrappable and under_wrap and kind in _MAPPING_TYPES)
             for name, value in node.items():
-                if name not in _NOT_SCHEMA_KEYS:
-                    stack.append((value, below, discarded or _discards(kind, name, node), keyed_below))
+                if name in _NOT_SCHEMA_KEYS:
+                    continue
+                discards = discarded or _discards(kind, name, node)
+                if kind in ("model-fields", "typed-dict") and name == "fields" and type(value) is dict:
+                    # These classes key their fields by name, so the name is known only here.
+                    stack.extend(
+                        (field, below, discards, keyed_below, (at[0], str(field_name)), json_at)
+                        for field_name, field in value.items()
+                    )
+                    continue
+                stack.append((value, below, discards, keyed_below, at, json_at))
         return None
 
     def _union_reason(self, node: dict[str, Any]) -> str:
@@ -1811,8 +1890,15 @@ class _Schema:
                 return _MIXED_UNION_REASON
         return _UNION_REASON
 
-    def _is_class(self, node: Any) -> bool:
-        """Whether a schema node checks a model, a dataclass or a TypedDict, below references and validators."""
+    def _is_class(self, node: Any, *, named_tuples: bool = False) -> bool:
+        """
+        Whether a schema node checks a model, a dataclass or a TypedDict, below references and validators.
+
+        With ``named_tuples``, a NamedTuple counts too: its schema is
+        ``named-tuple``, or ``call`` around its arguments in older Pydantic.
+        Only the loop rule of the PyPy rules asks for it, so the union
+        reasons and the CPython rules keep reading classes as before.
+        """
         seen: set[str] = set()
         while True:
             kind = _kind(node)
@@ -1825,7 +1911,8 @@ class _Schema:
             elif kind in _FUNCTION_TYPES - {"function-plain"} or kind in ("nullable", "default"):
                 node = node.get("schema")
             else:
-                return kind in ("model", "dataclass", "typed-dict")
+                classes = ("model", "dataclass", "typed-dict")
+                return kind in classes or (named_tuples and kind in ("named-tuple", "call"))
 
     def _items_fail_once(self, node: dict[str, Any], *, counted_only: bool = False) -> bool:
         """
@@ -2196,6 +2283,31 @@ def _is_pydantic_own(node: dict[str, Any], *, follow: bool = True) -> bool:
 # and whether it is below a wrap validator, which may read every error below
 # it and retry, so its collections keep reading every item.
 _Context = tuple[bool, bool]
+# A class field a schema node sits in, for messages: the name of the class
+# or type (None when the walk started inside it) and the field's name (None
+# when the node is not inside a named field of that class or type).
+_FieldAt = tuple[str | None, str | None]
+# The schema types of a class whose node names the class in `cls`.
+_NAMED_CLASS_KINDS = frozenset({"model", "dataclass", "typed-dict", "named-tuple"})
+# The schema types of one field or argument that carry the field's name.
+_NAMED_FIELD_KINDS = frozenset({"dataclass-field", "named-tuple-field", "arguments-parameter"})
+
+
+def _type_name(ref: str) -> str:
+    """Return the name a reader knows a definition by, from Pydantic's ``module.Name:id`` reference."""
+    return ref.rsplit(":", 1)[0].rsplit(".", 1)[-1]
+
+
+def _field_at(node: dict[str, Any], kind: str | None, at: _FieldAt) -> _FieldAt:
+    """Return the class field that a node's children sit in, given the one the node sits in."""
+    if kind in _NAMED_CLASS_KINDS and node.get("cls") is not None:
+        cls = node["cls"]
+        return (str(getattr(cls, "__qualname__", cls)), None)
+    if kind in _NAMED_FIELD_KINDS and isinstance(node.get("name"), str):
+        return (at[0], node["name"])
+    return at
+
+
 # The keys of an object schema that hold the schema of each extra key or
 # value, one check per key the payload sends.
 _EXTRAS_KEYS = ("extras_schema", "extras_keys_schema", "var_args_schema", "var_kwargs_schema")
@@ -3117,9 +3229,9 @@ def checker_for(cls: type, *, state: bool = False, by_name: bool = False, repeat
         # Registration refuses such a class when its schema is complete then;
         # this catches one that was completed later, or one that registration
         # does not see, such as a Pydantic class inside a plain `data` class.
-        name, reason = found
+        name, reason, json_at = found
         where = f"Its field {name!r}" if name else "It"
-        refusal = f"{where} holds a Json[...] value with {reason}. {_fix_for(reason)} You can also {_PLAIN_TYPE_FIX}."
+        refusal = f"{where} holds a Json[...] value with {reason}. {_fix_for(reason)}{_plain_type_fix(name, json_at)}"
         checker = Checker(None, wrapped=False, refusal=refusal, **common)
         return _remember(store, cls, checker, complete=complete)
     try:
@@ -3343,8 +3455,14 @@ _CHAIN_REASON = "a chain of validators inside a recursive type, where two or mor
 _LAX_OR_STRICT_REASON = "a recursive type with separate strict and lax checks, both of which check the tree"
 _REPEAT_REASONS = {"chain": _CHAIN_REASON, "lax-or-strict": _LAX_OR_STRICT_REASON}
 _RECURSIVE_CLASS_REASON = (
-    "a recursive class (a model, dataclass or TypedDict that can hold itself), whose nesting Citry cannot limit"
-    " while it reads JSON"
+    "a recursive class (a model, dataclass, TypedDict or NamedTuple that can hold itself), whose nesting Citry"
+    " cannot limit while it reads JSON"
+)
+# On PyPy only: a type that holds itself again inside Json[...] text, which
+# any type can do, not only a class.
+_JSON_LOOP_REASON = (
+    "a recursive type that holds itself again inside Json[...] text, whose nesting Citry cannot limit on this"
+    " Python, because each JSON string starts a fresh parse"
 )
 _EXTRAS_REASON = (
     "extra keys that the class allows and gives a type, whose values can fail with more than one error or with"
@@ -3892,26 +4010,28 @@ def _unbounded_field(
     *,
     discarded_only: bool = False,
     class_loops: bool = False,
-) -> tuple[str | None, str] | None:
+) -> tuple[str | None, str, _FieldAt | None] | None:
     """
-    Return the first field (in name order) that holds a part Citry cannot check, and why.
+    Return the first field (in name order) that holds a part Citry cannot check, why, and where its Json[...] is.
 
     ``names`` limits the walk to those top-level fields; without it every
     field is read, and then the rest of the class, which gives a ``None``
-    name when the part sits outside any field.
+    name when the part sits outside any field. The last item is the field
+    that holds the outermost ``Json[...]`` above the part, as
+    ``_Schema.unbounded_part`` returns it.
     """
     fields = _top_fields(root)
     for name in sorted(fields if names is None else names):
         entry = fields.get(name)
         if entry is None:
             continue
-        reason = schema.unbounded_reason(entry, context, discarded_only=discarded_only, class_loops=class_loops)
-        if reason is not None:
-            return name, reason
+        found = schema.unbounded_part(entry, context, discarded_only=discarded_only, class_loops=class_loops)
+        if found is not None:
+            return name, *found
     if names is None:
-        reason = schema.unbounded_reason(root, context, discarded_only=discarded_only, class_loops=class_loops)
-        if reason is not None:
-            return None, reason
+        found = schema.unbounded_part(root, context, discarded_only=discarded_only, class_loops=class_loops)
+        if found is not None:
+            return None, *found
     return None
 
 
@@ -3935,12 +4055,12 @@ def check_data_class(comp_name: str, cls: Any) -> None:
     )
     if found is None:
         return
-    name, reason = found
+    name, reason, json_at = found
     where = f"the field {name!r} of the event data class" if name else "the event data class"
     # Outside `Json[...]` the copy counts the same part, so the plain type is a fix too.
     msg = (
         f"Component {comp_name}: {where} {cls.__qualname__} holds a Json[...] value with {reason}."
-        f" {_fix_for(reason)} You can also {_PLAIN_TYPE_FIX}."
+        f" {_fix_for(reason)}{_plain_type_fix(name, json_at)}"
     )
     raise ValueError(msg)
 
@@ -3965,7 +4085,14 @@ def _fix_for(reason: str) -> str:
     if reason == _RECURSIVE_CLASS_REASON:
         return (
             "Give the recursive class a wrap validator, which Citry counts at each level; below it the class"
-            " reads Python values, not JSON."
+            " reads Python values, not JSON, so a strict class refuses a date, UUID or similar value that JSON"
+            " writes as a string."
+        )
+    if reason == _JSON_LOOP_REASON:
+        return (
+            "Give the recursive type a wrap validator, which Citry counts at each level; below it the type"
+            " reads Python values, not JSON, so a strict type refuses a date, UUID or similar value that JSON"
+            " writes as a string."
         )
     if reason == _LAX_OR_STRICT_REASON:
         return "Give the recursive type one check for both strict and lax mode."
@@ -3991,8 +4118,31 @@ def _fix_for(reason: str) -> str:
     return "Give the extra keys a type that fails with one short message, such as int or str."
 
 
+def _plain_type_fix(name: str | None, json_at: _FieldAt | None) -> str:
+    """
+    Return the sentence that offers the type inside the brackets in place of ``Json[...]``, naming the field.
+
+    ``json_at`` is the field that holds the outermost ``Json[...]`` above
+    the refused part (see ``_Schema.unbounded_part``). It may be a field of
+    a class deeper inside the named field, and that is the field to change.
+    """
+    if json_at is None:
+        return ""
+    owner, field = json_at
+    if owner is not None and field is not None:
+        where = f"the field {field!r} of {owner}"
+    elif field is not None:
+        where = f"the field {field!r}"
+    elif owner is not None:
+        where = owner
+    elif name is not None:
+        where = "that field"
+    else:
+        where = "the class"
+    return f" You can also replace Json[...] in {where} with the type inside its brackets."
+
+
 # The other fixes the messages offer, after the one for the reason.
-_PLAIN_TYPE_FIX = "declare the field as the type itself instead of Json[...]"
 _LEAVE_OUT_FIX = "set _model to the fields the browser may change, without {name!r}"
 
 
@@ -4068,7 +4218,7 @@ def check_state_class(comp_name: str, cls: Any, writable: frozenset[str]) -> Non
     schema = _Schema(root)
     found = _unbounded_field(schema, root, _WRAPPED, writable, class_loops=STACK_SET_BY_RECURSION_LIMIT)
     if found is not None:
-        name, reason = found
+        name, reason, _ = found
         # The plain type is not offered: a model State refuses some of these
         # parts outside `Json[...]` too, and the browser cannot write a class
         # to a dataclass State field. The `_model` fix also works for a State
@@ -4090,7 +4240,7 @@ def check_state_class(comp_name: str, cls: Any, writable: frozenset[str]) -> Non
     )
     if found is None:
         return
-    name, reason = found
+    name, reason, _ = found
     if why is None:
         msg = (
             f"Component {comp_name}: the writable field {name!r} of the Pydantic model State {cls.__qualname__}"

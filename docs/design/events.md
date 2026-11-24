@@ -2171,9 +2171,20 @@ Error modes:
       schema with dozens of them at each level can still end PyPy below
       the limit, as Pydantic alone does. Inside `Json[...]` no wrapper
       counts, and each JSON string starts a fresh parse, so on PyPy
-      registration also refuses a recursive class reached through
-      `Json[...]` (`class_loops`, `_RECURSIVE_CLASS_REASON`), in event
-      data and in writable State fields. On PyPy 7.3.23 about 40 shapes
+      registration and the first-call check also refuse, in event data
+      and in writable State fields, a definition reached through
+      `Json[...]` that lies on a loop with no author's wrap validator
+      (`class_loops`, `_Schema.uncounted_loop_reason`) when the loop
+      passes through a class (model, dataclass, TypedDict, NamedTuple:
+      `_RECURSIVE_CLASS_REASON`) or through a `json` node
+      (`_JSON_LOOP_REASON`). The second rule covers any type, such as
+      `tuple[list[P], Json[P] | None]`: strings nested in each other
+      nest it without limit, and on PyPy 7.3.23 three such strings of 90
+      levels each ended the process. A loop that does not pass through
+      `json` stays inside one string, which pydantic-core's JSON parser
+      limits to 200 nested containers; light shapes measured 99 levels
+      there without ending the process. On CPython the class rule keeps
+      its three kinds and applies only to a State read only as JSON. On PyPy 7.3.23 about 40 shapes
       were refused at the limit without ending the process; the
       heaviest ordinary ones used 30% to 70% of the stack there.
     - What cannot absorb the refusal: a part of the schema that drops an
@@ -2296,8 +2307,11 @@ field); for a chain, one validator that checks the tree; for a
 lax-or-strict pair, one check for both modes; for typed extra keys or
 items, a type that fails with one short message, or the wrap validator
 moved inside the `Json[...]`, which then does not run when the text is
-not valid JSON. The message also offers declaring the field as the type
-itself instead of `Json[...]` for a `data` class only: Citry's own check
+not valid JSON. The message also offers replacing `Json[...]` with the
+type inside its brackets, for a `data` class only, and names the field
+where the outermost `Json[...]` above the refused part is written
+(`_plain_type_fix`), which may be a field of a class or a type inside
+the refused field: Citry's own check
 of a write to a dataclass State refuses a JSON object for a field
 typed as a class, so with the plain type the browser could not write the
 field at all. For State it offers setting `_model` to the fields the
