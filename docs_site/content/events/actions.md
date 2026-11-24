@@ -268,9 +268,21 @@ component's JavaScript shows a toast, or a header badge refreshes.
 return actions.Dispatch("TaskRow:saved", {"title": title})
 ```
 
-Start the name with your component's name, as in `TaskRow:saved`. Names that
-start with `citry:` are reserved for Citry, so `actions.Dispatch` raises
-`ValueError` for them.
+Start the name with your component's name, as in `TaskRow:saved`.
+`actions.Dispatch` raises `ValueError` for a name that the page, Vue, or
+Citry already listens for:
+
+- The name of a standard DOM event, such as `click`, `submit`, `input`,
+  `change`, `keydown`, or `focus`, in any letter case. The event would
+  run the page's own listeners for it, including
+  [`@c-*` bindings](/events/bindings/) that call the server.
+- A name that starts with `citry:`, which Citry uses for its own events,
+  or with `vue:` or `vnode-`, which Vue uses for its lifecycle hooks.
+
+Citry's browser code refuses the same names before it fires the event,
+so an action list that reaches the page another way, such as through
+[`Citry.events.applyActions`](/reference/browser-apis/#citry-events-apply-actions), fails the same
+way.
 
 The event starts at the first element of the component whose handler ran and
 bubbles up to `document`. It fires once, even when the component has several
@@ -297,12 +309,9 @@ script, listen on an ancestor element, on `document`, or with
 !!! warning "Choose the event name yourself"
 
     Never build the name from request data (a query parameter, form
-    field, or header). A name such as `click` or `submit` runs the
-    page's own listeners for that event, including
-    [`@c-*` bindings](/events/bindings/) that call the server. If the
-    component's first element is a `<form>`, Firefox also submits that
-    form to its `action` on a `submit` event, and a listener cannot
-    cancel it.
+    field, or header). Citry refuses the standard event names, but
+    the page may also listen for your own names, and a name taken
+    from a request would pick which of those listeners run.
 
 ## `Data` for JavaScript { #send-data-to-javascript }
 

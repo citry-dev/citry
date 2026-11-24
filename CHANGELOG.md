@@ -14,6 +14,24 @@
   server-stored State, each new token adds one cache entry. See
   [Treat State as input](https://citry.dev/security/#treat-state-as-client-input).
 
+### Changed
+
+- Security: `actions.Dispatch` now raises `ValueError` for the name of a
+  standard DOM event, such as `click`, `submit`, `input`, `change`,
+  `keydown` or `focus`, in any letter case, and for a name that starts
+  with `vue:` or `vnode-`. The bubbling event would run the page's own
+  listeners for that event, including `@c-*` bindings that call the
+  server. Citry's browser code refuses the same names, so
+  `Citry.events.applyActions` rejects them too. If you dispatch such a
+  name, prefix it with your component's name:
+
+  ```python
+  actions.Dispatch("click")          # now raises ValueError
+  actions.Dispatch("TaskRow:click")  # works
+  ```
+
+  See [`Dispatch` browser events](https://citry.dev/events/actions/#notify-browser-code-that-something-happened).
+
 ## v1.2.0
 
 Citry 1.2.0 adds Experimental APIs for host integrations such as
