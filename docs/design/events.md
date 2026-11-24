@@ -2156,6 +2156,23 @@ Error modes:
       with one nested model per level and a discriminated tree about
       60 levels, the model-and-field wrap shape about 21, and a union
       without a discriminator about 15, where the work budget stops it.
+    - On PyPy (`STACK_SET_BY_RECURSION_LIMIT`, set on every interpreter
+      but CPython), a thread may use only as much stack as the recursion
+      limit sets (about 760 KB at 1000), whatever its real size, and when
+      pydantic-core uses it up, PyPy ends the process instead of raising
+      `RecursionError`. So there the limit is `SMALL_STACK_CHECK_DEPTH`
+      on check threads too, and every Python function the copy calls on
+      the way down counts a level (`_enter_level`): Pydantic's own wrap
+      functions (wrapped in `_counted`), `_discarded`,
+      `_discarded_spending`, the wrappers from `_spending` and
+      `_text_spending`. Left out of the count, these calls let data
+      nested within the limit end the process. Parts that pydantic-core
+      checks without calling Python still take stack uncounted, so a
+      schema with dozens of them at each level can still end PyPy below
+      the limit, as Pydantic alone does. On PyPy 7.3.23 every shape
+      tried (about 40) is refused at the limit without ending the
+      process; the heaviest ordinary one used less than half of the
+      stack there.
     - What cannot absorb the refusal: a part of the schema that drops an
       item on any error, such as `OnErrorOmit`. The tally records the
       first stop for work, time, or nesting, and the check raises it

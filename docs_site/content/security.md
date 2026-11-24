@@ -699,8 +699,26 @@ The limit also applies when Citry checks a plain class, a dataclass or a
 Pydantic dataclass `data` class with its own code: each object counts
 one level.
 
+On PyPy the limit is 32 levels, and more of the check counts toward it.
+PyPy lets each thread use only a fixed, small amount of stack, and when
+Pydantic's compiled code uses it up, PyPy ends the whole server process
+instead of raising an error. So on PyPy, each `Sequence[...]` field and
+each part that drops bad items, such as `OnErrorOmit`, also counts one
+level, and a wrap validator or a union whose members could read the
+value counts two or three. Valid recursive data therefore holds fewer
+levels on PyPy than on CPython. In our tests on PyPy 7.3, a tree of
+models passed 30 levels when each model held its children in a `list`,
+15 in a `Sequence`, and 10 in two nested lists of `OnErrorOmit`
+items. A schema with many validators or other parts at each level can
+still use up PyPy's stack before the limit, as it does with Pydantic
+alone. If your app takes deeply nested data from the browser, run it on
+CPython.
+
 Lists and dicts do not count, so a `pydantic.JsonValue` field accepts
-data nested as deeply as the 200-level limit on request JSON. Citry's
+data nested as deeply as the 200-level limit on request JSON. On PyPy
+and on Windows, Pydantic itself refuses a `JsonValue` nested more than
+about 98 levels (about 48 on PyPy for Windows), and the call gets a
+422 for that field. Citry's
 own work with such a value runs on its threads, described below. Code
 of yours that checks or writes out the value again on your thread needs
 much more stack than data at the limit: on Python 3.11, `model_dump()`
@@ -737,7 +755,9 @@ own threads outside Python should set a larger size in its own
 settings.
 
 Citry checks the data on a thread of its own with a 16 MiB stack, so the
-limit is the same whatever stack size your server gives its threads.
+limit is the same whatever stack size your server gives its threads
+(on PyPy, the stack size does not change how much stack a check may
+use).
 Citry also builds State for a render, writes State out for its token
 and for the page, and checks State a handler changed, all on those
 threads. Your request thread waits each time Citry hands work to such
@@ -838,7 +858,8 @@ node. More children, or more data in each node, lower that number.
 To check deeper trees, declare the discriminator where you define the
 recursive type (a type that contains itself, here `Node`), and give each
 class a `Literal` tag field. Then each node counts one level toward the
-[nesting limit](#check-event-data), so a tree can nest about 60 levels:
+[nesting limit](#check-event-data), so a tree can nest about 60 levels
+(about 30 on PyPy):
 
 ```python
 from typing import Annotated, Literal

@@ -103,6 +103,12 @@ change how a page renders, and Citry still refuses a `Secret` in
 CPython. Issue [#434](https://github.com/citry-dev/citry/issues/434)
 tracks giving PyPy the same answers.
 
+On PyPy, Events refuses event data and State writes that nest more than
+32 levels, and counts some parts of a schema, such as `Sequence[...]`
+fields, as extra levels, so that deeply nested data cannot end the
+server process. On CPython the limit is 64 levels. See
+[Check event data](/security/#check-event-data).
+
 If you turn off the [expression sandbox](/security/#turning-the-sandbox-off)
 with `Citry(sandbox_expressions=False)`, template expressions on PyPy can
 also call any Python builtin. A missing variable that shares a builtin's

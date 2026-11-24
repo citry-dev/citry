@@ -172,10 +172,12 @@ cpu_clock = _choose_cpu_clock()
 # How many of Citry's counting wrappers may be checking inside each other:
 # each Pydantic model, dataclass, TypedDict and wrap validator a value
 # passes through counts one, and so does each union whose members can read
-# it. Data that nests deeper is refused with TOO_DEEP_MESSAGE. Each level
-# takes room on the thread's stack, so the limit keeps a check within a
-# fixed amount of it. Two stacks bound the limit. Checks run on check
-# threads with a stack of CHECK_STACK_BYTES (see `run_on_check_thread`),
+# it. On PyPy every other Python function the copy calls while a nested
+# value is still being checked counts one too, and the limit is lower (see
+# STACK_SET_BY_RECURSION_LIMIT). Data that nests deeper is refused with
+# TOO_DEEP_MESSAGE. Each level takes room on the thread's stack, so the
+# limit keeps a check within a fixed amount of it. On CPython two stacks
+# bound the limit. Checks run on check threads with a stack of CHECK_STACK_BYTES (see `run_on_check_thread`),
 # which hold far more than 64 levels: the heaviest shape measured, a wrap
 # validator on a model and another on its field, takes about 14 KB per
 # level on macOS with Python 3.11, so data at the limit needs about
@@ -189,11 +191,37 @@ cpu_clock = _choose_cpu_clock()
 MAX_CHECK_DEPTH = 64
 # The nesting limit for a check that runs on a thread whose stack Citry did
 # not choose, which happens only where no check thread can start (see
-# `run_on_check_thread`). It is sized so data at the limit, in the shapes
-# that measured heaviest per level, is checked in 512 KiB, half the 1 MiB
+# `run_on_check_thread`), and for every check on PyPy (see
+# STACK_SET_BY_RECURSION_LIMIT). It is sized so data at the limit, in the
+# shapes that measured heaviest per level, is checked in 512 KiB, half the 1 MiB
 # thread stack of a Windows program that embeds Python with the linker's
 # default and of the official Python images for Alpine Linux.
 SMALL_STACK_CHECK_DEPTH = 32
+# Whether the interpreter lets each thread use only as much stack as the
+# recursion limit sets, as PyPy does: about 760 KB at the default limit of
+# 1000, whatever the thread's real size, so a check thread's 16 MiB does not
+# help. When pydantic-core uses that amount up, PyPy ends the process
+# instead of raising RecursionError. So where this is set:
+# - every Python function that Citry's copy calls while a nested value is
+#   still being checked counts as a level of nesting, not only the objects,
+#   unions and wrap validators: Pydantic's own wrap functions (behind
+#   `Sequence[...]`, for one) and Citry's wrappers for parts whose errors
+#   may be thrown away (`OnErrorOmit`, union members) or that spend from
+#   the work budget. Each stays on the stack until the value below it is
+#   checked, and left out of the count, they let data nested less deeply
+#   than the limit end the process;
+# - the limit is SMALL_STACK_CHECK_DEPTH on every thread. On PyPy 7.3.23
+#   the heaviest ordinary shape measured (a model whose field nests two
+#   lists, each with a few validators and constraints) used more than 80%
+#   of that stack at 64 levels, and less than half of it at 32.
+# Parts that pydantic-core checks without calling Python (lists, dicts,
+# optional values, the author's before and after validators) still take
+# stack at each level without counting, so a schema with dozens of such
+# parts at each level can still end PyPy below the limit, as it does with
+# Pydantic alone. CPython raises RecursionError instead, and a check
+# thread's 16 MiB holds these calls, so there they do not count and the
+# limit stays MAX_CHECK_DEPTH. Other Python implementations follow PyPy.
+STACK_SET_BY_RECURSION_LIMIT = sys.implementation.name != "cpython"
 # What one more check of a list or object costs besides the values inside it,
 # in steps: the Python wrappers around it run on every check.
 ENTRY_STEPS = 32
@@ -650,8 +678,16 @@ def unbudgeted() -> Iterator[None]:
 
 
 def nesting_limit() -> int:
-    """Return the nesting limit here: ``MAX_CHECK_DEPTH`` on a check thread, ``SMALL_STACK_CHECK_DEPTH`` elsewhere."""
-    return MAX_CHECK_DEPTH if on_check_thread() else SMALL_STACK_CHECK_DEPTH
+    """
+    Return the nesting limit here: ``MAX_CHECK_DEPTH`` on a check thread, ``SMALL_STACK_CHECK_DEPTH`` elsewhere.
+
+    Where ``STACK_SET_BY_RECURSION_LIMIT`` is set (PyPy), a check thread's
+    large stack does not help, so the limit is ``SMALL_STACK_CHECK_DEPTH``
+    there too.
+    """
+    if STACK_SET_BY_RECURSION_LIMIT or not on_check_thread():
+        return SMALL_STACK_CHECK_DEPTH
+    return MAX_CHECK_DEPTH
 
 
 def current_work() -> WorkBudget | None:
@@ -1001,6 +1037,20 @@ def counted_level() -> Iterator[None]:
         tally.depth -= 1
 
 
+def _enter_level(tally: _Tally) -> int:
+    """
+    Count the calling wrapper as one level of nesting, or stop the check when the data is already at the limit.
+
+    Called only where ``STACK_SET_BY_RECURSION_LIMIT`` is set: the caller stays on the
+    stack while the part below it is checked. Returns how much the caller
+    must take off ``tally.depth`` once its handler returns or fails.
+    """
+    if tally.depth >= tally.depth_limit:
+        raise _stopped("nesting", tally.depth_limit)
+    tally.depth += 1
+    return 1
+
+
 def _discarded(value: Any, handler: Any) -> Any:
     """
     Check a part whose errors the node above may throw away, so they leave the total.
@@ -1019,6 +1069,9 @@ def _discarded(value: Any, handler: Any) -> Any:
             raise _signal(err) from None
     if tally.repeating and tally.budget is not None:
         tally.budget.spend(PYTHON_CALL_STEPS)
+    # This frame stays on the stack while the part below is checked, at every
+    # level of a recursive value (see STACK_SET_BY_RECURSION_LIMIT).
+    level = _enter_level(tally) if STACK_SET_BY_RECURSION_LIMIT else 0
     before = tally.errors
     try:
         return handler(value)
@@ -1032,6 +1085,7 @@ def _discarded(value: Any, handler: Any) -> Any:
         raise _signal(err) from None
     finally:
         tally.errors = before
+        tally.depth -= level
 
 
 def _spending(inner: Callable[[Any, Any], Any]) -> Callable[[Any, Any], Any]:
@@ -1039,18 +1093,26 @@ def _spending(inner: Callable[[Any, Any], Any]) -> Callable[[Any, Any], Any]:
 
     def spend(value: Any, handler: Any) -> Any:
         tally = _current_tally()
-        if tally is None or tally.budget is None:
+        if tally is None:
             return inner(value, handler)
-        tally.budget.spend_on(value)
-        tally.repeating += 1
+        # This frame and `inner`'s stay on the stack while the value is
+        # checked, at every level of a recursive value (see STACK_SET_BY_RECURSION_LIMIT).
+        level = _enter_level(tally) if STACK_SET_BY_RECURSION_LIMIT else 0
         try:
-            return inner(value, handler)
-        except pydantic_core.ValidationError as err:
-            # Each wrapper above copies the errors handed up, as for a union member.
-            tally.budget.spend(err.error_count() * _STEPS_PER_ERROR)
-            raise
+            if tally.budget is None:
+                return inner(value, handler)
+            tally.budget.spend_on(value)
+            tally.repeating += 1
+            try:
+                return inner(value, handler)
+            except pydantic_core.ValidationError as err:
+                # Each wrapper above copies the errors handed up, as for a union member.
+                tally.budget.spend(err.error_count() * _STEPS_PER_ERROR)
+                raise
+            finally:
+                tally.repeating -= 1
         finally:
-            tally.repeating -= 1
+            tally.depth -= level
 
     return spend
 
@@ -1081,6 +1143,8 @@ def _discarded_spending(value: Any, handler: Any) -> Any:
     budget = tally.budget
     if budget is not None:
         budget.spend_on(value)
+    # A level, as in `_discarded`.
+    level = _enter_level(tally) if STACK_SET_BY_RECURSION_LIMIT else 0
     before = tally.errors
     outer_floor = tally.member_floor
     tally.member_floor = before
@@ -1101,6 +1165,7 @@ def _discarded_spending(value: Any, handler: Any) -> Any:
         tally.errors = before
         tally.member_floor = outer_floor
         tally.repeating -= 1
+        tally.depth -= level
 
 
 def _text_spending(text_steps: int, long_text_steps: int = 0) -> Callable[[Any, Any], Any]:
@@ -1118,7 +1183,12 @@ def _text_spending(text_steps: int, long_text_steps: int = 0) -> Callable[[Any, 
 
     def charge(value: Any, handler: Any) -> Any:
         tally = _current_tally()
-        if tally is not None and tally.repeating and tally.budget is not None:
+        if tally is None:
+            try:
+                return handler(value)
+            except pydantic_core.SchemaError as err:
+                raise _signal(err) from None
+        if tally.repeating and tally.budget is not None:
             # This wrapper is a Python call too, as `_counted` charges.
             tally.budget.spend(PYTHON_CALL_STEPS)
             if isinstance(value, (str, bytes)):
@@ -1127,10 +1197,15 @@ def _text_spending(text_steps: int, long_text_steps: int = 0) -> Callable[[Any, 
             elif isinstance(value, _CONTAINERS):
                 # An author's function may read every string inside.
                 tally.budget.spend_time(tally.budget.measure(value).characters * text_steps // _TEXT_PER_STEP)
+        # The node may be a function on the way down a recursive value, so
+        # this frame can stay on the stack at every level (see STACK_SET_BY_RECURSION_LIMIT).
+        level = _enter_level(tally) if STACK_SET_BY_RECURSION_LIMIT else 0
         try:
             return handler(value)
         except pydantic_core.SchemaError as err:
             raise _signal(err) from None
+        finally:
+            tally.depth -= level
 
     return charge
 
@@ -2359,6 +2434,12 @@ class _Rewriter:
                 # times, so each call spends for the value it checks.
                 copied["schema"] = _wrap(copied["schema"], _spending(_passed_through))
             # The author's wrap validator may catch the errors below it and succeed.
+            return _wrap(copied, _counted)
+        if kind == "function-wrap" and STACK_SET_BY_RECURSION_LIMIT:
+            # Pydantic's own wrap function (behind `Sequence[...]`, for one)
+            # stays on the stack while the value below it is checked, so on a
+            # recursive value it adds a Python call at every level, which the
+            # nesting limit counts where STACK_SET_BY_RECURSION_LIMIT says so.
             return _wrap(copied, _counted)
         if kind == "lax-or-strict" and type(copied.get("strict_schema")) is dict:
             # Inside a union, the strict attempt's errors are thrown away

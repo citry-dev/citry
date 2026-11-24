@@ -67,6 +67,10 @@ IS_PYPY = platform.python_implementation() == "PyPy"
 PYPY_CRASHES_IN_SUBPROCESS = "PyPy's C-API layer crashes in this subprocess; see #708"
 
 SIGNING_KEY = "test-secret-key"
+# The nesting limit a check applies on a check thread. PyPy lets a thread
+# use only as much stack as its recursion limit sets, so there it is the
+# small-stack limit (see `bounded.STACK_SET_BY_RECURSION_LIMIT`).
+CHECK_LIMIT = bounded.SMALL_STACK_CHECK_DEPTH if bounded.STACK_SET_BY_RECURSION_LIMIT else bounded.MAX_CHECK_DEPTH
 
 
 @pytest.fixture(autouse=True)
@@ -94,8 +98,12 @@ class _HandClock:
 def deep_checks(monkeypatch: pytest.MonkeyPatch) -> None:
     # A test of the work budget needs data deep enough for the budget to run
     # out before the nesting limit stops it, so these tests raise the limit
-    # to 100, which the stack of a check thread holds many times over.
-    monkeypatch.setattr(bounded, "MAX_CHECK_DEPTH", 100)
+    # to 150, which the stack of a check thread holds many times over. On
+    # PyPy a level of a recursive union counts three times or more (the
+    # union, the member's wrapper and the object), and the limit there is
+    # the small-stack one, so both are raised.
+    monkeypatch.setattr(bounded, "MAX_CHECK_DEPTH", 150)
+    monkeypatch.setattr(bounded, "SMALL_STACK_CHECK_DEPTH", 150)
 
 
 @pytest.fixture
@@ -610,7 +618,7 @@ def test_data_past_the_nesting_limit_is_refused_and_logged_once(caplog: pytest.L
         c: Node | None = None
 
     payload: dict[str, Any] = {}
-    for _ in range(bounded.MAX_CHECK_DEPTH):
+    for _ in range(CHECK_LIMIT):
         payload = {"c": payload}
 
     with caplog.at_level(logging.WARNING, logger="citry"):
@@ -619,7 +627,7 @@ def test_data_past_the_nesting_limit_is_refused_and_logged_once(caplog: pytest.L
 
     assert first.fields == second.fields == {"_args": bounded.TOO_DEEP_MESSAGE}
     # Any client can send deep data again, so the warning comes once per class.
-    assert caplog.text.count(f"nests more than {bounded.MAX_CHECK_DEPTH} objects") == 1
+    assert caplog.text.count(f"nests more than {CHECK_LIMIT} objects") == 1
 
 
 def test_a_part_that_drops_bad_items_does_not_swallow_the_nesting_limit() -> None:
@@ -634,6 +642,150 @@ def test_a_part_that_drops_bad_items_does_not_swallow_the_nesting_limit() -> Non
         payload = {"c": [payload]}
 
     assert validate_args(ONode, payload).fields == {"_args": bounded.TOO_DEEP_MESSAGE}
+
+
+# --- PyPy's fixed stack budget ----------------------------------------------------
+#
+# PyPy lets a thread use only as much stack as the recursion limit sets, and
+# ends the process when pydantic-core uses it up, so there Citry counts every
+# Python call its copy makes on the way down, and applies the small-stack
+# limit on check threads too. These tests set the rule on CPython, so CI runs
+# them; each class is made inside its test, because the copy of a class is
+# built once, under the rule set when it is first checked.
+
+
+@pytest.fixture
+def pypy_stack_rules(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", True)
+
+
+def _omit_tree_class() -> type[pydantic.BaseModel]:
+    class OTree(pydantic.BaseModel):
+        children: list[pydantic.OnErrorOmit[list[pydantic.OnErrorOmit[OTree]]]] = []
+
+    return OTree
+
+
+def _omit_tree(depth: int) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for _ in range(depth):
+        payload = {"children": [[payload]]}
+    return payload
+
+
+def _sequence_tree_class() -> type[pydantic.BaseModel]:
+    class STree(pydantic.BaseModel):
+        children: Sequence[STree] = ()
+
+    return STree
+
+
+def _sequence_tree(depth: int) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for _ in range(depth):
+        payload = {"children": [payload]}
+    return payload
+
+
+def test_on_pypy_a_check_thread_applies_the_small_stack_limit(pypy_stack_rules: None) -> None:
+    # A check thread's 16 MiB does not raise PyPy's budget, so it gets the
+    # limit sized for a small stack.
+    assert bounded.run_on_check_thread(bounded.nesting_limit) == bounded.SMALL_STACK_CHECK_DEPTH
+
+
+def test_on_cpython_a_check_thread_applies_the_full_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", False)
+
+    assert bounded.run_on_check_thread(bounded.nesting_limit) == bounded.MAX_CHECK_DEPTH
+
+
+@pytest.mark.parametrize(
+    ("make_class", "make_payload"),
+    [
+        # Citry's wrapper for each part that drops bad items stays on the
+        # stack while the item below it is checked.
+        pytest.param(_omit_tree_class, _omit_tree, id="OnErrorOmit"),
+        # So does Pydantic's own wrap function behind `Sequence[...]`.
+        pytest.param(_sequence_tree_class, _sequence_tree, id="Sequence"),
+    ],
+)
+def test_on_pypy_each_python_call_on_the_way_down_counts_toward_the_nesting_limit(
+    monkeypatch: pytest.MonkeyPatch,
+    make_class: Any,
+    make_payload: Any,
+) -> None:
+    # Two thirds of the small-stack limit in objects is within it when only
+    # the objects count, and past it when the calls between them count too.
+    # The CPython rule runs here with the small-stack limit, so the two
+    # checks differ only in what counts.
+    payload = make_payload(bounded.SMALL_STACK_CHECK_DEPTH * 2 // 3)
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", False)
+    monkeypatch.setattr(bounded, "MAX_CHECK_DEPTH", bounded.SMALL_STACK_CHECK_DEPTH)
+    counting_objects = validate_args(make_class(), payload)
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", True)
+    counting_calls = validate_args(make_class(), payload)
+
+    assert counting_objects.ok
+    assert counting_calls.fields == {"_args": bounded.TOO_DEEP_MESSAGE}
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_the_member_wrappers_of_a_recursive_union_count_toward_the_nesting_limit() -> None:
+    # Each member of a union whose members can each read the value has a
+    # Citry wrapper that stays on the stack. Twelve levels of filters are
+    # within the limit when only the unions and objects count.
+    class F(pydantic.BaseModel):
+        q: And | Or | Leaf
+
+    assert validate_args(F, {"q": _chain(12, 1)}).fields == {"_args": bounded.TOO_DEEP_MESSAGE}
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_the_wrappers_of_a_wrap_validator_count_toward_the_nesting_limit() -> None:
+    # A wrap validator may call its handler again, so its copy spends from
+    # the work budget, for the value and for the text the function may read,
+    # in two more wrappers that stay on the stack. With the object and the
+    # validator, each level counts four times.
+    class W(pydantic.BaseModel):
+        c: W | None = None
+
+        @pydantic.model_validator(mode="wrap")
+        @classmethod
+        def whole(cls, value: Any, handler: Any) -> Any:
+            return handler(value)
+
+    payload: dict[str, Any] = {}
+    for _ in range(bounded.SMALL_STACK_CHECK_DEPTH // 4):
+        payload = {"c": payload}
+
+    assert validate_args(W, payload).fields == {"_args": bounded.TOO_DEEP_MESSAGE}
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_data_within_the_nesting_limit_is_accepted() -> None:
+    # Counting each call must leave the count where it was after each part,
+    # or a tree with many branches would add up its branches.
+    tree_class = _omit_tree_class()
+    wide = {"children": [[_omit_tree(3)] * 20] * 20}
+
+    result = validate_args(tree_class, wide)
+
+    assert result.ok
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_a_state_write_counts_each_python_call_toward_the_nesting_limit() -> None:
+    tree_class = _omit_tree_class()
+
+    class Forest(pydantic.BaseModel):
+        tree: tree_class = tree_class()  # type: ignore[valid-type]
+        _model = ("tree",)
+
+    payload = _omit_tree(bounded.SMALL_STACK_CHECK_DEPTH * 2 // 3)
+    with bounded.request_work(), pytest.raises(StateUpdateError) as caught:
+        apply_state_updates(Forest(), {"tree": payload}, model_fields=("tree",))
+
+    assert caught.value.fields == {"_state": bounded.TOO_DEEP_MESSAGE}
 
 
 @pydantic.dataclasses.dataclass
@@ -784,7 +936,7 @@ def test_a_check_runs_on_a_check_thread_with_the_full_limit_and_the_callers_cont
 
     inner = bounded.run_on_check_thread(check)
 
-    assert ran_on == [(inner, True, bounded.MAX_CHECK_DEPTH, "caller")]
+    assert ran_on == [(inner, True, CHECK_LIMIT, "caller")]
     assert inner != threading.get_ident()
     assert seen.get() == "caller"
     assert not bounded.on_check_thread()
@@ -1063,6 +1215,7 @@ def test_a_check_inside_a_validation_counts_its_cpu_time_on_the_check_thread() -
 # --- recursive unions and the work budget -------------------------------------------
 
 
+@pytest.mark.usefixtures("deep_checks")
 def test_a_valid_filter_chain_fourteen_levels_deep_is_accepted() -> None:
     result = validate_args(Query, {"q": _chain(14, 1)})
 
@@ -1144,6 +1297,7 @@ def test_a_recursive_union_that_reads_each_value_with_one_member_spends_nothing(
     assert result.value == Blob.model_validate(payload)
 
 
+@pytest.mark.usefixtures("deep_checks")
 def test_the_calls_of_one_request_share_one_work_budget() -> None:
     payload = {"q": _chain(14, 1)}
     results = []
@@ -1154,6 +1308,7 @@ def test_the_calls_of_one_request_share_one_work_budget() -> None:
     assert results[-1].fields == {"_args": bounded.TOO_MUCH_WORK_MESSAGE}
 
 
+@pytest.mark.usefixtures("deep_checks")
 def test_a_plain_dataclass_recursive_union_too_deep_to_check_is_refused() -> None:
     @dataclasses.dataclass
     class DAnd:
@@ -2113,6 +2268,7 @@ def test_citry_own_messages_count_toward_the_error_limit() -> None:
 # --- the request's work budget -------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("deep_checks")
 def test_a_task_started_during_a_request_gets_its_own_budget_after_the_request_ends() -> None:
     async def later() -> bool:
         await asyncio.sleep(0)
@@ -2856,6 +3012,7 @@ def _padded_chain(depth: int, size: int) -> dict[str, Any]:
     return value
 
 
+@pytest.mark.usefixtures("deep_checks")
 def test_a_deep_union_over_a_large_leaf_spends_the_budget() -> None:
     data = pydantic.create_model("Data", q=(PadA | PadB, ...))
 
@@ -2874,6 +3031,7 @@ def test_the_same_shallow_tree_with_a_large_leaf_is_accepted() -> None:
     assert result.value == data.model_validate(payload)
 
 
+@pytest.mark.usefixtures("deep_checks")
 def test_a_wrap_validator_that_calls_its_handler_twice_spends_for_each_call() -> None:
     class TwicePad(pydantic.BaseModel):
         kid: TwicePad | None = None
@@ -3428,6 +3586,7 @@ def test_a_shallow_tree_with_a_large_leaf_of_small_objects_is_accepted() -> None
     assert validate_args(filter_class, _filter_payload(4, [{"x": 1}] * 60_000)).ok
 
 
+@pytest.mark.usefixtures("deep_checks")
 @pytest.mark.parametrize(
     ("value_type", "leaf", "depth"),
     [
@@ -3444,6 +3603,7 @@ def test_a_deep_union_over_text_that_its_check_parses_spends_the_budget(
     assert result.fields == {"_args": bounded.TOO_MUCH_WORK_MESSAGE}
 
 
+@pytest.mark.usefixtures("deep_checks")
 @pytest.mark.parametrize(
     ("value_type", "leaf"),
     [
@@ -4509,8 +4669,10 @@ class Tree(Component):
 
 
 # As deep as the nesting limit accepts: the State, then one level per node.
+# PyPy applies the small-stack limit (see `bounded.STACK_SET_BY_RECURSION_LIMIT`).
+limit = bounded.SMALL_STACK_CHECK_DEPTH if bounded.STACK_SET_BY_RECURSION_LIMIT else bounded.MAX_CHECK_DEPTH
 value = None
-for _ in range(bounded.MAX_CHECK_DEPTH - 1):
+for _ in range(limit - 1):
     value = {"c": value}
 answers = {}
 
@@ -4591,8 +4753,8 @@ def test_each_class_kind_counts_one_level_per_object(data_cls: type) -> None:
     # Pydantic dataclass sees only one level at a time. Each object still
     # counts one level, so a chain of any of these class kinds is accepted
     # at the limit and refused one level past it.
-    accepted = validate_args(data_cls, _chain_of_objects(bounded.MAX_CHECK_DEPTH))
-    refused = validate_args(data_cls, _chain_of_objects(bounded.MAX_CHECK_DEPTH + 1))
+    accepted = validate_args(data_cls, _chain_of_objects(CHECK_LIMIT))
+    refused = validate_args(data_cls, _chain_of_objects(CHECK_LIMIT + 1))
 
     assert accepted.ok
     assert refused.fields == {"_args": bounded.TOO_DEEP_MESSAGE}
