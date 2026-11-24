@@ -4227,7 +4227,7 @@ def _state_reader(board: type) -> type[Component]:
 
 @pytest.mark.skipif(
     IS_PYPY,
-    reason="PyPy's recursion check depends on how warm its JIT is, so no State is reliably too deep to restore",
+    reason="PyPy may or may not run out of frames on a deep State, depending on how warm its JIT is",
 )
 def test_a_signed_pydantic_v1_state_too_deep_to_restore_answers_stale_state() -> None:
     # A token Citry signed can hold a v1 State that Python cannot read back
@@ -4256,8 +4256,8 @@ def test_a_signed_pydantic_v1_state_too_deep_to_restore_answers_stale_state() ->
 def test_a_restore_that_runs_out_of_python_frames_answers_stale_state(monkeypatch: pytest.MonkeyPatch) -> None:
     # Where a restore runs out of frames depends on the interpreter, and on
     # PyPy on how warm its JIT is, so the test above cannot run on PyPy.
-    # Here the restore raises RecursionError itself, as it does at the end of
-    # the frames, so the answer is checked on every interpreter.
+    # Here the restore raises RecursionError itself, as it does when Python
+    # runs out of frames, so the answer is checked on every interpreter.
     def out_of_frames(*args: Any, **kwargs: Any) -> None:
         raise RecursionError
 
