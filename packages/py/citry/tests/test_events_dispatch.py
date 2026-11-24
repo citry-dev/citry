@@ -3180,12 +3180,8 @@ class TestGuardReturnValues:
         comp = self._component(_citry(), log, handler_guard=self._returning(log, "handler", value=error))
         for _ in range(3):
             assert self._call(comp, "go")["error"]["message"] == "No."
-        depth = 0
-        tb = error.__traceback__
-        while tb is not None:
-            depth += 1
-            tb = tb.tb_next
-        assert depth <= 2
+            # Nothing from the call stays reachable through the shared error.
+            assert error.__traceback__ is None
 
     def test_a_returned_event_error_refuses_a_view_events_verb(self):
         log = []

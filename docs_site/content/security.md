@@ -178,7 +178,8 @@ the submitted data in the handler body, where the data has already been
 validated.
 
 Return `None` (or nothing) or `True` to let the call go ahead. Any
-other value, such as `0` or a string, also lets the call go ahead, but
+other value, such as `0`, a string, or an exception other than
+`EventError`, also lets the call go ahead, but
 Citry logs a warning that names the guard. Only `False` and an
 `EventError` refuse, so return `False` explicitly: an expression such
 as `user and user.is_staff` gives `None` when there is no user, and
@@ -257,9 +258,10 @@ a check of its own, as in
 `@event(component_guard=False, guard=rate_limit)`.
 
 Put every setting for a handler in one `@event(...)`. Citry raises an
-error when a second `@event(...)` decorates the same function, because
-the second one would replace the first one's settings, its `guard=`
-among them. It also raises one when a decorator above `@event(...)`
+error when a second `@event(...)` decorates the same function, or when
+one function is decorated for two classes, because only one set of
+settings would take effect and a `guard=` could be dropped. Give each
+class its own function. It also raises one when a decorator above `@event(...)`
 hides its settings; write such a decorator with `functools.wraps`.
 
 Write guards and `_context` as plain `def` functions, not `async def`.

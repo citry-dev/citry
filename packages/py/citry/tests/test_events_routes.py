@@ -1928,10 +1928,15 @@ class TestGuardThatReturnsARefusalOnEveryRoute:
         else:
             # The no-JavaScript form post: no runtime header, HTML answer.
             response = client.post(_event_url(locked, "go"), data={"_citry_caller_render_id": "i1"})
+        # The message tells the two apart: a returned error keeps its own.
+        message = "You are not allowed to make this call." if returned == "false" else "Locked."
         if route == "form":
             assert response.status_code == 403
+            assert message in response.text
         else:
-            assert response.json()["results"][0]["error"]["code"] == "forbidden"
+            error = response.json()["results"][0]["error"]
+            assert error["code"] == "forbidden"
+            assert error["message"] == message
         assert ran == []
 
 

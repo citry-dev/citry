@@ -599,9 +599,9 @@ def _apply_guard_result(source: str, guard: Any, result: Any) -> None:
     # the log line should not carry text the caller chose.
     guard_name = getattr(guard, "__qualname__", None) or type(guard).__name__
     logger.warning(
-        f"{source}: the guard {guard_name} returned a value of type {type(result).__name__!r}, which Citry ignores."
-        " A guard refuses a call by raising or returning EventError or by returning False, and allows it by"
-        " returning None or True, so this call goes ahead."
+        f"{source}: guard {guard_name!r} returned a value of type {type(result).__name__!r}, which Citry ignores,"
+        " so the call goes ahead. To refuse it, raise or return an EventError, or return False; return None or"
+        " True to allow it without this warning."
     )
 
 
@@ -1254,7 +1254,12 @@ class EventsDispatcher:
                         handler.guard(events),
                     )
         except EventError as err:
-            return build_error_result(wire_error(err), send_sequence)
+            error = wire_error(err)
+            # A guard may return one error object kept in a module constant;
+            # dropping the traceback stops that object holding this call's
+            # frames (the request, the State) until the next call.
+            err.__traceback__ = None
+            return build_error_result(error, send_sequence)
         except Exception as err:  # noqa: BLE001 - a crash before the handler still answers 500
             return self._unexpected_error(
                 ctx, err, comp_cls=comp_cls, handler=handler, events=events, send_sequence=send_sequence

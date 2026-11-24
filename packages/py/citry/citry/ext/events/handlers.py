@@ -661,7 +661,9 @@ def event(
             (anything other than GET, HEAD, POST, PUT, PATCH, DELETE, and
             OPTIONS), at decoration time. Also when the handler already
             has ``@event`` settings, such as from a second ``@event(...)``
-            stacked on it: put every setting in one ``@event(...)``.
+            stacked on it or from decorating the same function for another
+            class: put every setting in one ``@event(...)``, and give each
+            class its own function.
 
     """
     if name is not None and (not isinstance(name, str) or not name):
