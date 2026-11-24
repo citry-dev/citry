@@ -13,6 +13,14 @@
   again, so a watcher on an object or list field of `$state` runs. With
   server-stored State, each new token adds one cache entry. See
   [Treat State as input](https://citry.dev/security/#treat-state-as-client-input).
+- You can now check that a redirect URL from the request stays on your
+  site with `local_url_or()` and `is_local_url()` from
+  `citry.ext.events`, for example
+  `actions.Redirect(local_url_or(data.next, "/"))`. They read the URL
+  the way a browser does, so `//other.example` and `/\other.example`
+  get the fallback. Pass `allowed_hosts` to also accept a full URL on
+  your site. See
+  [Check redirect URLs](https://citry.dev/security/#check-redirect-urls).
 - `RouteRequest` has a new `scheme` field: `"http"` or `"https"`, as
   your server reports it. The ASGI, WSGI and Django adapters fill it in.
   If you build a `RouteRequest` yourself, set it, because Events skip
