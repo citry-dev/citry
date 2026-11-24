@@ -233,8 +233,10 @@ class Newsletter(Component):
 Write guards and `_context` as plain `def` functions, not `async def`.
 Citry calls them without awaiting them, on WSGI and ASGI servers alike,
 so it refuses an async one with an error when the component class is
-defined. A decorator you put on a guard must not call an async function
-either, because Citry cannot see inside it. Put a check that needs
+defined. A decorator you put on a guard must run any async function it
+calls to the end, for example with `asgiref.sync.async_to_sync`. Citry
+cannot see inside the decorator, so a call it starts and never finishes
+refuses nothing. Put a check that needs
 `await` at the start of an `async def` handler and raise `EventError`
 there, as a guard would. An `async def` handler needs an ASGI server.
 

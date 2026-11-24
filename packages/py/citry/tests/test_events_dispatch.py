@@ -13,8 +13,10 @@ indirection.
 """
 
 import asyncio
+import collections.abc
 import functools
 import importlib.util
+import inspect
 import json
 import logging
 import re
@@ -2665,6 +2667,40 @@ class TestAsyncGuardsAreRefused:
         [item] = _dispatch(comp.citry, {"componentClassId": comp.class_id, "handlerName": "go"})["results"]
         assert item["error"]["code"] == "handler_error"
         assert ran == []
+
+    def test_a_context_that_returns_a_compiled_style_coroutine_refuses_the_call(self):
+        # Cython and mypyc coroutines register only as collections.abc.Coroutine,
+        # so inspect.iscoroutine misses them; the call must still be refused.
+        class CompiledCoroutine(collections.abc.Coroutine):
+            def send(self, value):
+                raise StopIteration
+
+            def throw(self, *args):
+                raise StopIteration
+
+            def __await__(self):
+                yield from ()
+
+        assert not inspect.iscoroutine(CompiledCoroutine())
+        comp, ran = self._guarded(_citry(), _context=lambda _events: CompiledCoroutine())
+        [item] = _dispatch(comp.citry, {"componentClassId": comp.class_id, "handlerName": "go"})["results"]
+        assert item["error"]["code"] == "handler_error"
+        assert ran == []
+
+    def test_a_started_generator_from_a_guard_is_refused_but_not_closed(self):
+        # The app may still use a generator it already started; Citry
+        # refuses the call without closing it.
+        def numbers():
+            yield 1
+            yield 2
+
+        started = numbers()
+        next(started)
+        comp, ran = self._guarded(_citry(), _guard=lambda _events: started)
+        [item] = _dispatch(comp.citry, {"componentClassId": comp.class_id, "handlerName": "go"})["results"]
+        assert item["error"]["code"] == "handler_error"
+        assert ran == []
+        assert next(started) == 2
 
     def test_a_context_may_return_other_awaitable_data(self):
         # _context's value is app data; only an unrun coroutine is refused.

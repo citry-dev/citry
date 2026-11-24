@@ -569,8 +569,9 @@ def _apply_guard_result(source: str, guard: Any, result: Any) -> None:
         result: What the guard returned.
 
     Raises:
-        TypeError: When the result is unrun code (a coroutine or
-            generator); the dispatcher answers ``handler_error``.
+        TypeError: When the result is a coroutine, another awaitable, or
+            a generator, so the guard's check did not run; the dispatcher
+            answers ``handler_error``.
         EventError: With status 403 when the result is ``False``.
 
     """

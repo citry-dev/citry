@@ -19,7 +19,7 @@ import inspect
 import re
 import sys
 import textwrap
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, is_dataclass
 from types import FunctionType
 from typing import Any, TypeVar, get_type_hints, overload
@@ -314,6 +314,15 @@ def refuse_deferred_body(source: str, value: Any, purpose: str) -> None:
         raise ValueError(msg)
 
 
+def _not_started(result: Any) -> bool:
+    """Whether ``result`` is a Python coroutine or generator whose code has not started."""
+    if inspect.iscoroutine(result):
+        return inspect.getcoroutinestate(result) == inspect.CORO_CREATED
+    if inspect.isgenerator(result):
+        return inspect.getgeneratorstate(result) == inspect.GEN_CREATED
+    return False
+
+
 def refuse_deferred_result(source: str, result: Any, *, coroutine_only: bool = False) -> None:
     """
     Raise ``TypeError`` when a call returned a coroutine or generator.
@@ -327,10 +336,11 @@ def refuse_deferred_result(source: str, result: Any, *, coroutine_only: bool = F
     Args:
         source: The function's name, as the error message shows it.
         result: What the function returned.
-        coroutine_only: Refuse only a coroutine. ``_context`` passes this:
-            its value is app data, which may be some other awaitable or a
-            generator on purpose. A guard or CSRF function returns nothing
-            useful, so any of these means its code did not run.
+        coroutine_only: Refuse only a coroutine, compiled ones included.
+            ``_context`` passes this: its value is app data, which may be
+            some other awaitable or a generator on purpose. A guard or CSRF
+            function refuses only by raising, so a result Citry would have
+            to await or iterate means its check did not run.
 
     Raises:
         TypeError: When ``result`` is a coroutine, or (without
@@ -340,18 +350,22 @@ def refuse_deferred_result(source: str, result: Any, *, coroutine_only: bool = F
 
     """
     if coroutine_only:
-        deferred = inspect.iscoroutine(result)
+        # A compiled coroutine (Cython, mypyc) is registered only as a
+        # ``collections.abc.Coroutine``, so ``inspect.iscoroutine`` misses it.
+        deferred = isinstance(result, Coroutine)
     else:
         deferred = inspect.isawaitable(result) or inspect.isgenerator(result) or inspect.isasyncgen(result)
     if not deferred:
         return
-    # Only objects Citry knows are unrun code are closed; closing some other
-    # awaitable the app returned could shut down a resource it still uses.
-    if inspect.iscoroutine(result) or inspect.isgenerator(result):
+    # Closing an unstarted coroutine or generator stops Python warning that
+    # it was never awaited. One the app already started may still be in use
+    # elsewhere, and some other awaitable may be a resource the app owns, so
+    # those are left alone.
+    if _not_started(result):
         result.close()
     msg = (
-        f"{source} returned a {type(result).__name__!r} object, so its code did not run. It must be"
-        " a plain (not async) function: Citry calls it without awaiting it, so this call is refused."
+        f"{source} returned a {type(result).__name__!r} object. It must be a plain (not async) function:"
+        " Citry calls it without awaiting or iterating what it returns, so this call is refused."
     )
     raise TypeError(msg)
 
