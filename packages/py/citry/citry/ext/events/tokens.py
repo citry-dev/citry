@@ -43,11 +43,10 @@ Both storage modes share one lifetime rule: a token is valid for ``_max_age``
 after it is minted, or for 24 hours when ``_max_age`` is unset. A call that
 arrives once the token is past half its lifetime gets a new token with a full
 lifetime, even when State did not change (``state_renewal_due``; the
-dispatcher sends it). So a page that calls at least once per half lifetime
-never reaches the expiry. A token whose
-version this release does not know (one a newer or older release wrote) is
-treated like an expired one, so a version change in a later release costs an
-open page one reload.
+dispatcher sends it). So a component that gets a call at least once per half
+lifetime never reaches the expiry. A token whose version this release does
+not know (one a newer or older release wrote) is treated like an expired
+one, so a version change in a later release costs an open page one reload.
 
 The per-call order the dispatcher (a later work package) drives is: verify the
 token, rebuild the State from ``verified.state_kwargs`` (``restore_state``), apply ``stateUpdates`` to
@@ -509,10 +508,9 @@ def _warn_unbounded_state_cache(cache: CitryCache) -> None:
     _WARNED_UNBOUNDED_CACHES.add(id(cache))
     logger.warning(
         "Server-stored State (_storage = 'server') is kept in an InMemoryCache with state_max_bytes=None."
-        " Each render, each State change, and each token renewal adds an entry that lasts until it expires"
-        " (24 hours unless"
-        " _max_age is set), so the process memory grows with traffic. Keep the default budget, set"
-        " InMemoryCache(state_max_bytes=...), or use a shared backend with a size limit."
+        " Each render, each State change, and each token renewal adds an entry that lasts until it"
+        " expires (24 hours unless _max_age is set), so the process memory grows with traffic. Keep the"
+        " default budget, set InMemoryCache(state_max_bytes=...), or use a shared backend with a size limit."
     )
 
 
@@ -803,9 +801,9 @@ def state_renewal_due(verified: VerifiedState) -> bool:
     Whether a verified token is old enough that the call should send a new one.
 
     A token is due once it is past half its lifetime. Renewing then, rather
-    than only near the expiry, leaves a page that calls at least once per
-    half lifetime with a valid token, and costs at most one new token per
-    half lifetime. Each server compares the token's times with its own clock,
+    than only near the expiry, leaves a component that gets a call at least
+    once per half lifetime with a valid token, and costs about one new token
+    per instance per half lifetime. Each server compares the token's times with its own clock,
     so a token minted by a server whose clock runs ahead is renewed later,
     never refused for it.
     """

@@ -76,11 +76,11 @@ its own calls.
 
 The expiry limits how long a copied token stays useful only while nobody
 uses it. Anyone who sends calls with a copy at least every 12 hours keeps
-getting new tokens, as the page does, even to handlers that only read
-State. A token that a GET handler receives in its URL can end up in
+getting new tokens, as the page does, even when it calls only handlers
+that read State. A token that a GET handler receives in its URL can end up in
 server and proxy logs, so whoever can read those logs can keep that
-token alive the same way. Tokens give no permission: check it in every
-handler.
+token alive the same way. A token grants no permission, so check
+permissions in every handler.
 
 A call with an expired token does not run its handler: it gets a
 `stale_state` error, and calls from that component keep failing until
@@ -90,10 +90,10 @@ shows how to tell the visitor.
 
 To change the lifetime, set `State._max_age` to a `timedelta` of at least
 one second. Token times are whole seconds, so a token can stop working up
-to one second early. No setting turns expiry off. Changing `_max_age` later does not change the tokens
-Citry has already issued. A call renews a token once it is past half its
-lifetime, so set `_max_age` to at least twice the longest time a page may
-go without a call.
+to one second early. No setting turns expiry off. Changing `_max_age`
+later does not change the tokens Citry has already issued. A call renews
+a token once it is past half its lifetime, so set `_max_age` to at least
+twice the longest time a page may go without a call.
 
 ```python
 from datetime import timedelta
@@ -133,8 +133,8 @@ them. Server storage does not replace the permission check either: still
 authorize every use of the restored values.
 
 Server storage adds a cache entry for each token Citry issues (see
-above), and keeps each entry until it expires: after
-`State._max_age`, or after 24 hours when you do not set it. With several
+above), and keeps each entry until it expires: after `State._max_age`,
+or after 24 hours when you do not set it. With several
 server processes, use a shared backend and set its memory limit and
 eviction policy. A browser write that would make the stored
 State larger than `State._max_bytes` (64 KiB by default) gets a 422

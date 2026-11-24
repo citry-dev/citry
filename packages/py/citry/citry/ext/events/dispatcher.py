@@ -538,23 +538,28 @@ def _too_deep_to_write(state: Any) -> bool:
     return False
 
 
-# The class ids of components whose State token could not be renewed, so the
-# warning is logged once per class rather than on every call for up to half a
-# token lifetime. Later failures still log at debug level.
-_RENEWAL_FAILURES_LOGGED: set[str] = set()
+# The component class ids and error kinds whose failed State token renewal was
+# already logged, so each warns once rather than on every call for up to half
+# a token lifetime, while a different kind of failure still warns. Later
+# repeats log at debug level.
+_RENEWAL_FAILURES_LOGGED: set[tuple[str, str]] = set()
 
 
 def _log_failed_renewal(comp_cls: type[Component], err: Exception) -> None:
-    """Log why a State token could not be renewed: a warning once per component class, then debug."""
+    """Log why a State token could not be renewed: a warning once per component class and error kind, then debug."""
     message = (
         f"Component {comp_cls.__name__}: the State token is past half its lifetime, but a new one could not be"
         f" made, so the page keeps its current token until it expires: {type(err).__name__}: {err}"
     )
-    if comp_cls.class_id in _RENEWAL_FAILURES_LOGGED:
+    seen = (comp_cls.class_id, type(err).__name__)
+    if seen in _RENEWAL_FAILURES_LOGGED:
         logger.debug(message)
         return
-    _RENEWAL_FAILURES_LOGGED.add(comp_cls.class_id)
-    logger.warning(message)
+    _RENEWAL_FAILURES_LOGGED.add(seen)
+    # A value that cannot be signed or a cache that is down is expected and
+    # explained by the message. Anything else may be a bug in Citry, which
+    # would otherwise show only as pages expiring, so it keeps its traceback.
+    logger.warning(message, exc_info=not isinstance(err, (ValueError, OSError)))
 
 
 def _instances_given_a_token(wire_actions: list[dict[str, Any]]) -> set[str]:
@@ -1601,8 +1606,8 @@ class EventsDispatcher:
         either way.
 
         A token past half its lifetime gets the same ``state`` action with
-        unchanged State, so a page that keeps calling never reaches the
-        expiry (design 7.1). ``_renewal_wanted`` and ``_renew_state`` skip it
+        unchanged State, so a component that keeps getting calls never
+        reaches the expiry (design 7.1). ``_renewal_wanted`` and ``_renew_state`` skip it
         wherever it could do harm or nobody would store it.
         """
         if plan.state is None:

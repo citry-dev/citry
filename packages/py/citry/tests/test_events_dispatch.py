@@ -3912,8 +3912,8 @@ class TestStateRenewal:
     A call whose State token is past half its lifetime gets a new token.
 
     The new token is sent in the `state` action that a State change
-    already uses, so a page that keeps calling never reaches the expiry even when
-    its calls only read State.
+    already uses, so a component that keeps getting calls never reaches
+    the expiry, even when its calls only read State.
     """
 
     HALF_DAY = 12 * 60 * 60
