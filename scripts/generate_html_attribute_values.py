@@ -249,9 +249,11 @@ SUPPLEMENTAL_EVENT_NAMES = (
     # Compatibility Standard, the `onorientationchange` handler on Window.
     "orientationchange",
     # WICG Manifest Incubations, the `onappinstalled` and
-    # `onbeforeinstallprompt` handlers Chromium has on Window.
+    # `onbeforeinstallprompt` handlers Chromium has on Window, and the
+    # `oninstallresult` handler of the Web Install proposal.
     "appinstalled",
     "beforeinstallprompt",
+    "installresult",
     # Gamepad, the handlers it adds to WindowEventHandlers.
     "gamepadconnected",
     "gamepaddisconnected",

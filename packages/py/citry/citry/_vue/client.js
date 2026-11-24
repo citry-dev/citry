@@ -206,31 +206,32 @@
     "dragstart", "drop", "durationchange", "emptied", "encrypted", "ended", "enterpictureinpicture",
     "error", "focus", "focusin", "focusout", "formdata", "freeze", "fullscreenchange",
     "fullscreenerror", "gamepadconnected", "gamepaddisconnected", "gotpointercapture", "hashchange",
-    "input", "invalid", "keydown", "keypress", "keyup", "languagechange", "leavepictureinpicture",
-    "load", "loadeddata", "loadedmetadata", "loadstart", "lostpointercapture", "message",
-    "messageerror", "mousedown", "mouseenter", "mouseleave", "mousemove", "mouseout", "mouseover",
-    "mouseup", "mousewheel", "mozfullscreenchange", "mozfullscreenerror", "offline", "online",
-    "orientationchange", "pagehide", "pagereveal", "pageshow", "pageswap", "paste", "pause", "play",
-    "playing", "pointercancel", "pointerdown", "pointerenter", "pointerleave", "pointerlockchange",
-    "pointerlockerror", "pointermove", "pointerout", "pointerover", "pointerrawupdate", "pointerup",
-    "popstate", "prerenderingchange", "progress", "ratechange", "readystatechange",
-    "rejectionhandled", "reset", "resize", "resume", "scroll", "scrollend", "scrollsnapchange",
-    "scrollsnapchanging", "search", "securitypolicyviolation", "seeked", "seeking", "select",
-    "selectionchange", "selectstart", "slotchange", "stalled", "storage", "submit", "suspend",
-    "timeupdate", "toggle", "touchcancel", "touchend", "touchmove", "touchstart",
-    "transitioncancel", "transitionend", "transitionrun", "transitionstart", "unhandledrejection",
-    "unload", "visibilitychange", "volumechange", "waiting", "waitingforkey",
-    "webglcontextcreationerror", "webglcontextlost", "webglcontextrestored", "webkitanimationend",
-    "webkitanimationiteration", "webkitanimationstart", "webkitfullscreenchange",
-    "webkitfullscreenerror", "webkittransitionend", "wheel",
+    "input", "installresult", "invalid", "keydown", "keypress", "keyup", "languagechange",
+    "leavepictureinpicture", "load", "loadeddata", "loadedmetadata", "loadstart",
+    "lostpointercapture", "message", "messageerror", "mousedown", "mouseenter", "mouseleave",
+    "mousemove", "mouseout", "mouseover", "mouseup", "mousewheel", "mozfullscreenchange",
+    "mozfullscreenerror", "offline", "online", "orientationchange", "pagehide", "pagereveal",
+    "pageshow", "pageswap", "paste", "pause", "play", "playing", "pointercancel", "pointerdown",
+    "pointerenter", "pointerleave", "pointerlockchange", "pointerlockerror", "pointermove",
+    "pointerout", "pointerover", "pointerrawupdate", "pointerup", "popstate", "prerenderingchange",
+    "progress", "ratechange", "readystatechange", "rejectionhandled", "reset", "resize", "resume",
+    "scroll", "scrollend", "scrollsnapchange", "scrollsnapchanging", "search",
+    "securitypolicyviolation", "seeked", "seeking", "select", "selectionchange", "selectstart",
+    "slotchange", "stalled", "storage", "submit", "suspend", "timeupdate", "toggle", "touchcancel",
+    "touchend", "touchmove", "touchstart", "transitioncancel", "transitionend", "transitionrun",
+    "transitionstart", "unhandledrejection", "unload", "visibilitychange", "volumechange",
+    "waiting", "waitingforkey", "webglcontextcreationerror", "webglcontextlost",
+    "webglcontextrestored", "webkitanimationend", "webkitanimationiteration",
+    "webkitanimationstart", "webkitfullscreenchange", "webkitfullscreenerror",
+    "webkittransitionend", "wheel",
   ]);
   // END DOM_EVENT_NAMES
   // Citry's own runtime events and Vue's lifecycle hooks. The same list as
   // `RESERVED_EVENT_PREFIXES` in citry/ext/events/actions.py; a Python test checks the two match.
   const reservedEventPrefixes = ["citry:", "vue:", "vnode-"];
-  // Only A-Z are folded, as on the server: a browser compares event names character for character, so
-  // a name with a non-ASCII lookalike letter reaches no standard listener, and `toLowerCase`
-  // would fold a few non-ASCII letters the server's check leaves alone.
+  // Only A-Z are folded, as on the server: a browser compares event names character for
+  // character, so a name with a non-ASCII lookalike letter reaches no standard listener, and
+  // `toLowerCase` would fold a few non-ASCII letters the server's check leaves alone.
   const asciiLowercase = name => name.replace(/[A-Z]/g, letter => String.fromCharCode(letter.charCodeAt(0) + 32));
   // A refused name throws before any listener runs, so the call that carried it fails the same
   // way a refused redirect does.

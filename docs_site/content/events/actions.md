@@ -307,9 +307,8 @@ script, listen on an ancestor element, on `document`, or with
 
     Never build the name from request data (a query parameter, form
     field, or header). Citry refuses only standard DOM event names and
-    the prefixes above.
-    Your page code may listen for other names, such as
-    `TaskRow:saved`, and a name taken from a request would choose
+    the prefixes above. Your page code may listen for other names, such
+    as `TaskRow:saved`, and a name taken from a request would choose
     which of those listeners run.
 
 If you pass actions to

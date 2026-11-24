@@ -2042,7 +2042,10 @@ def test_the_browser_refuses_a_standard_event_name_on_a_mounted_component(page: 
         """globalThis.__heard=[];
         document.addEventListener('click',()=>__heard.push('document'));"""
     )
-    page.goto(serve_live(engine, Probe().render().serialize(), "") + "/")
+    html = Probe().render().serialize()
+    render_id = re.search(r'"renderId":"([^"]+)"', html)
+    assert render_id is not None
+    page.goto(serve_live(engine, html, "") + "/")
     page.wait_for_function("typeof globalThis.__send === 'function'")
     page.evaluate("document.querySelector('#probe').addEventListener('click',()=>__heard.push('element'))")
 
@@ -2051,11 +2054,15 @@ def test_the_browser_refuses_a_standard_event_name_on_a_mounted_component(page: 
     # DOM event; neither may run.
     outcome = page.evaluate("globalThis.__send()")
     assert "refused to dispatch" in outcome
-    # Page code applying an untargeted action while an app is mounted takes
-    # the page-wide dispatch.
+    # Page code that applies an action list aimed at the mounted component
+    # hands it to the Events bridge, which fires an untargeted event in that
+    # list with its page-wide dispatch.
     applied = page.evaluate(
-        """()=>Citry.events.applyActions([{action:'event',eventName:'Click'}])
-        .then(()=>'resolved',error=>String(error.message))"""
+        """target=>Citry.events.applyActions([
+          {action:'event',eventName:'Probe:noop',target},
+          {action:'event',eventName:'Click'},
+        ]).then(()=>'resolved',error=>String(error.message))""",
+        f"render:{render_id.group(1)}",
     )
     assert "refused to dispatch" in applied
     assert page.evaluate("globalThis.__heard") == []

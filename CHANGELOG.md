@@ -22,9 +22,9 @@
   listeners for it, including `@c-*` bindings that call the server.
   This includes common words that are also browser events, such as
   `close`, `toggle`, `error`, `load`, `message`, `select` and
-  `progress`. It also refuses names that start with `vue:` or `vnode-`,
-  and it now refuses `citry:` names in any letter case. Letter case is
-  ignored in every check. Citry's browser code refuses the same names,
+  `progress`. It also refuses names that start with `vue:`, `vnode-` or
+  `citry:`. Letter case is ignored in every check, so `Citry:ready` is
+  now refused too. Citry's browser code refuses the same names,
   so `Citry.events.applyActions` rejects them too. If you dispatch such
   a name, prefix it with your component's name and listen for the new
   name:

@@ -277,8 +277,8 @@ class Dispatch(Action):
     Prefix the name with the component name, such as ``"MyCard:submit"``,
     so events from different components do not collide.
 
-    ``ValueError`` is raised for two kinds of name, whatever their letter
-    case:
+    ``Dispatch`` raises ``ValueError`` for two kinds of name, whatever
+    their letter case:
 
     - The name of a standard DOM event, such as ``click``, ``submit``,
       ``input``, ``keydown``, ``load`` or ``message``. The event would run
@@ -333,9 +333,10 @@ RESERVED_EVENT_PREFIXES = ("citry:", "vue:", "vnode-")
 
 # Lowercases A-Z only. Browsers compare event names character for
 # character, so only ASCII case is folded: a name with a Unicode lookalike
-# letter never reaches a standard listener and needs no refusal. Python's `str.lower` and
-# JavaScript's `toLowerCase` also disagree on a few non-ASCII letters, which
-# would let the server and the browser copy of this check drift apart.
+# letter never reaches a standard listener and needs no refusal. Python's
+# `str.lower` and JavaScript's `toLowerCase` also disagree on a few
+# non-ASCII letters, which would let the server and the browser copy of
+# this check drift apart.
 _ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 
 
