@@ -44,11 +44,17 @@
   refuses it with that error's status and message, as if it had raised
   it. Before, a guard written as `return user.is_staff` or
   `return Document.objects.filter(owner=user)` let every caller
-  through. `None` and `True` let the call go ahead; any other true value
-  lets it go ahead and logs a warning that names the guard and the
-  component. A returned value whose true-or-false test raises an error
-  fails the call with a 500. See
+  through. `None` and `True` let the call go ahead. A guard that
+  returns a function, as `return self.can_edit` does without the `()`,
+  fails the call with a 500 and logs the guard's name. Any other true
+  value lets the call go ahead and logs a warning that names the guard
+  and the component. A returned value whose true-or-false test raises
+  an error fails the call with a 500. See
   [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
+- When an event guard, `_context`, an `on_event` hook or a State
+  validator raises an unexpected error, the server log now names it
+  instead of saying the event handler raised, since the handler never
+  ran.
 
 ## v1.2.0
 

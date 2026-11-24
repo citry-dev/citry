@@ -20,6 +20,7 @@ import inspect
 import json
 import logging
 import re
+import sys
 from collections import UserDict
 from dataclasses import dataclass
 from pathlib import Path
@@ -1038,6 +1039,40 @@ class TestServerStoredState:
         now[0] += 24 * 3600 + 1
         c.cache.set("unrelated", "v")
         assert self._entries(c) == {}
+
+
+def test_the_500_log_line_names_a_state_validator_that_raised(monkeypatch, caplog):
+    # A State validator's own bug answers 500 before the handler runs, so
+    # the log names the State class's validator, not the handler.
+    c = _citry()
+    ran = []
+
+    class Notes(Component):
+        citry = c
+        template = "<div>n</div>"
+
+        class State:
+            note: str = ""
+
+        class Events:
+            def read(self, state):
+                ran.append(True)
+
+    def broken(*_args, **_kwargs):
+        msg = "validator bug"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr(dispatcher_module, "restore_state", broken)
+    token = mint_state_token(Notes.State(), class_id=Notes.class_id, secret=SIGNING_KEY, max_age=None, max_bytes=None)
+    call = {"componentClassId": Notes.class_id, "handlerName": "read", "stateToken": token}
+    with caplog.at_level(logging.ERROR, logger="citry"):
+        [item] = _dispatch(c, call)["results"]
+    assert item["error"]["code"] == "handler_error"
+    assert ran == []
+    assert (
+        "Uncaught exception from a validator of the State class of event 'read' on component Notes;"
+        " the event handler did not run."
+    ) in caplog.text
 
 
 class TestSignedStateCap:
@@ -3065,6 +3100,20 @@ class _PermissionDenied(Exception):
     """Stands in for django.core.exceptions.PermissionDenied."""
 
 
+def _can_edit(events):
+    return False
+
+
+class _Checks:
+    def can_edit(self, events):
+        return False
+
+
+class _CallableCheck:
+    def __call__(self, events):
+        return False
+
+
 class TestGuardReturnValues:
     """
     Any false value or a returned exception refuses the call.
@@ -3423,6 +3472,195 @@ class TestGuardReturnValues:
             assert self._call(comp, "go")["ok"] is True
         assert "secret" not in caplog.text
         assert "forged line" not in caplog.text
+
+    @pytest.mark.parametrize("use_async_dispatch", [False, True], ids=["sync", "async"])
+    @pytest.mark.parametrize("level", ["component", "engine", "handler"])
+    @pytest.mark.parametrize(
+        ("value", "returned_name"),
+        [
+            (_Checks().can_edit, "_Checks.can_edit"),
+            (_can_edit, "_can_edit"),
+            (functools.partial(_can_edit, None), "partial"),
+            (_Checks, "_Checks"),
+            (_CallableCheck(), "_CallableCheck"),
+        ],
+        ids=["bound-method", "function", "partial", "class", "callable-object"],
+    )
+    def test_a_returned_callable_refuses_as_handler_error(
+        self, value, returned_name, level, use_async_dispatch, caplog
+    ):
+        # `return self.can_edit` without the `()` hands back the check
+        # itself, which never ran. Letting it through would fail open, so
+        # the call answers 500 and the log names the guard and the callable.
+        log = []
+        guard = self._returning(log, level, value=value)
+        c = _citry(extensions_defaults={"events": {"_guard": guard}}) if level == "engine" else _citry()
+        comp = self._component(
+            c,
+            log,
+            component_guard=guard if level == "component" else None,
+            handler_guard=guard if level == "handler" else None,
+        )
+        with caplog.at_level(logging.ERROR, logger="citry"):
+            item = self._call(comp, "go", use_async_dispatch=use_async_dispatch)
+        assert item["error"]["status"] == 500
+        assert item["error"]["code"] == "handler_error"
+        assert log == [level]
+        assert f"_returning.<locals>.guard' returned the callable {returned_name!r}" in caplog.text
+        assert "which Citry ignores" not in caplog.text
+
+    def test_a_returned_exception_s_chain_does_not_keep_the_call_s_frames(self):
+        # The exception a guard returns may have been raised from another
+        # one; each traceback on the chain holds the guard's frames, so all
+        # of them are cleared, not only the top one.
+        log = []
+        kept = []
+
+        def guard(events):
+            log.append("guard")
+            try:
+                try:
+                    raise LookupError("no row")
+                except LookupError as missing:
+                    raise _PermissionDenied from missing
+            except _PermissionDenied as error:
+                kept.append(error)
+                return error
+
+        comp = self._component(_citry(), log, handler_guard=guard)
+        assert self._call(comp, "go")["error"]["status"] == 403
+        [error] = kept
+        assert error.__traceback__ is None
+        assert error.__cause__ is not None
+        assert error.__cause__.__traceback__ is None
+        assert error.__context__ is error.__cause__
+
+    @pytest.mark.parametrize("returned", [True, False], ids=["returned", "raised"])
+    def test_an_event_error_s_chain_does_not_keep_the_call_s_frames(self, returned):
+        log = []
+        kept = []
+
+        def guard(events):
+            log.append("guard")
+            try:
+                raise LookupError("no row")
+            except LookupError:
+                error = EventError("No.", status=403)
+                kept.append(error)
+                if returned:
+                    # Returned inside the `except`, so the error has no
+                    # __context__ of its own yet; give it one as `raise ... from` would.
+                    error.__cause__ = sys.exc_info()[1]
+                    return error
+                raise error from None
+
+        comp = self._component(_citry(), log, handler_guard=guard)
+        assert self._call(comp, "go")["error"]["message"] == "No."
+        [error] = kept
+        chained = error.__cause__ or error.__context__
+        assert chained is not None
+        assert error.__traceback__ is None
+        assert chained.__traceback__ is None
+
+    def test_an_exception_chain_that_loops_is_cleared_once(self):
+        # A chain can point back at itself (`a.__context__ = b`,
+        # `b.__context__ = a`); clearing it must still finish.
+        log = []
+        first = _PermissionDenied("first")
+        second = ValueError("second")
+        for error in (first, second):
+            try:
+                raise error
+            except type(error):
+                pass
+        first.__context__ = second
+        second.__context__ = first
+        comp = self._component(_citry(), log, handler_guard=self._returning(log, "handler", value=first))
+        assert self._call(comp, "go")["error"]["status"] == 403
+        assert first.__traceback__ is None
+        assert second.__traceback__ is None
+
+    def test_an_exception_group_s_members_are_cleared(self):
+        log = []
+        member = ValueError("member")
+        try:
+            raise member
+        except ValueError:
+            pass
+        group = ExceptionGroup("refused", [member])  # noqa: F821 - Python 3.11+; ruff checks for 3.10 (#331)
+        comp = self._component(_citry(), log, handler_guard=self._returning(log, "handler", value=group))
+        assert self._call(comp, "go")["error"]["status"] == 403
+        assert member.__traceback__ is None
+
+    @pytest.mark.parametrize(
+        ("level", "label"),
+        [("component", "the component guard"), ("engine", "the component guard"), ("handler", "the guard")],
+    )
+    def test_the_500_log_line_names_the_guard_that_raised(self, level, label, caplog):
+        # The handler never ran, so the log points the author at the guard.
+        log = []
+
+        def guard(events):
+            log.append(level)
+            msg = "database is down"
+            raise RuntimeError(msg)
+
+        c = _citry(extensions_defaults={"events": {"_guard": guard}}) if level == "engine" else _citry()
+        comp = self._component(
+            c,
+            log,
+            component_guard=guard if level == "component" else None,
+            handler_guard=guard if level == "handler" else None,
+        )
+        with caplog.at_level(logging.ERROR, logger="citry"):
+            item = self._call(comp, "go")
+        assert item["error"] == {
+            "status": 500,
+            "code": "handler_error",
+            "message": "The event handler raised an unexpected error.",
+        }
+        assert log == [level]
+        assert (
+            f"Uncaught exception from {label} {guard.__qualname__!r} of event 'go' on component Returning;"
+            " the event handler did not run."
+        ) in caplog.text
+        assert "Uncaught exception from event handler" not in caplog.text
+
+    def test_the_debug_message_names_the_guard_that_raised(self, caplog):
+        log = []
+
+        def guard(events):
+            msg = "database is down"
+            raise RuntimeError(msg)
+
+        comp = self._component(_citry(), log, handler_guard=guard)
+        with caplog.at_level(logging.DEBUG, logger="citry"):
+            item = self._call(comp, "go")
+        assert item["error"]["message"] == (
+            f"The guard {guard.__qualname__!r} raised an unexpected error: RuntimeError: database is down"
+        )
+
+    def test_the_500_log_line_names_context_when_it_raised(self, caplog):
+        log = []
+
+        def context(events):
+            msg = "no session"
+            raise RuntimeError(msg)
+
+        def go(self):
+            log.append("go")
+
+        events_cls = type("Events", (), {"_context": context, "go": go})
+        comp = type(
+            "Returning", (Component,), {"citry": _citry(), "Events": events_cls, "template": "\n<div>r</div>\n"}
+        )
+        with caplog.at_level(logging.ERROR, logger="citry"):
+            assert self._call(comp, "go")["error"]["status"] == 500
+        assert log == []
+        assert (
+            "Uncaught exception from Events._context of event 'go' on component Returning;"
+            " the event handler did not run."
+        ) in caplog.text
 
     def test_none_goes_ahead_without_a_warning(self, caplog):
         log = []

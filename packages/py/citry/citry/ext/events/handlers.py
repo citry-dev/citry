@@ -576,9 +576,12 @@ def event(
             ``EventError``, by returning one (answered as if raised), or
             by returning any other exception or any false value other
             than ``None``, such as ``False`` or an empty QuerySet (a
-            403). Returning ``None`` or ``True`` lets the call go ahead;
-            any other true value also lets it go ahead and logs a
-            warning. It runs after the component's
+            403). Returning ``None`` or ``True`` lets the call go ahead.
+            Returning a function or other callable (``return
+            self.can_edit`` without the ``()``) fails the call with a
+            500 and logs the guard's name; any other true value lets
+            the call go ahead and logs a warning. It runs after the
+            component's
             ``_guard`` (or the app-wide ``_guard`` in
             ``extensions_defaults["events"]`` when the component defines
             none), and either one refusing refuses the call. It must be a

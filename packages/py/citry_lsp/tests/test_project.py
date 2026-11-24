@@ -9,6 +9,7 @@ import subprocess
 import threading
 from importlib.metadata import requires
 from textwrap import dedent
+from types import SimpleNamespace
 
 import pytest
 from packaging.requirements import Requirement
@@ -884,6 +885,21 @@ def test_worker_reads_the_detached_flag_from_an_older_citry_without_it(tmp_path,
     handlers = app_worker._event_sources(card)["handlers"]
     assert [handler.get("detached") for handler in handlers] == [True, None]
 
+    # A citry before 1.3.0 keeps `detached` only on the function's options, not on the
+    # handler record; the worker falls back to the options.
+    info = app_worker._component_events_info(card)
+    older_info = SimpleNamespace(
+        handlers={
+            name: SimpleNamespace(func=handler.func, method_name=handler.method_name, data_schema=handler.data_schema)
+            for name, handler in info.handlers.items()
+        },
+        state_cls=info.state_cls,
+        state_meta=info.state_meta,
+    )
+    monkeypatch.setattr(app_worker, "_component_events_info", lambda _cls: older_info)
+    handlers = app_worker._event_sources(card)["handlers"]
+    assert [handler.get("detached") for handler in handlers] == [True, None]
+
     # citry 0.6.0's options record has no `detached` field; the worker must not fail on it.
     class OldOptions:
         __slots__ = ("bundle",)
@@ -894,3 +910,34 @@ def test_worker_reads_the_detached_flag_from_an_older_citry_without_it(tmp_path,
     monkeypatch.setattr(app_worker, "event_options", lambda _func: OldOptions())
     handlers = app_worker._event_sources(card)["handlers"]
     assert [handler.get("detached") for handler in handlers] == [None, None]
+
+
+def test_worker_reads_the_detached_flag_the_dispatcher_uses(tmp_path, monkeypatch):
+    # The dispatcher reads `detached` from the handler record that citry builds when the
+    # class is created. A function decorated after that does not change how the call
+    # runs, so it must not change the editor's hint either.
+    (tmp_path / "late_detached_app.py").write_text(
+        dedent(
+            """
+            from citry import Citry, Component
+            from citry.ext.events import event
+            engine = Citry(autodiscover=False)
+            def peek(self):
+                return None
+            class Card(Component):
+                citry = engine
+                template = "<p>card</p>"
+                class Events:
+                    peek = peek
+            event(detached=True)(peek)
+            """
+        ),
+        encoding="utf8",
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    module = __import__("late_detached_app")
+    [handler] = app_worker._component_events_info(module.Card).handlers.values()
+    assert handler.detached is False
+    assert app_worker.event_options(module.peek).detached is True
+    handlers = app_worker._event_sources(module.Card)["handlers"]
+    assert [record.get("detached") for record in handlers] == [None]

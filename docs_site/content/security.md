@@ -188,8 +188,11 @@ can also refuse the call by returning a value that means "no":
 - Any false value other than `None`, such as `False`, `0`, an empty
   list or an empty QuerySet, refuses it with a 403.
 
-Any other true value lets the call go ahead, and Citry logs a warning
-that names the guard. To decide, Citry tests the value for true or
+A guard that returns a function or other callable, as
+`return self.can_edit` does when the `()` is missing, fails the call
+with a 500, and the server log names the guard, since the check it
+meant to run never ran. Any other true value lets the call go ahead,
+and Citry logs a warning that names the guard. To decide, Citry tests the value for true or
 false once, which runs a QuerySet's database query; return
 `queryset.exists()` instead of the QuerySet so the query loads no rows.
 If that test raises an error, the call fails with a 500, as when the

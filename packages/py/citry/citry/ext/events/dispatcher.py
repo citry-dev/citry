@@ -551,6 +551,41 @@ def _detached_render_message(plan: _CallPlan) -> str:
     )
 
 
+def _callable_name(func: Any) -> str:
+    """The name the server log uses for a guard or another callable: its qualified name, else its type's name."""
+    name = getattr(func, "__qualname__", None)
+    # A callable object may answer `__qualname__` with anything; only text
+    # names it, and the type's name stands in otherwise.
+    return name if isinstance(name, str) and name else type(func).__name__
+
+
+def _drop_tracebacks(error: BaseException) -> None:
+    """
+    Clear the traceback of ``error`` and of every exception chained to it.
+
+    A guard may keep one exception object and return or raise it on every
+    call. Its traceback, and those of the exceptions on its ``__cause__``
+    and ``__context__`` chain (or inside an exception group), hold the
+    frames of the call that raised them, and through them the request and
+    the State, so they are cleared once the call is answered. A chain can
+    loop back on itself, so each exception is visited once.
+    """
+    seen: set[int] = set()
+    pending: list[BaseException] = [error]
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        current.__traceback__ = None
+        pending.extend(
+            chained for chained in (current.__cause__, current.__context__) if isinstance(chained, BaseException)
+        )
+        # Python 3.11+, which citry requires; ruff still checks for 3.10 (#331).
+        if isinstance(current, BaseExceptionGroup):  # noqa: F821
+            pending.extend(current.exceptions)
+
+
 def _apply_guard_result(source: str, guard: Any, result: Any) -> None:
     """
     Refuse the call when a guard's result says no, and warn about a result Citry ignores.
@@ -569,9 +604,11 @@ def _apply_guard_result(source: str, guard: Any, result: Any) -> None:
     - Any other false value (``False``, ``0``, an empty list or QuerySet)
       refuses with a 403.
 
-    ``None`` and ``True`` let the call go ahead. Any other true value lets
-    the call go ahead with a warning, so a guard that returns something by
-    mistake shows up in the server log.
+    ``None`` and ``True`` let the call go ahead. A function or other
+    callable is refused as an error (500), since ``return self.can_edit``
+    with the call's ``()`` missing never ran the check. Any other true
+    value lets the call go ahead with a warning, so a guard that returns
+    something by mistake shows up in the server log.
 
     Args:
         source: The guard's place, such as "The guard of event 'save' on
@@ -581,9 +618,9 @@ def _apply_guard_result(source: str, guard: Any, result: Any) -> None:
 
     Raises:
         TypeError: When the result is a coroutine, another awaitable, a
-            generator, or an async generator, so the guard's check did not
-            run, or when testing the result for true or false raises; the
-            dispatcher answers ``handler_error`` (500) to both.
+            generator, an async generator, or a callable, so the guard's
+            check did not run, or when testing the result for true or false
+            raises; the dispatcher answers ``handler_error`` (500) to these.
         EventError: The returned error itself when the result is an
             ``EventError``, the error that testing the result raised, or
             a 403 for any other refusal above.
@@ -601,19 +638,21 @@ def _apply_guard_result(source: str, guard: Any, result: Any) -> None:
     # Clearing the traceback first stops an error kept in a module constant
     # and returned on every call from collecting one traceback per call.
     if isinstance(result, EventError):
-        raise result.with_traceback(None)
+        _drop_tracebacks(result)
+        raise result
     # Any other exception, or an exception class, is a refusal too (a
     # Django `return PermissionDenied()`, say). Its text was not written for
     # the browser, so the answer is the standard 403. The exception is not
-    # raised, so it gains no traceback here; one it already carries (from a
-    # guard that caught it and returned it) is cleared so a shared object
-    # does not keep that call's frames alive.
+    # raised, so it gains no traceback here; the ones it already carries
+    # (from a guard that caught it and returned it, and on the exceptions
+    # it was raised from) are cleared so a shared object does not keep that
+    # call's frames alive.
     if isinstance(result, BaseException):
-        result.__traceback__ = None
+        _drop_tracebacks(result)
         raise EventError(_MSG_GUARD_REFUSED, status=403)
     if isinstance(result, type) and issubclass(result, BaseException):
         raise EventError(_MSG_GUARD_REFUSED, status=403)
-    guard_name = getattr(guard, "__qualname__", None) or type(guard).__name__
+    guard_name = _callable_name(guard)
     # Testing the value runs app code (`__bool__` or `__len__`; a lazy
     # QuerySet queries the database here). When that raises, the guard
     # never gave an answer: the call is refused as a 500, the same answer a
@@ -636,6 +675,18 @@ def _apply_guard_result(source: str, guard: Any, result: Any) -> None:
     # 0 or numpy.False_ from `return <check>` means "no" just the same.
     if not allowed:
         raise EventError(_MSG_GUARD_REFUSED, status=403)
+    # A callable is almost always a check the guard forgot to call
+    # (`return self.can_edit` without the `()`). Its check never ran, so
+    # letting the call through would fail open; a 500 with the guard named
+    # in the log shows the author the slip on the first call.
+    if callable(result):
+        returned = _callable_name(result)
+        msg = (
+            f"{source}: guard {guard_name!r} returned the callable {returned!r} instead of a result, so the call"
+            " is refused. Call it and return what it returns (add the missing parentheses), or return True,"
+            " False or None."
+        )
+        raise TypeError(msg)
     # The type name, not the value: the value may hold request data, and
     # the log line should not carry text the caller chose.
     logger.warning(
@@ -1098,7 +1149,12 @@ class EventsDispatcher:
                     # Not a value that no longer fits: a State validator
                     # failed, which is the author's bug and answers 500.
                     return self._unexpected_error(
-                        ctx, err, comp_cls=comp_cls, handler=handler, send_sequence=send_sequence
+                        ctx,
+                        err,
+                        comp_cls=comp_cls,
+                        handler=handler,
+                        send_sequence=send_sequence,
+                        failed_step="a validator of the State class",
                     )
                 # A model State validates its values here, and a
                 # ValidationError means the same as a dataclass's TypeError.
@@ -1251,6 +1307,9 @@ class EventsDispatcher:
         events.event = call_event
 
         answered: Any = _NOT_ANSWERED
+        # Which step is running, so a crash before the handler is logged
+        # against the code that failed (a guard, say), not the handler.
+        step = "the on_event hook"
         try:
             # on_event: veto or answer (design 3.7); fires before _context
             # and guards.
@@ -1264,6 +1323,7 @@ class EventsDispatcher:
                 # _context builds the per-call context injectable; guards read
                 # it, so it runs first (design 3.6).
                 if info.context is not None:
+                    step = "Events._context"
                     events.context = info.context(events)
                     # Definition time refuses an async _context; this catches
                     # a plain def returning a coroutine, so a handler never
@@ -1280,6 +1340,7 @@ class EventsDispatcher:
                 # would pass the call, and a false value or a returned
                 # exception means "refuse", so all of them fail closed there.
                 if handler.component_guard is not None:
+                    step = f"the component guard {_callable_name(handler.component_guard)!r}"
                     _apply_guard_result(
                         f"The component guard of event {handler.name!r} on {comp_cls.__name__}",
                         handler.component_guard,
@@ -1288,6 +1349,7 @@ class EventsDispatcher:
                 # The same function set at both levels runs once, so a guard
                 # that counts calls (a rate limit) counts each call once.
                 if handler.guard is not None and handler.guard is not handler.component_guard:
+                    step = f"the guard {_callable_name(handler.guard)!r}"
                     _apply_guard_result(
                         f"The guard of event {handler.name!r} on {comp_cls.__name__}",
                         handler.guard,
@@ -1295,14 +1357,21 @@ class EventsDispatcher:
                     )
         except EventError as err:
             error = wire_error(err)
-            # A guard may return one error object kept in a module constant;
-            # dropping the traceback stops that object holding this call's
-            # frames (the request, the State) until the next call.
-            err.__traceback__ = None
+            # A guard may raise one error object kept in a module constant;
+            # dropping its tracebacks (and those of the exceptions chained to
+            # it) stops that object holding this call's frames (the request,
+            # the State) until the next call.
+            _drop_tracebacks(err)
             return build_error_result(error, send_sequence)
         except Exception as err:  # noqa: BLE001 - a crash before the handler still answers 500
             return self._unexpected_error(
-                ctx, err, comp_cls=comp_cls, handler=handler, events=events, send_sequence=send_sequence
+                ctx,
+                err,
+                comp_cls=comp_cls,
+                handler=handler,
+                events=events,
+                send_sequence=send_sequence,
+                failed_step=step,
             )
 
         injectables: dict[str, Any] = {
@@ -1781,6 +1850,7 @@ class EventsDispatcher:
         events: Any = None,
         send_sequence: int | None = None,
         checking_args: bool = False,
+        failed_step: str | None = None,
     ) -> dict[str, Any]:
         """
         An uncaught exception: log it, fire ``on_event_error``, answer a 500.
@@ -1789,7 +1859,9 @@ class EventsDispatcher:
         rides only in debug mode, and a traceback never rides at all
         (design 3.7). ``checking_args`` says the exception came from checking
         the call's data, so the handler never ran, and the log and the
-        debug text say so.
+        debug text say so. ``failed_step`` names the code that raised
+        before the handler ran (``"the guard 'require_owner'"``, say), and
+        the log and the debug text name it in place of the handler.
         """
         if plan is not None:
             comp_cls = plan.comp_cls
@@ -1798,10 +1870,18 @@ class EventsDispatcher:
             send_sequence = plan.send_sequence
         handler_label = handler.name if handler is not None else "<unresolved>"
         comp_label = comp_cls.__name__ if comp_cls is not None else "<unresolved>"
-        source = "checking the data for" if checking_args else "from"
-        logger.exception(f"Uncaught exception {source} event handler {handler_label!r} on component {comp_label}.")
-        if _debug_enabled():
+        if failed_step is not None:
+            # The handler never ran, so the log names the code that failed.
+            logger.exception(
+                f"Uncaught exception from {failed_step} of event {handler_label!r} on component {comp_label};"
+                " the event handler did not run."
+            )
+            raised = f"{failed_step[0].upper()}{failed_step[1:]} raised"
+        else:
+            source = "checking the data for" if checking_args else "from"
+            logger.exception(f"Uncaught exception {source} event handler {handler_label!r} on component {comp_label}.")
             raised = "Checking the event's data raised" if checking_args else "The event handler raised"
+        if _debug_enabled():
             message = f"{raised} an unexpected error: {type(err).__name__}: {err}"
         else:
             message = _MSG_HANDLER_ERROR
