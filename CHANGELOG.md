@@ -40,6 +40,28 @@
   that is not a `GET` now fails; see
   [Fix an http Origin](https://citry.dev/advanced/web-frameworks/#fix-an-http-origin).
 
+### Changed
+
+- Security: `actions.Dispatch` now raises `ValueError` for the name of
+  a standard DOM event, such as `click`, `submit`, `input`, `change`,
+  `keydown` or `focus`, because the event would run the page's own
+  listeners for it, including `@c-*` bindings that call the server.
+  This includes common words that are also browser events, such as
+  `close`, `toggle`, `error`, `load`, `message`, `select` and
+  `progress`. It also refuses names that start with `vue:`, `vnode-` or
+  `citry:`. Letter case is ignored in every check, so `Citry:ready` is
+  now refused too. Citry's browser code refuses the same names,
+  so `Citry.events.applyActions` rejects them too. If you dispatch such
+  a name, prefix it with your component's name and listen for the new
+  name:
+
+    ```python
+    actions.Dispatch("click")          # now raises ValueError
+    actions.Dispatch("TaskRow:click")  # works
+    ```
+
+    See [`Dispatch` browser events](https://citry.dev/events/actions/#notify-browser-code-that-something-happened).
+
 ## v1.2.0
 
 Citry 1.2.0 adds Experimental APIs for host integrations such as
