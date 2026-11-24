@@ -328,7 +328,7 @@ weekly discovery process are defined in
 
 ### Refreshing the HTML tables
 
-Several lint rules check templates against tables in
+Several lint rules, and the name check in `actions.Dispatch`, read tables in
 [`citry/_html_attribute_values.py`](../packages/py/citry/citry/_html_attribute_values.py):
 
 - `citry.template.invalid-attribute-value` checks the value of an attribute
@@ -343,6 +343,8 @@ Several lint rules check templates against tables in
   HTML element names.
 - `citry.vue.misspelled-event` and
   `citry.browser.undeclared-component-event` read the DOM event names.
+- `actions.Dispatch` refuses every name in the DOM event names table, and
+  so does the browser runtime, which holds a copy of that table.
 
 A script generates that module from published standards and Vue's type
 declarations. The script also lists a few names and keywords by hand:
@@ -368,6 +370,15 @@ of one page instead of downloading it (`--source FILE` does this for the
 index), and `--vue-types FILE` to read another `runtime-dom.d.ts`;
 `--help` lists the page names. The generated module's docstring records
 every source and the date it was generated.
+
+The script also copies the DOM event names into
+[`_vue/client.js`](../packages/py/citry/citry/_vue/client.js), between the
+`BEGIN DOM_EVENT_NAMES` and `END DOM_EVENT_NAMES` comments. After any run,
+rebuild the browser runtime that pages load, `_vue/runtime.js`, with
+`pnpm --dir packages/js/citry-client run build`. `--client-only` copies the
+committed table into `client.js` without downloading anything. A name that
+browsers fire but no source lists goes in `SUPPLEMENTAL_EVENT_NAMES` in the
+script, with its spec reference, so that every refresh keeps it.
 
 Review the diff before committing: a new name or keyword becomes valid, and
 a removed one starts being reported. No CI job refreshes the tables, because

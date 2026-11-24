@@ -1607,6 +1607,15 @@ def test_attribute_value_lint_reports_a_boolean_attribute_with_any_other_value()
     )
 
 
+def test_attribute_value_lint_reads_switch_as_a_boolean_attribute_of_input():
+    source = (
+        '<input type="checkbox" switch><input type="checkbox" switch="false">'
+        # `switch` is a boolean attribute of `input` only, so the same value on a `div` is not reported.
+        '<div switch="false"></div>'
+    )
+    assert _attribute_values(source) == [("switch", "warning", "false")]
+
+
 def test_attribute_value_lint_tells_a_bound_boolean_string_to_bind_a_boolean():
     (finding,) = lint_attribute_values(parse_template("<button :disabled=\"'false'\">Save</button>"), ())
     assert finding.message == (
