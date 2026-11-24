@@ -115,7 +115,7 @@ correct = "The page shows the public API base `/api`, and the secret never reach
 
 [[mistake]]
 id = "m13-state-field-typo"
-title = "State field typo in an update handler"
+title = "Server handler writes to a misspelled state field"
 category = "events"
 origin = "neutral"
 description = "The code that runs when Add is clicked writes the new total to a misspelled state field, for example `cuont` instead of `count`."
@@ -203,7 +203,7 @@ correct = "Each card shows its project title."
 
 [[mistake]]
 id = "m24-undeclared-event"
-title = "Child emits an event the parent does not listen for"
+title = "Child component emits a misspelled event to its parent"
 category = "events"
 origin = "citry-inventory"
 description = "The card's Hide control emits or calls a misspelled event, for example `hdie` instead of `hide`, so the page's listener never runs."
@@ -243,7 +243,7 @@ correct = "Clicking Close in the status line hides the details text and the Deta
 
 [[mistake]]
 id = "m29-listener-name"
-title = "Parent listens for a misspelled event"
+title = "Parent listens for a misspelled event from its child"
 category = "events"
 origin = "neutral"
 description = "The card emits or calls `hide` correctly, but the page listens under a misspelled name, for example `@hdie` or `onHdie`."
@@ -251,7 +251,7 @@ correct = "Clicking Hide on the first card hides that card."
 
 [[mistake]]
 id = "m30-event-payload-type"
-title = "Event sent with a payload of the wrong type"
+title = "Child component's event carries a value of the wrong type"
 category = "events"
 origin = "neutral"
 description = "The card's `hide` event carries a number, for example the card's task count, where the page expects the card's title (a string). Where the event carries no value, because the page's listener already knows which card it belongs to, this mistake does not apply."
@@ -315,7 +315,7 @@ correct = "Each card's footer link reads `Open Alpha (3)`, `Open Beta (5)`, `Ope
 
 [[mistake]]
 id = "m38-state-read-typo"
-title = "Template reads a misspelled state field"
+title = "Displayed value is read from a misspelled state field"
 category = "naming"
 origin = "neutral"
 description = "The counter's text reads the saved total from a misspelled state field, for example `cuont`, while the code that updates it is correct."
@@ -323,7 +323,7 @@ correct = "Clicking Add changes the text from `Saved: 0` to `Saved: 1`."
 
 [[mistake]]
 id = "m39-state-type"
-title = "State field given a value of the wrong type"
+title = "Server handler stores a wrong-typed value in a state field"
 category = "types"
 origin = "neutral"
 description = "The Add handler stores the new total as text, for example `str(total)`, in a state field declared as a number."
@@ -491,7 +491,7 @@ correct = "The page shows `Projects: 3`."
 
 [[mistake]]
 id = "m60-handler-arguments"
-title = "Handler declares arguments the event does not send"
+title = "Parent's handler takes more arguments than its child's event sends"
 category = "events"
 origin = "neutral"
 description = "The page's hide handler is changed to take one more argument than the card's hide event sends, a reason for hiding the card, which the handler then uses. Where the page's listener is an inline statement rather than a function with parameters, this mistake does not apply."

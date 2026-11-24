@@ -30,7 +30,7 @@ Three Citry terms come up throughout:
   component re-renders it. See [Event actions](/events/actions/).
 
 The Citry examples assume the `citry_app` instance configured in
-[Server events](/events/#configure-a-signing-secret-before-using-state)
+[Server events](/events/#set-a-signing-secret)
 and these imports:
 
 ```python
@@ -207,7 +207,8 @@ none, is still one Vue component.
 
 Citry does not pickle components, models, or forms into State. State holds
 JSON values and is signed, not encrypted. To keep a value out of the page,
-set `_storage = "server"` and leave the field out of `_public`. Server
+set [`_storage = "server"`](/events/state/#storage) and leave the field
+out of [`_public`](/events/state/#public). Server
 storage keeps the values in the server cache, but fields listed in `_public`
 (all fields by default) still reach the browser. See
 [Treat State as input](/security/#treat-state-as-client-input).

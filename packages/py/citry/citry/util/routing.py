@@ -104,6 +104,18 @@ class RouteRequest:
             request names none.
         native: The untouched host request object: the ASGI scope, the WSGI
             environ, or Django's `HttpRequest`.
+        scheme: The scheme the host reports the request arrived over,
+            lowercase: `"http"` or `"https"`, or `""` when the adapter does
+            not know it. When it is `"https"`, Events refuse a call that is
+            not a `GET` and carries an `Origin` that is not `https:`;
+            when it is `"http"` or `""`, they skip that check. The ASGI adapter reads the scope's `scheme`,
+            the WSGI adapter reads `wsgi.url_scheme`, and the Django
+            adapter reads `request.scheme`, which follows
+            `SECURE_PROXY_SSL_HEADER`. Behind a proxy that serves the site
+            over https and passes plain http to the app, this is `"http"`
+            unless the server reads the scheme the proxy forwards (for
+            example Uvicorn's `--forwarded-allow-ips` or Werkzeug's
+            `ProxyFix(x_proto=1)`).
 
     """
 
@@ -114,6 +126,8 @@ class RouteRequest:
     body: bytes = b""
     content_type: str = ""
     native: Any = None
+    # Last, so a caller that passes the fields by position keeps working.
+    scheme: str = ""
 
 
 class URLRouteHandler(Protocol):

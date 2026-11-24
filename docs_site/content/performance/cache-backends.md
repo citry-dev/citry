@@ -67,10 +67,16 @@ write to the store, even if nothing reads it again.
 
 ### Server-stored State { #server-stored-state }
 
-Events State kept on the server (`State._storage = "server"`) adds one
-entry for every render and every State change. Each lasts 24 hours unless
-`State._max_age` sets another lifetime. `InMemoryCache` keeps these
-entries apart from everything else, under a budget of 64 MiB by default:
+Events State kept on the server
+([`State._storage = "server"`](/events/state/#storage)) adds one
+entry for every render, every State change that sends the page a new
+token, and every call that renews the token (see
+[`State._max_age`](/events/state/#max-age)). A State change from a call
+that cannot send a token, such as one from an API client or from a form
+posted without JavaScript, adds none. Each entry lasts 24 hours unless
+`State._max_age` sets another lifetime.
+`InMemoryCache` keeps these entries apart from everything else, under a
+budget of 64 MiB by default:
 
 ```python
 backend = InMemoryCache(state_max_bytes=256 * 1024 * 1024)

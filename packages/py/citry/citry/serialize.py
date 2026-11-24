@@ -1256,10 +1256,8 @@ def _apply_valued_markers(
     Markers with the same name merge into one attribute whose values are
     space-separated. ``valued_markers`` arrives innermost component first
     (own markers before inherited ones), and the merged value is written
-    outermost first, so the innermost component's value is last. This follows
-    the same innermost-last convention that ``events.md`` section 5.5 pins
-    for the separate ``data-cid`` instance-id list; the client does not use
-    ``data-citry-key`` to resolve instance roots.
+    outermost first, so the innermost component's value is last. The client
+    does not use ``data-citry-key`` to resolve instance roots.
     """
     by_name: dict[str, list[str]] = {}
     for marker in valued_markers:

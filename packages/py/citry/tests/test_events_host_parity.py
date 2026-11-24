@@ -49,6 +49,7 @@ from citry.contrib.fastapi import mount as mount_fastapi  # noqa: E402
 from citry.contrib.wsgi import wsgi_app  # noqa: E402
 from citry.ext.events import event  # noqa: E402
 from citry.ext.events.tokens import mint_state_token  # noqa: E402
+from citry.util.routing import RouteResponse  # noqa: E402
 
 SIGNING_KEY = "wp18-host-parity-secret"
 FIXED_NOW = 1_700_000_000.0
@@ -102,6 +103,18 @@ def _fixture_component(c: Citry) -> type[Component]:
             @event(methods=("GET",))
             def echo(self, data: _TextIn) -> dict[str, str]:
                 return {"echo": data.text}
+
+            @event(methods=("GET",))
+            def peek(self, state: ParityState) -> dict[str, str]:
+                return {"text": state.text}
+
+            @event(methods=("GET",), bundle=False)
+            def localized(self, state: ParityState) -> RouteResponse:
+                return RouteResponse(
+                    content=state.text,
+                    content_type="text/plain",
+                    headers=(("Vary", "Accept-Language"), ("Cache-Control", "public, s-maxage=60, max-age=10")),
+                )
 
             @event(methods=("PUT", "DELETE"))
             def replace(self, data: _TextIn) -> dict[str, str]:
@@ -208,10 +221,10 @@ class _MountedHost:
             return self.client.post(url, data=body, content_type=content_type, headers=RUNTIME_HEADERS)
         return self.client.post(url, content=body, headers={"Content-Type": content_type, **RUNTIME_HEADERS})
 
-    def get(self, event_name: str, query: dict[str, str]) -> _Response:
+    def get(self, event_name: str, query: dict[str, str], headers: dict[str, str] | None = None) -> _Response:
         if self.name == "django":
-            return self.client.get(self.event_url(event_name), data=query)
-        return self.client.get(self.event_url(event_name), params=query)
+            return self.client.get(self.event_url(event_name), data=query, headers=headers)
+        return self.client.get(self.event_url(event_name), params=query, headers=headers)
 
     def post_form(self, event_name: str, fields: dict[str, str]) -> _Response:
         if self.name == "django":
@@ -340,6 +353,37 @@ def _stateless_get(host: _MountedHost) -> _Snapshot:
         {"ok": True, "actions": [{"action": "data", "value": {"echo": "hello"}}]},
     ]
     return snapshot
+
+
+def _stateful_get_token_header(host: _MountedHost) -> tuple[Any, ...]:
+    # The browser sends a GET call's State token in a header, which every
+    # host must hand to Citry, and the answer must vary on it.
+    token = _token(host.component, text="from header")
+    response = host.get("peek", {}, headers={"X-Citry-State-Token": token})
+    snapshot = _json_snapshot(response)
+    assert snapshot.body["results"][0]["actions"] == [{"action": "data", "value": {"text": "from header"}}]
+    vary = tuple(_header_values(response, "vary"))
+    assert vary == ("X-Citry-Page-Nonce, X-Citry-State-Token",)
+    conflict = _json_snapshot(
+        host.get("peek", {"_citry_state_token": "other"}, headers={"X-Citry-State-Token": token})
+    )
+    assert conflict.status == 400
+    assert conflict.body["results"][0]["error"]["code"] == "protocol_mismatch"
+    assert conflict.cache_control == "no-store"
+    # A handler's own Vary is extended in place, since Django refuses a
+    # repeated header, and its shared-cache policy is narrowed to the
+    # visitor's browser because the URL does not carry the token.
+    own = host.get("localized", {}, headers={"X-Citry-State-Token": token})
+    assert own.status_code == 200
+    own_marks = (
+        tuple(_header_values(own, "vary")),
+        tuple(_header_values(own, "cache-control")),
+    )
+    assert own_marks == (
+        ("Accept-Language, X-Citry-Page-Nonce, X-Citry-State-Token",),
+        ("private, max-age=10",),
+    )
+    return snapshot, conflict, vary, own_marks
 
 
 def _validation_and_unknown_errors(host: _MountedHost) -> tuple[_Snapshot, _Snapshot]:
@@ -540,6 +584,7 @@ _Scenario = Callable[[_MountedHost], Any]
 SCENARIOS: tuple[Any, ...] = (
     pytest.param(_happy_stateful_render, id="happy-stateful-render"),
     pytest.param(_stateless_get, id="stateless-get"),
+    pytest.param(_stateful_get_token_header, id="stateful-get-token-header"),
     pytest.param(_validation_and_unknown_errors, id="validation-and-unknown-errors"),
     pytest.param(_unknown_component, id="unknown-component"),
     pytest.param(_mixed_batch, id="mixed-batch-always-200"),
@@ -607,7 +652,14 @@ def test_django_and_fastapi_have_the_same_events_http_contract(scenario: _Scenar
 
 
 def _wsgi_call(
-    citry: Citry, method: str, path: str, *, body: bytes = b"", content_type: str = "", query: str = ""
+    citry: Citry,
+    method: str,
+    path: str,
+    *,
+    body: bytes = b"",
+    content_type: str = "",
+    query: str = "",
+    headers: dict[str, str] | None = None,
 ) -> tuple[str, list[tuple[str, str]], bytes]:
     """Run one request through the WSGI adapter, returning the status line, the headers, and the body."""
     environ: dict[str, Any] = {
@@ -620,6 +672,8 @@ def _wsgi_call(
     }
     if content_type:
         environ["CONTENT_TYPE"] = content_type
+    for name, value in (headers or {}).items():
+        environ[f"HTTP_{name.upper().replace('-', '_')}"] = value
     sent: dict[str, Any] = {}
 
     def start_response(status: str, headers: list[tuple[str, str]]) -> None:
@@ -651,6 +705,21 @@ def test_wsgi_sends_nosniff_with_every_kind_of_events_response() -> None:
         assert by_name.count(("x-content-type-options", "nosniff")) == 1
         assert [value for name, value in by_name if name == "x-content-type-options"] == ["nosniff"]
         assert dict(by_name)["content-type"].startswith(expected_type)
+
+
+def test_wsgi_reads_the_state_token_header_on_a_get_call() -> None:
+    citry = Citry(secret=SIGNING_KEY)
+    citry.set_mounted_prefix("/citry")
+    component = _fixture_component(citry)
+    token = _token(component, text="from header")
+
+    status, headers, payload = _wsgi_call(
+        citry, "GET", f"/ext/events/e/{component.class_id}/peek", headers={"X-Citry-State-Token": token}
+    )
+
+    assert status.startswith("200")
+    assert json.loads(payload)["results"][0]["actions"] == [{"action": "data", "value": {"text": "from header"}}]
+    assert {name.lower(): value for name, value in headers}["vary"] == "X-Citry-Page-Nonce, X-Citry-State-Token"
 
 
 def test_wsgi_answers_a_too_deep_json_body_with_a_400() -> None:

@@ -90,6 +90,19 @@ Build the URL while rendering with
 not change anything on the server. Its arguments arrive in the query string,
 which holds strings, booleans, numbers, and non-empty lists of those.
 
+A GET handler can also read State, when it declares a `state` parameter
+(see [Access State in handlers](/events/state/#access-state-in-handlers)).
+Citry's browser code then sends the component's State token in the
+`X-Citry-State-Token` request header, so the token stays out of the URL,
+which server and proxy logs record. A client you write should do the
+same. The `_citry_state_token` query parameter also works, but it puts
+the token in those logs. If the header and the query parameter carry
+different tokens, the call gets a `400` error and the handler does not
+run. When the call sends the header and the handler sets its own
+`Cache-Control`, Citry makes that policy `private` and drops `public`,
+`s-maxage`, and CDN-only headers such as `CDN-Cache-Control`, because
+the URL does not show which visitor's token the call sent.
+
 !!! note "Which HTTP methods a handler accepts"
 
     `methods` accepts `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, and

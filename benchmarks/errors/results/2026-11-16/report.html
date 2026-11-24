@@ -485,7 +485,7 @@ Happened while evaluating page &#x27;index&#x27;">E</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 30%, white)" title="tsc --noEmit (VS Code TypeScript): TS2551 Property &#x27;titel&#x27; does not exist on type &#x27;{ title: string; count: number; }&#x27;. Did you mean &#x27;title&#x27;?
 next build: TS2551 Property &#x27;titel&#x27; does not exist on type &#x27;{ title: string; count: number; }&#x27;. Did you mean &#x27;title&#x27;?">E</td>
 </tr>
-<tr><th scope="row">Template reads a misspelled state field</th>
+<tr><th scope="row">Displayed value is read from a misspelled state field</th>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 30%, white)" title="Citry language server (citry check --types): citry.typescript.ts2551 Property &#x27;cuont&#x27; does not exist on type &#x27;CitryEventsState&#x27;. Did you mean &#x27;count&#x27;?">E</td>
 <td class="cell" style="background: color-mix(in srgb, #c53030 30%, white)">M</td>
 <td class="cell" style="background: color-mix(in srgb, #c53030 30%, white)">M</td>
@@ -870,7 +870,7 @@ Happened while evaluating page &#x27;index&#x27;">E</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 30%, white)" title="tsc --noEmit (VS Code TypeScript): TS2339 Property &#x27;padStart&#x27; does not exist on type &#x27;number&#x27;.
 next build: TS2339 Property &#x27;padStart&#x27; does not exist on type &#x27;number&#x27;.">E</td>
 </tr>
-<tr><th scope="row">State field given a value of the wrong type</th>
+<tr><th scope="row">Server handler stores a wrong-typed value in a state field</th>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 30%, white)" title="Pylance, type checking on (pyright 1.1.414, standard): reportAttributeAccessIssue Cannot assign to attribute &quot;count&quot; for class &quot;State&quot;
   &quot;str&quot; is not assignable to &quot;int&quot;">E</td>
 <td class="cell" style="background: color-mix(in srgb, #c53030 30%, white)">M</td>
@@ -1633,7 +1633,7 @@ Happened while evaluating page &#x27;index&#x27;">E</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 30%, white)" title="tsc --noEmit (VS Code TypeScript): TS2552 Cannot find name &#x27;sav&#x27;. Did you mean &#x27;save&#x27;?
 next build: TS2552 Cannot find name &#x27;sav&#x27;. Did you mean &#x27;save&#x27;?">E</td>
 </tr>
-<tr><th scope="row">State field typo in an update handler</th>
+<tr><th scope="row">Server handler writes to a misspelled state field</th>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 30%, white)" title="Pylance, type checking on (pyright 1.1.414, standard): reportAttributeAccessIssue Cannot access attribute &quot;cuont&quot; for class &quot;State&quot;
   Attribute &quot;cuont&quot; is unknown
 Pylance, type checking on (pyright 1.1.414, standard): reportAttributeAccessIssue Cannot assign to attribute &quot;cuont&quot; for class &quot;State&quot;
@@ -1702,7 +1702,7 @@ Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue No parame
 <td class="cell" style="background: color-mix(in srgb, #2f855a 30%, white)" title="tsc --noEmit (VS Code TypeScript): TS2561 Object literal may only specify known properties, but &#x27;amont&#x27; does not exist in type &#x27;{ amount: number; }&#x27;. Did you mean to write &#x27;amount&#x27;?
 next build: TS2561 Object literal may only specify known properties, but &#x27;amont&#x27; does not exist in type &#x27;{ amount: number; }&#x27;. Did you mean to write &#x27;amount&#x27;?">E</td>
 </tr>
-<tr><th scope="row">Child emits an event the parent does not listen for</th>
+<tr><th scope="row">Child component emits a misspelled event to its parent</th>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 30%, white)" title="Citry language server (citry check --types): citry.browser.undeclared-emit Event &#x27;hdie&#x27; is not declared in this component&#x27;s emits option.
 citry check: citry.browser.undeclared-emit Event &#x27;hdie&#x27; is not declared in this component&#x27;s emits option.">E</td>
 <td class="cell" style="background: color-mix(in srgb, #c53030 30%, white)">M</td>
@@ -1745,7 +1745,7 @@ Modifying component props or hook arguments is not allowed. Consider using a loc
 .benchmarks/errors/envs/next/work/m28-input-written-by-child/app/status.tsx:12:11
   10 |       Status: {open ...">C</td>
 </tr>
-<tr><th scope="row">Parent listens for a misspelled event</th>
+<tr><th scope="row">Parent listens for a misspelled event from its child</th>
 <td class="cell" style="background: color-mix(in srgb, #9ae6b4 30%, white)" title="Citry language server (citry check --types): citry.browser.undeclared-component-event Component &#x27;c-card&#x27; does not declare event &#x27;hdie&#x27; in its emits option. Did you mean &#x27;hide&#x27;?
 citry check: citry.browser.undeclared-component-event Component &#x27;c-card&#x27; does not declare event &#x27;hdie&#x27; in its emits option. Did you mean &#x27;hide&#x27;?">Ew</td>
 <td class="cell" style="background: color-mix(in srgb, #c53030 30%, white)">M</td>
@@ -1768,7 +1768,7 @@ Happened while evaluating page &#x27;index&#x27;">E</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 30%, white)" title="tsc --noEmit (VS Code TypeScript): TS2322 Type &#x27;{ key: string; title: string; count: number; tone: &quot;plain&quot; | &quot;accent&quot;; footer: (card: { title: string; count: number; }) =&gt; Element; onHdie: () =&gt; void; }&#x27; is not assignable to type &#x27;IntrinsicAttributes &amp; CardProps&#x27;.
 next build: TS2322 Type &#x27;{ key: string; title: string; count: number; tone: &quot;plain&quot; | &quot;accent&quot;; footer: (card: { title: string; count: number; }) =&gt; Element; onHdie: () =&gt; void; }&#x27; is not assignable to type &#x27;IntrinsicAttributes &amp; CardProps&#x27;.">E</td>
 </tr>
-<tr><th scope="row">Event sent with a payload of the wrong type</th>
+<tr><th scope="row">Child component&#x27;s event carries a value of the wrong type</th>
 <td class="cell" style="background: color-mix(in srgb, #c53030 30%, white)">M</td>
 <td class="cell" title="The card dispatches `hide` with no value (`$dispatch(&#x27;hide&#x27;)`). Each card sits in its own Alpine wrapper, and that wrapper&#x27;s listener hides itself, so the page already knows which card the event came from and the event carries no payload whose type could be wrong.">n/a</td>
 <td class="cell" title="The card dispatches `hide` with no value (`$dispatch(&#x27;hide&#x27;)`). Each card sits in its own Alpine wrapper, and that wrapper&#x27;s listener hides itself, so the page already knows which card the event came from and the event carries no payload whose type could be wrong.">n/a</td>
@@ -1906,7 +1906,7 @@ error: KeyError: &#x27;q&#x27;">R</td>
 <td class="cell" style="background: color-mix(in srgb, #c53030 30%, white)">M</td>
 <td class="cell" style="background: color-mix(in srgb, #c53030 30%, white)">M</td>
 </tr>
-<tr><th scope="row">Handler declares arguments the event does not send</th>
+<tr><th scope="row">Parent&#x27;s handler takes more arguments than its child&#x27;s event sends</th>
 <td class="cell" style="background: color-mix(in srgb, #c53030 30%, white)">M</td>
 <td class="cell" title="Each card sits in its own Alpine wrapper, whose listener for the card&#x27;s `hide` event is the inline statement `@hide=&quot;shown = false&quot;`, not a function with parameters, and the event carries no value. There is no handler that could take more arguments than the event sends.">n/a</td>
 <td class="cell" title="Each card sits in its own Alpine wrapper, whose listener for the card&#x27;s `hide` event is the inline statement `@hide=&quot;shown = false&quot;`, not a function with parameters, and the event carries no value. There is no handler that could take more arguments than the event sends.">n/a</td>

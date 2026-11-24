@@ -31,7 +31,7 @@ call. Citry splits a `UnicornView`'s job across three pieces:
   itself. See [Server events](/events/).
 
 The Citry examples assume the `citry_app` instance configured in
-[Server events](/events/#configure-a-signing-secret-before-using-state)
+[Server events](/events/#set-a-signing-secret)
 and these imports:
 
 ```python
@@ -196,8 +196,9 @@ page decides what to show:
 In the component's JavaScript, listen with the `onEvent` function that
 `onServerRender` receives (see
 [Event actions](/events/actions/#notify-browser-code-that-something-happened)),
-or with `addEventListener` on an element above it. Start the name with the component's name, as here. Names that start
-with `citry:` are reserved, and `actions.Dispatch` rejects them.
+or with `addEventListener` on an element above it. Start the name with the component's name, as here. `actions.Dispatch`
+rejects the name of a standard DOM event, such as `click`, and names
+that start with `citry:`, `vue:`, or `vnode-`.
 [Event actions](/events/actions/) lists everything a handler can return.
 
 ## Change State locally
@@ -225,7 +226,7 @@ Python call expressions in the template. It also does not turn an id into a
 model instance for you. Declare State fields, named handlers, and typed
 `data` classes, and load records inside the handler. To control which State
 fields browser code may read or change, see
-[`_public` and `_model`](/events/state/#limit-what-the-browser-can-read-and-change).
+[`_public`](/events/state/#public) and [`_model`](/events/state/#model).
 
 ### Build dirty markers
 
