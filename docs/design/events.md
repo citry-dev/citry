@@ -2176,25 +2176,23 @@ Error modes:
       `Json[...]` that lies on a loop with no author's wrap validator
       (`class_loops`, `_Schema.uncounted_loop_reason`) when the loop
       passes through a class (model, dataclass, TypedDict, NamedTuple:
-      `_RECURSIVE_CLASS_REASON`), or when its value can hold `Json[...]`
-      text whose type has such an uncounted loop, following every
-      reference, past wrap validators too
-      (`_leads_to_uncounted_json`, `_JSON_LOOP_REASON`). The second rule
-      covers any type, such as `tuple[list[P], Json[P] | None]`: each
-      string adds up to 200 uncounted levels (pydantic-core's JSON
-      parser stops one string there), and strings nested in each other
-      add up. On PyPy 7.3.23 three such strings of 90 levels each ended
-      the process, and so did a model with its own wrap validator whose
-      `Json[...]` field held a recursive tuple that held the model again
-      (3 x 190 levels): one counted wrap validator above each string
-      does not count the levels inside it, so the error names the
-      recursive type that needs its own wrap validator. A recursive type
-      that cannot reach more such text stays inside one string; light
-      shapes measured 99 levels there without ending the process. On
-      CPython the class rule keeps its three kinds and applies only to a
-      State read only as JSON. On PyPy 7.3.23 about 40 shapes were
-      refused at the limit without ending the process; the heaviest
-      ordinary ones used 30% to 70% of the stack there.
+      `_RECURSIVE_CLASS_REASON`), and any other such loop too
+      (`_JSON_LOOP_REASON`), `pydantic.JsonValue` included. One JSON
+      string nests up to 200 uncounted levels (pydantic-core's JSON
+      parser stops there), and those come on top of what was checked
+      outside the string: on PyPy 7.3.23 a list alias 198 levels deep in
+      one string ended the process below 31 counted models with
+      several lists per level, and below 97 levels of an uncounted
+      tuple alias outside `Json[...]`. Strings nested in each other add
+      up too, even with a counted wrap validator above each string,
+      which counts only its own level; so the error names the recursive
+      type that needs a wrap validator of its own. `Json[Any]` is
+      accepted: pydantic-core only parses it, and 198 levels of it
+      passed in the same places. On CPython the class rule keeps its
+      three kinds and applies only to a State read only as JSON. On
+      PyPy 7.3.23 about 40 shapes were refused at the limit without
+      ending the process; the heaviest ordinary ones used 30% to 70% of
+      the stack there.
     - What cannot absorb the refusal: a part of the schema that drops an
       item on any error, such as `OnErrorOmit`. The tally records the
       first stop for work, time, or nesting, and the check raises it

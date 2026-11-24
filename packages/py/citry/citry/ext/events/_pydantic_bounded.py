@@ -216,13 +216,10 @@ SMALL_STACK_CHECK_DEPTH = 32
 #   several lists, some with validators and constraints) used more than
 #   80% of that stack at 64 levels, and 30% to 70% of it at 32;
 # - a type that can hold itself inside `Json[...]` without an author's wrap
-#   validator on the way is refused when it is a class (a model,
-#   dataclass, TypedDict or NamedTuple), as for a State Citry reads only as JSON
-#   (`_RECURSIVE_CLASS_REASON`), or when it holds itself again inside the
-#   JSON text (`_JSON_LOOP_REASON`): no wrapper counts its levels there,
-#   and each JSON string starts a fresh parse, so strings nested inside
-#   each other could end the process, whatever the type
-#   (`_Schema.uncounted_loop_reason`).
+#   validator on the way is refused, whatever its kind
+#   (`_Schema.uncounted_loop_reason`): no wrapper counts its levels there,
+#   one JSON string adds up to 200 of them on top of the levels checked
+#   outside it, and strings nested inside each other add up further.
 # Parts that pydantic-core checks without calling Python (lists, dicts,
 # optional values, the author's before and after validators) still take
 # stack at each level without counting, so a schema with dozens of such
@@ -1466,22 +1463,6 @@ def _refs_used_without_wrap(node: Any) -> set[str]:
     return found
 
 
-def _json_nodes(node: Any) -> list[dict[str, Any]]:
-    """Return the ``Json[...]`` nodes in a node's subtree, without following refs."""
-    found: list[dict[str, Any]] = []
-    todo = [node]
-    visited: set[int] = set()
-    while todo:
-        item = todo.pop()
-        if id(item) in visited:
-            continue
-        visited.add(id(item))
-        if _kind(item) == "json":
-            found.append(item)
-        todo.extend(_children(item))
-    return found
-
-
 def _reachable(start: set[str], direct: dict[str, set[str]]) -> set[str]:
     """Return every ref reachable from ``start`` through the definitions."""
     reached: set[str] = set()
@@ -1595,19 +1576,17 @@ class _Schema:
         text), only an author's wrap validator counts a level, so a type
         that can reach itself without passing a wrap validator nests as deep
         as the data does. A loop that passes through an ``Iterable`` field
-        is still such a loop, because only a wrap validator ends it. Two
-        kinds of such a loop are refused:
+        is still such a loop, because only a wrap validator ends it. Such a
+        loop is refused:
 
-        - a loop through a class (model, dataclass, TypedDict; under the
-          PyPy rules also a NamedTuple), which takes the most stack per
-          level, so even one JSON string nests it too deeply there;
-        - under the PyPy rules, a loop of any type that can lead to more
-          ``Json[...]`` text holding such a loop again, directly or past
-          a wrap validator. pydantic-core stops one JSON string at 200
-          nested containers, but each string starts a fresh parse, so
-          strings nested inside each other add their uncounted levels
-          up, and one counted wrap validator above each string does not
-          stop that.
+        - when it passes through a class (model, dataclass, TypedDict;
+          under the PyPy rules also a NamedTuple), which takes the most
+          stack per level, so even one JSON string nests it too deeply;
+        - under the PyPy rules, whatever the type. pydantic-core stops one
+          JSON string at 200 nested containers, but those levels come on
+          top of everything checked outside the string, and strings nested
+          inside each other add up. On PyPy 7.3.23, a list alias 198 levels
+          deep in one string ended the process below 31 counted models.
         """
         pypy = STACK_SET_BY_RECURSION_LIMIT
         known = self._loop_reasons.get(pypy)
@@ -1620,37 +1599,15 @@ class _Schema:
         bare = {ref: _refs_used_without_wrap(node) for ref, node in self.definitions.items()}
         reach = {ref: _reachable(bare[ref], bare) for ref in bare}
         looping = {ref for ref in bare if ref in reach[ref]}
-        leads_to_more = self._leads_to_uncounted_json(looping) if pypy else {}
         found: dict[str, str] = {}
         for ref in looping:
             # The definitions on a loop with this one: each reaches the other.
             loop = {other for other in looping if (other == ref or other in reach[ref]) and ref in reach[other]}
             if any(self._is_class(self.definitions[other], named_tuples=pypy) for other in loop):
                 found[ref] = _RECURSIVE_CLASS_REASON
-            elif leads_to_more.get(ref, False):
+            elif pypy:
                 found[ref] = _JSON_LOOP_REASON
         return found
-
-    def _leads_to_uncounted_json(self, looping: set[str]) -> dict[str, bool]:
-        """
-        Return, for each definition, whether its value can hold ``Json[...]`` text whose type has an uncounted loop.
-
-        The walk follows every reference, past wrap validators too: a
-        counted wrap validator above the text does not count the levels
-        inside it, so each string nested this way adds up to 200 more.
-        """
-        used = {ref: _refs_used(node) for ref, node in self.definitions.items()}
-        reach = {ref: _reachable(used[ref], used) for ref in used}
-
-        def text_loops(json_node: Any) -> bool:
-            inside = _refs_used(json_node)
-            return bool(_reachable(inside, used) & looping)
-
-        holds = {
-            ref: any(text_loops(json_node) for json_node in _json_nodes(node))
-            for ref, node in self.definitions.items()
-        }
-        return {ref: holds[ref] or any(holds.get(other, False) for other in reach[ref]) for ref in self.definitions}
 
     def reaches_recursion(self, node: Any) -> bool:
         """Whether checking ``node`` can lead into a recursive definition."""
@@ -3480,12 +3437,10 @@ _RECURSIVE_CLASS_REASON = (
     "a recursive class (such as a model or dataclass that can hold itself), whose nesting Citry cannot limit"
     " while it reads JSON"
 )
-# On PyPy only: a recursive type of any kind whose value can hold more
-# Json[...] text with an uncounted recursive type inside.
+# On PyPy only: a recursive type of any kind, such as a list or tuple alias.
 _JSON_LOOP_REASON = (
-    "a recursive type that can hold more Json[...] text with a recursive type inside, and on this Python"
-    " implementation Citry cannot limit how deeply JSON text nests inside JSON text, since Pydantic reads each"
-    " string separately"
+    "a recursive type (one that can hold itself), whose nesting Citry cannot limit while it reads JSON on"
+    " Python implementations other than CPython, such as PyPy"
 )
 _EXTRAS_REASON = (
     "extra keys that the class allows and gives a type, whose values can fail with more than one error or with"
@@ -4113,10 +4068,12 @@ def _fix_for(reason: str, loop_type: str | None = None) -> str:
         return "Apply only one validator that checks the recursive type."
     if reason in (_RECURSIVE_CLASS_REASON, _JSON_LOOP_REASON):
         target = loop_type or "the recursive type"
+        free_form = " For free-form JSON, Json[Any] works too." if reason == _JSON_LOOP_REASON else ""
         return (
-            f"Give {target} a wrap validator of its own, so that each of its levels passes one and Citry counts"
-            " it; a wrap validator elsewhere does not count these levels. Below it the type reads Python values,"
-            " not JSON, so a strict type refuses a date, UUID or similar value that JSON writes as a string."
+            f"Give {target} a wrap validator of its own, so that Citry counts each of its levels; a wrap"
+            " validator elsewhere does not count them. Below that validator the type reads Python values, not"
+            " JSON, so a strict type refuses a date, UUID or similar value that JSON writes as a string."
+            f"{free_form}"
         )
     if reason == _LAX_OR_STRICT_REASON:
         return "Give the recursive type one check for both strict and lax mode."

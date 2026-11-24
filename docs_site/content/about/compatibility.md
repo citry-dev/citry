@@ -107,9 +107,10 @@ On PyPy, Events refuses event data that nests more than 32 levels,
 where CPython allows 64 (32 in Pyodide), and counts more parts of a
 schema as a level. Defining a component on PyPy also raises
 `ValueError` for some event data and State classes that CPython
-accepts: those with a recursive type inside `Json[...]` (a class that
-Citry first meets at a call gets a 422 for that call instead). Both rules
-keep deeply nested data from ending the server process; see
+accepts: those with a recursive type inside `Json[...]`, such as
+`Json[pydantic.JsonValue]` (a class that Citry first meets at a call
+gets a 422 for that call instead). Both rules keep deeply nested data
+from ending the server process in the cases measured; see
 [Event data on PyPy](/security/#event-data-on-pypy). Citry applies
 them on every Python implementation other than CPython.
 
