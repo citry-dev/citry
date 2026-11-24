@@ -820,10 +820,50 @@ class JsonTuple(NamedTuple):
 
 # A type that is no class at all and still holds itself inside Json[...] text.
 JsonPair = TypeAliasType("JsonPair", "tuple[list[JsonPair], pydantic.Json[JsonPair] | None]")
+# A recursive type with no Json[...] of its own, which one JSON string bounds.
+PlainPair = TypeAliasType("PlainPair", "tuple[list[PlainPair], int]")
 
 
 def _keep(value: Any, handler: Any) -> Any:
     return handler(value)
+
+
+class CountedHolder(pydantic.BaseModel):
+    # The wrap validator counts this class's levels, but not those of the
+    # recursive type inside its JSON text, which can hold the class again.
+    pairs: pydantic.Json[HolderPair] | None = None  # type: ignore[name-defined]
+
+    @pydantic.model_validator(mode="wrap")
+    @classmethod
+    def _keep(cls, value: Any, handler: Any) -> Any:
+        return handler(value)
+
+
+HolderPair = TypeAliasType("HolderPair", "tuple[HolderPair | None, CountedHolder | None]")
+CountedHolder.model_rebuild()
+# The same, with the wrap validator where the recursive type refers to the class.
+WrappedRefPair = TypeAliasType(
+    "WrappedRefPair",
+    "tuple[WrappedRefPair | None, Annotated[PairBox, pydantic.WrapValidator(_keep)] | None]",
+)
+
+
+class PairBox(pydantic.BaseModel):
+    pairs: pydantic.Json[WrappedRefPair] | None = None
+
+
+PairBox.model_rebuild()
+# Two different recursive types, the second inside the first one's JSON text.
+OuterChain = TypeAliasType("OuterChain", "tuple[OuterChain | None, pydantic.Json[InnerChain] | None]")
+InnerChain = TypeAliasType("InnerChain", "tuple[InnerChain | None, int]")
+
+
+class PlainLeaf(pydantic.BaseModel):
+    name: str = ""
+
+
+# A recursive type whose JSON text holds only a class that cannot hold anything.
+LeafPair = TypeAliasType("LeafPair", "tuple[LeafPair | None, pydantic.Json[PlainLeaf] | None]")
 
 
 class WrappedJsonTree(pydantic.BaseModel):
@@ -841,7 +881,10 @@ class WrappedJsonTree(pydantic.BaseModel):
     ("field_type", "reason"),
     [
         pytest.param(JsonTuple, "a recursive class", id="NamedTuple"),
-        pytest.param(JsonPair, "a type that contains itself through Json", id="tuple alias"),
+        pytest.param(JsonPair, "a recursive type that can hold more Json", id="tuple alias"),
+        pytest.param(CountedHolder, "a recursive type that can hold more Json", id="wrap validator elsewhere"),
+        pytest.param(pydantic.Json[OuterChain], "a recursive type that can hold more Json", id="two types"),
+        pytest.param(PairBox, "a recursive type that can hold more Json", id="wrap validator on the reference"),
     ],
 )
 def test_on_pypy_a_type_that_holds_itself_inside_json_is_refused(
@@ -855,8 +898,11 @@ def test_on_pypy_a_type_that_holds_itself_inside_json_is_refused(
     bounded.check_data_class("Probe", data)
     monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", True)
 
-    with pytest.raises(ValueError, match=rf"holds a Json\[\.\.\.\] value with {reason}"):
+    with pytest.raises(ValueError, match=rf"holds a Json\[\.\.\.\] value with {reason}") as raised:
         bounded.check_data_class("Probe", data)
+
+    # The wrap validator must go on the recursive type itself, so the fix names it.
+    assert re.search(r"Give \w+ a wrap validator of its own", str(raised.value))
 
 
 @pytest.mark.usefixtures("pypy_stack_rules")
@@ -866,6 +912,10 @@ def test_on_pypy_a_type_that_holds_itself_inside_json_is_refused(
         pytest.param(JsonTuple, "in the field 'blob' of JsonTuple", id="Json inside the class"),
         pytest.param(pydantic.Json[list[JsonTuple]], "in that field", id="Json on the field"),
         pytest.param(JsonPair, "in JsonPair", id="Json inside an alias"),
+        pytest.param(
+            _json_tree_class(), "in the field 'blob' of _json_tree_class.<locals>.JTree", id="Json in a model field"
+        ),
+        pytest.param(pydantic.Json[list[JsonTuple]] | int, "in that field", id="outermost Json above another"),
     ],
 )
 def test_on_pypy_the_refusal_names_the_field_that_holds_the_json(field_type: Any, where: str) -> None:
@@ -877,6 +927,35 @@ def test_on_pypy_the_refusal_names_the_field_that_holds_the_json(field_type: Any
         bounded.check_data_class("Probe", data)
 
     assert f"You can also replace Json[...] {where} with the type inside its brackets" in str(raised.value)
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+@pytest.mark.parametrize(
+    "field_type",
+    [
+        pytest.param(pydantic.Json[PlainPair], id="recursive type without Json"),
+        pytest.param(pydantic.Json[pydantic.JsonValue], id="JsonValue"),
+        pytest.param(pydantic.Json[LeafPair], id="Json of a class that cannot nest"),
+    ],
+)
+def test_on_pypy_a_recursive_type_that_cannot_reach_more_json_text_is_accepted(field_type: Any) -> None:
+    # One JSON string stops at 200 nested containers, as with Pydantic alone,
+    # so only a type that can start another string is refused.
+    bounded.check_data_class("Probe", pydantic.create_model("Data", x=(field_type, ...)))
+
+
+def test_on_cpython_a_state_read_only_as_json_keeps_accepting_a_type_that_loops_through_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The rule for any type that loops through Json[...] belongs to the PyPy
+    # rules; CPython refuses only a class there, as before.
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", False)
+
+    class StrictPairs(pydantic.BaseModel):
+        model_config = pydantic.ConfigDict(strict=True)
+        pairs: JsonPair | None = None
+
+    bounded.check_state_class("Probe", StrictPairs, frozenset({"pairs"}))
 
 
 @pytest.mark.usefixtures("pypy_stack_rules")

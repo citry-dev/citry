@@ -20,16 +20,19 @@ still requires citry-core 2.1.2.
   [Event data on PyPy](https://citry.dev/security/#event-data-on-pypy)
   and
   [GHSA-29wx-2wvw-8962](https://github.com/citry-dev/citry/security/advisories/GHSA-29wx-2wvw-8962).
-- Security: on PyPy, defining a component now raises `ValueError`, so
-  the app fails when it imports the component, when its event `data`
-  class or a State field the browser may write holds a recursive class
-  inside `Json[...]`, or a type that contains itself through
-  `Json[...]`. Give that type a wrap validator. In a `data` class you
-  can instead change `Json[Tree]` to `Tree`; the field then takes the
-  value itself, not JSON text.
+- Security: on PyPy, a component whose event `data` class or
+  browser-writable State field holds a recursive class inside
+  `Json[...]`, or a recursive type that can hold more `Json[...]` text,
+  now raises `ValueError` when it is defined, so the app fails at
+  import. A class that Citry first meets at a call, such as a Pydantic
+  model inside a plain dataclass, gets a 422 for that call instead. Give
+  the recursive type that the error names a wrap validator of its own.
+  In a `data` class you can instead change `Json[Tree]` to `Tree`; the
+  field then takes the value itself, not JSON text.
 
-Nothing changes on CPython. The PyPy rules apply on every other Python
-implementation too, such as GraalPy, because only PyPy was measured.
+CPython accepts and refuses the same data as before. Citry applies the
+PyPy rules on every Python implementation other than CPython, such as
+GraalPy, since only CPython has been measured to be safe without them.
 
 ## v1.2.0
 

@@ -692,9 +692,9 @@ Pydantic v2 class checks it (on PyPy the limit is 32 and some parts
 count more; see [Event data on PyPy](#event-data-on-pypy)). Each model,
 dataclass, TypedDict, wrap validator, and `Iterable[...]` or
 `Generator[...]` field that a value passes through counts one level.
-So does each union whose members could read the value. Citry checks the items of an `Iterable[...]` field
-before the handler runs, and the handler gets an iterator over the
-checked items.
+So does each union whose members could read the value. Citry checks
+the items of an `Iterable[...]` field before the handler runs, and the
+handler gets an iterator over the checked items.
 
 The limit also applies when Citry checks a plain class, a dataclass or a
 Pydantic dataclass `data` class with its own code: each object counts
@@ -839,10 +839,10 @@ PyPy, Citry checks event data and State writes with tighter rules.
 The limit is 32 levels, and some parts of a schema count as more than
 one level. A level is one model, dataclass, TypedDict, wrap validator
 or union that the data passes through. On PyPy a wrap validator counts
-three levels and a union two, and each `Sequence[...]` or
+three or four levels and a union two, and each `Sequence[...]` or
 `defaultdict` field and each `OnErrorOmit` item adds one more. So
 recursive data can nest fewer levels on PyPy than on CPython. Measured
-on PyPy 7.3.23, a tree of models was accepted down to 30 levels when
+on PyPy 7.3.23, a tree of models was accepted up to 30 levels when
 each model held its children in a `list`, 15 in a `Sequence`, and 10
 in `list[OnErrorOmit[list[OnErrorOmit[Tree]]]]`.
 
@@ -1002,16 +1002,22 @@ text, so change the browser code that sends it.
   holds a type that can contain itself:
     - Refused: a model, dataclass, TypedDict or `NamedTuple` that can
       contain itself.
-    - Refused: any type that contains itself through `Json[...]`, such
-      as a tuple alias `Pair` of `list[Pair]` and `Json[Pair] | None`.
-      A JSON string can hold another JSON string, and Pydantic reads
-      each one separately, so nothing limits how deeply they nest.
-    - Fine: a recursive list or dict type inside `Json[...]`, such as
-      `Json[pydantic.JsonValue]`, since the type does not contain
-      `Json[...]` itself.
-    - Fine: a refused type above with a wrap validator on it, such as
-      a `model_validator(mode="wrap")` that returns `handler(value)`,
-      or `WrapValidator` in a type alias. Citry counts each level there.
+    - Refused: a recursive type of any kind, such as a tuple or list,
+      that can hold more `Json[...]` text with a recursive type inside.
+      An example is a tuple alias `Pair` of `list[Pair]` and
+      `Json[Pair] | None`. A JSON string can hold another JSON string,
+      and Pydantic reads each one separately, so nothing limits how
+      deeply they nest.
+    - Fine: a recursive type inside `Json[...]` that cannot hold more
+      such text, such as `Json[pydantic.JsonValue]`. Pydantic stops one
+      JSON string at 200 nested lists and objects.
+    - Fine: a refused type with a wrap validator of its own, such as a
+      `model_validator(mode="wrap")` that returns `handler(value)`, or
+      `WrapValidator` in a type alias, so that each of its levels
+      passes the validator. Citry counts each level there. A wrap
+      validator elsewhere, such as on a model that holds the
+      `Json[...]` field, does not count the levels of the recursive
+      type inside the text, so the error names the type that needs one.
       Below a wrap validator the type checks Python values instead of
       JSON text, so a strict model refuses a date, UUID or similar
       value that JSON writes as a string.
