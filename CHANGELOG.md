@@ -13,9 +13,32 @@
   again, so a watcher on an object or list field of `$state` runs. With
   server-stored State, each new token adds one cache entry. See
   [Treat State as input](https://citry.dev/security/#treat-state-as-client-input).
+- You can now check that a redirect URL from the request stays on your
+  site with `local_url_or()` and `is_local_url()` from
+  `citry.ext.events`, for example
+  `actions.Redirect(local_url_or(data.next, "/"))`. They read the URL
+  the way a browser does, so `//other.example` and `/\other.example`
+  get the fallback. Pass `allowed_hosts` to also accept a full URL on
+  your site. See
+  [Check redirect URLs](https://citry.dev/security/#check-redirect-urls).
+- `RouteRequest` has a new `scheme` field: `"http"` or `"https"`, as
+  your server reports it. The ASGI, WSGI and Django adapters fill it in.
+  If you build a `RouteRequest` yourself, set it, because Events skip
+  the https `Origin` check when it is empty.
 
 ### Changed
 
+- Events now refuse a call with status 403 and `csrf_failed` when your
+  server says it arrived over https and it carries an `Origin` header
+  that is not https. This stops a plain-http page on the same host from
+  calling your app. 1.2.x accepted these calls. Citry already refused
+  them from browsers that send `Sec-Fetch-Site`, so browser traffic on
+  a correctly configured site should not change. Behind a proxy that
+  serves your site over https and passes plain http to your app,
+  nothing changes. If your site is served to
+  browsers over plain http while your server says https, every call
+  that is not a `GET` now fails; see
+  [Fix an http Origin](https://citry.dev/advanced/web-frameworks/#fix-an-http-origin).
 - Citry's browser code now sends a GET event call's State token in the
   `X-Citry-State-Token` header instead of the URL, so server and proxy
   access logs do not record it by default. The server still reads the

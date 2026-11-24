@@ -49,6 +49,7 @@ from citry.ext.events.errors import EventError
 from citry.ext.events.extension import EventsExtension
 from citry.ext.events.files import UploadedFile
 from citry.ext.events.handlers import event
+from citry.ext.events.local_urls import is_local_url, local_url_or
 from citry.ext.events.routes import get_event_url
 from citry.ext.events.view_events import ViewEvents
 
@@ -66,4 +67,6 @@ __all__ = [
     "actions",
     "event",
     "get_event_url",
+    "is_local_url",
+    "local_url_or",
 ]

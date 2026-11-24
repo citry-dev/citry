@@ -158,6 +158,9 @@ def _build_request(request: Any, body_limit: int | None = None) -> RouteRequest:
         body=body,
         content_type=headers.get("content-type", ""),
         native=request,
+        # Django's own scheme, so SECURE_PROXY_SSL_HEADER applies here as it
+        # does to request.is_secure().
+        scheme=request.scheme.lower(),
     )
 
 

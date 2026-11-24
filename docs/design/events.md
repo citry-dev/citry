@@ -1143,7 +1143,7 @@ anything when called:
 | `actions.Render(element, target=None, swap="morph")` | `render` | Render the element server-side, deliver it as a fragment, morph it into `target` (default: the calling instance). |
 | `actions.Data(value)` | `data` | Resolve an imperative client caller's promise with this JSON value. Declarative `@c-*` bindings do not expose the promise result. |
 | `actions.Dispatch(name, detail=None)` | `event` | Dispatch a named browser event (DOM CustomEvent; `onEvent` listeners and plain `addEventListener` react). |
-| `actions.Redirect(url)` | `redirect` | Navigate the page. |
+| `actions.Redirect(url)` | `redirect` | Navigate the page. The action checks only the scheme; a handler checks a URL from the request with `local_url_or()` (`citry/ext/events/local_urls.py`) before it builds the action. |
 | `actions.PushUrl(url)` / `actions.ReplaceUrl(url)` (v1.x) | `url` | History update without navigation, pushing onto or replacing the top of the history stack (the htmx `HX-Push-Url` / `HX-Replace-Url` sibling pair). The client preserves `history.state`; Citry does not synthesize `popstate` or restore component HTML or State on later Back/Forward navigation. |
 | `actions.Download(content, filename, content_type=...)` (v1.x) | none (escape) | A file download. Sugar over the raw-response escape below, so its handler uses `@event(bundle=False)`, runs through the per-event HTTP route, leaves State unchanged, and returns the download bare or as a list's only element. It cannot share a list or request with another result. The client accepts a successful attachment response for one call, buffers the blob, and starts the save only after the call survives timeout and supersession checks. |
 
@@ -5303,6 +5303,18 @@ traversal of any object graph; extra arg keys are rejected, not absorbed.
   type, and flat `application/json` alike (so an external API client
   sends one static header); a form post without the header takes the
   compat path (6.2).
+  The `Origin` check compares the origin's host and port with the
+  request's `Host` header. Each adapter also reports the scheme the
+  request arrived over (`RouteRequest.scheme`: the ASGI scope's
+  `scheme`, WSGI's `wsgi.url_scheme`, Django's `request.scheme`); when
+  it is `https`, an `Origin` that is not `https:` is refused, so a page
+  served over plain http on the same host cannot call the app. An http
+  request does not require the schemes to match: behind a proxy that
+  ends TLS the app sees `http` while the browser sends an `https:`
+  origin. A `RouteRequest` with an empty `scheme` (a hand-built one,
+  or an adapter that does not know it) skips the scheme comparison.
+  An `Origin` that Python's `urlsplit` cannot read is refused like a
+  mismatched one.
 - **Host token by default.** Under Django the routes are plain views, so
   Django's CSRF middleware applies untouched; the client runtime
   auto-attaches the token (by default it reads Django's `csrftoken`

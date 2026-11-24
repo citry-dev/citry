@@ -424,9 +424,11 @@ home page, with no warning.
     another site. Check it before you redirect to it. A prefix check such
     as `url.startswith("/")` is not enough, because browsers treat
     `//other.example` and `/\other.example` as addresses on another site.
-    Django's `url_has_allowed_host_and_scheme` does a full check. A
-    Flask or FastAPI app can call it after installing the `django`
-    package; see [Check redirect URLs](/security/#check-redirect-urls).
+    [`local_url_or()`][citry.ext.events.local_url_or] reads the URL the
+    way a browser does and returns `"/"` instead of a URL that leaves
+    your site: `actions.Redirect(local_url_or(data.next, "/"))`. By
+    default only a URL with no host name passes; to accept a full URL on
+    your own site, see [Check redirect URLs](/security/#check-redirect-urls).
 
 If a redirect with another scheme reaches the browser another way, such
 as through browser code you wrote that calls `Citry.events.applyActions()`,

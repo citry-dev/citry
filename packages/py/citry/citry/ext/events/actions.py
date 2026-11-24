@@ -360,8 +360,10 @@ class Redirect(Action):
     The action checks the scheme only, not where the URL leads. A URL such
     as ``//other.example`` or ``/\other.example`` has no scheme, yet the
     browser sends the visitor to another site. When the URL comes from the
-    request, such as a ``next`` parameter, check it before you pass it in.
-    Checking that it starts with ``/`` is not enough.
+    request, such as a ``next`` parameter, checking that it starts with
+    ``/`` is not enough. Check it with
+    [`local_url_or()`][citry.ext.events.local_url_or] before you pass it
+    in: ``actions.Redirect(local_url_or(data.next, "/"))``.
 
     Attributes:
         url: The URL to navigate to: an ``http:`` or ``https:`` URL, or a
