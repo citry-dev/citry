@@ -146,7 +146,7 @@ three places:
 A guard refuses a call by raising `EventError`, or by returning `False`.
 Raising lets you choose the message and status; returning `False`
 answers with status 403 and the message "You are not allowed to make
-this call.":
+this call." For example:
 
 ```citry
 from citry.ext.events import EventError
@@ -176,10 +176,12 @@ Use a guard for a rule every handler shares. Put a check that depends on
 the submitted data in the handler body, where the data has already been
 validated.
 
-Return nothing (`None`) to let the call go ahead. Any other return
-value, such as `True`, `0` or a string, also lets the call go ahead, and
-Citry logs a warning that names the guard, so a guard that returns a
-value by mistake shows up in the server log. Only `False` refuses.
+Return `None` (or nothing) to let the call go ahead, not `True`. Any
+other value, such as `True`, `0` or a string, also lets the call go
+ahead, but Citry logs a warning that names the guard. Only `False`
+refuses, so return it explicitly: an expression such as
+`user and user.is_staff` gives `None` when there is no user, and `None`
+lets the call go ahead.
 
 A handler's own guard runs in addition to the component's `_guard`.
 Citry first builds `self.context` with `_context`, so both guards can

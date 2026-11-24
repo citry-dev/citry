@@ -248,7 +248,9 @@ def validate_csrf_value(source: str, value: Any) -> str | bool | Callable[..., A
 
 
 # What a guard does, for the error that refuses an async one.
-GUARD_PURPOSE = "that takes the Events instance and raises EventError or returns False to refuse the call, or None"
+GUARD_PURPOSE = (
+    "that takes the Events instance and raises EventError or returns False to refuse the call; or None for no guard"
+)
 
 # Calling one of these returns an object whose code has not run yet: a
 # coroutine (async def), an async generator, or a generator.

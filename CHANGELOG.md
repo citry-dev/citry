@@ -21,13 +21,13 @@
   fails on every handler of the component, including handlers with
   their own guard. A handler that must accept callers the rest of its
   component refuses sets `@event(component_guard=False)`, which skips
-  the component's or app-wide `_guard` for that handler only. A guard
-  that returns `False` now refuses the call with a 403, as if it had
-  raised `EventError`; before, only raising refused, so a guard written
-  as `return user.is_staff` let every caller through. Calls such a guard
-  used to let through are now refused. Any other return value except
-  `None` still lets the call go ahead, and Citry logs a warning that
-  names the guard. See
+  the component's or app-wide `_guard` for that handler only. See
+  [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
+- Security: an event guard that returns `False` now refuses the call
+  with a 403, as if it had raised `EventError`. Before, a guard written
+  as `return user.is_staff` let every caller through. Any other return
+  value except `None` lets the call go ahead and logs a warning that
+  names the guard and the component. See
   [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
 
 ## v1.2.0

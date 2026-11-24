@@ -3069,7 +3069,7 @@ class TestGuardReturnValues:
         # find the function that returns the stray value.
         assert "_returning.<locals>.guard" in record.message
         assert "on Returning" in record.message
-        assert f"{type(value).__name__!r} object" in record.message
+        assert f"value of type {type(value).__name__!r}" in record.message
 
     def test_the_warning_shows_the_type_not_the_value(self, caplog):
         # The value may carry request data; the log line must not.

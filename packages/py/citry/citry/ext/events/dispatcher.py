@@ -135,9 +135,9 @@ _MSG_UNENCODABLE_RESULT = (
     "The handler returned a value strict JSON cannot encode (for example, a Decimal or a non-finite number such as "
     "inf or nan)."
 )
-# The refusal a guard gets by returning False. Not a protocol example: it
-# reads like the 403 messages guards raise themselves ("Log in first."),
-# since the page may show it to the visitor.
+# The refusal a guard gets by returning False. Written for the visitor,
+# like the 403 messages guards raise themselves ("Log in first."),
+# because the page may show it.
 _MSG_GUARD_REFUSED = "You are not allowed to make this call."
 
 # Sentinel: "the on_event hook did not answer the call" (None is a valid
@@ -587,7 +587,7 @@ def _apply_guard_result(source: str, guard: Any, result: Any) -> None:
     # the log line should not carry text the caller chose.
     guard_name = getattr(guard, "__qualname__", None) or type(guard).__name__
     logger.warning(
-        f"{source}: the guard {guard_name} returned a {type(result).__name__!r} object, which Citry ignores."
+        f"{source}: the guard {guard_name} returned a value of type {type(result).__name__!r}, which Citry ignores."
         " A guard refuses a call by raising EventError or by returning False, so this call goes ahead."
     )
 
