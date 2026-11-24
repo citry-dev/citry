@@ -202,14 +202,40 @@ A component that defines its own `_guard`, even `_guard = None`,
 replaces the app-wide one, so call `require_login(self)` from the
 component's `_guard` when both must run.
 
-A handler that must accept callers the rest of its component refuses,
-such as a public sign-up call on a component that needs a login, sets
-`@event(component_guard=False)`. That skips the component's `_guard`,
-or the app-wide one when the component has none, for that handler
-only. A `guard=` on the same handler still runs, and so does
-`_context`. With no `guard=`, anyone who can reach the page can call
-that handler, so check inside it. `component_guard` takes only `True`
-or `False`:
+Some handlers must accept callers the rest of the component refuses,
+such as a public `ping` on a component that needs a login. The
+component's `_guard` can let them through by checking `self.event.name`,
+the name of the handler being called:
+
+```citry
+class Dashboard(Component):
+    class Events:
+        def _guard(self):
+            if self.event.name == "ping":  # public
+                return
+            require_login(self)
+
+        def ping(self):
+            return {"ok": True}
+
+        def save(self, data: SaveIn):
+            ...
+```
+
+This keeps every access rule of the component in one place, so a
+reader sees which handlers are public without opening each one.
+`self.event.name` is the name the browser calls: the method name, or
+the `name=` given to `@event`. Renaming a handler changes which rule
+applies to it, and Citry does not warn you: a renamed `ping` no longer
+matches, so it falls back to the login check. Update the guard when you
+rename a handler.
+
+For an occasional public handler, set `@event(component_guard=False)`
+on the handler instead. It skips the component's `_guard`, or the
+app-wide one when the component has none, for that handler only.
+`_context` still runs. Anyone who can reach the page can then call the
+handler, so check inside it if it needs a check. `component_guard`
+takes only `True` or `False`:
 
 ```citry
 from citry.ext.events import event
@@ -219,16 +245,19 @@ class Newsletter(Component):
     class Events:
         _guard = require_login
 
-        # Runs require_login, then require_admin.
-        @event(guard=require_admin)
-        def export_members(self):
-            ...
-
-        # Runs only rate_limit.
-        @event(component_guard=False, guard=rate_limit)
+        @event(component_guard=False)
         def sign_up(self, data: SignUpIn):
             ...
 ```
+
+A `guard=` on the same handler still runs, so a public handler can keep
+a check of its own, as in
+`@event(component_guard=False, guard=rate_limit)`.
+
+Put every setting for a handler in one `@event(...)`. Citry raises an
+error when a second `@event(...)` decorates the same handler, because
+the second one would replace the first one's settings, its `guard=`
+among them.
 
 Write guards and `_context` as plain `def` functions, not `async def`.
 Citry calls them without awaiting them, on WSGI and ASGI servers alike,
@@ -236,9 +265,9 @@ so it refuses an async one with an error when the component class is
 defined. A decorator you put on a guard must run any async function it
 calls to the end, for example with `asgiref.sync.async_to_sync`. Citry
 cannot see inside the decorator, so a call it starts and never finishes
-refuses nothing. Put a check that needs
-`await` at the start of an `async def` handler and raise `EventError`
-there, as a guard would. An `async def` handler needs an ASGI server.
+refuses nothing. Put a check that needs `await` at the start of an
+`async def` handler and raise `EventError` there, as a guard would. An
+`async def` handler needs an ASGI server.
 
 Citry does not log users in. Your web framework does, and a handler reads
 the user from the `request` it receives, or from `request.native` for the

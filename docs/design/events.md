@@ -1335,14 +1335,22 @@ State's own meta lives on State (`_public` / `_model`, sections 3.2 and
 7.2), not here: Events holds handlers, State holds state.
 
 The per-handler decorator, exhaustively (kwargs need no underscore, they
-live in no shared namespace):
+live in no shared namespace). Each call stores one `EventOptions` on the
+function, so one `@event(...)` carries every setting of a handler: a
+second `@event(...)` on a function that already has settings (directly,
+copied by `functools.wraps`, or further down its `__wrapped__` chain)
+raises `ValueError` at decoration (`refuse_stacked_event`), since it
+would replace the first one's settings and drop its `guard=`. Applying
+`@event` once and assigning the result to several `Events` classes is
+fine. The `ViewEvents` verb shim fills `methods` into the stored settings
+itself and is not a second call.
 
 | `@event(...)` key | Type | Default | What it does |
 |---|---|---|---|
 | `name` | `str` | the method name | Wire name override: rename the Python method without touching templates. |
 | `methods` | tuple of HTTP method names | the component's `_methods` | Per-handler method allowlist. |
 | `guard` | same signature as `_guard` | none | Per-handler authorization that adds to the component's guard: the dispatcher runs `_context`, then the component-level guard (the component's `_guard`, else the engine default), then this one, and either refusing (raising or returning `False`) refuses the call. The same function given at both levels runs once. |
-| `component_guard` | `bool` (`True` or `False` only; any other value fails at decoration) | `True` | `False` skips the component-level guard (the component's `_guard`, or the engine default when the component sets none) for this handler only, for a handler that must be more open than its component, such as a public sign-up call. `guard` and `_context` still run. This is the only per-handler way to drop the component-level guard; a component's `_guard = None` removes the engine default for every handler of that component, and an `on_event` hook that answers a call skips every guard (3.7). |
+| `component_guard` | `bool` (`True` or `False` only; any other value fails at decoration) | `True` | `False` skips the component-level guard (the component's `_guard`, or the engine default when the component sets none) for this handler only, for a handler that must be more open than its component, such as a public sign-up call. `guard` and `_context` still run. The user docs lead with the other way to open a handler, a component `_guard` that returns early for named handlers (`if self.event.name == "ping": return`), because it keeps every access rule in one place; its cost is that renaming a handler silently moves it to the guard's other branch (fail closed when that branch is the stricter rule). This is the only per-handler way to drop the component-level guard; a component's `_guard = None` removes the engine default for every handler of that component, and an `on_event` hook that answers a call skips every guard (3.7). |
 | `csrf` | same values as `_csrf` | the component's `_csrf` | Per-handler CSRF override (e.g. `csrf=False` on a token-authenticated endpoint). |
 | `debounce` / `throttle` | `int`, milliseconds | the component's `_debounce` / `_throttle` | Client-side timing instructions, not server machinery: they travel in the class descriptor (4.4) and the runtime holds calls back before sending, so the server never sees the suppressed ones (server-side rate limiting is the `on_event` hook or a guard). An explicit modifier on a binding overrides both levels. |
 | `latest_wins` | `bool` | `False` | Newest-wins for this handler on one instance, opt-in (5.6): when a newer call to this handler enqueues from the same anchor, queued-not-sent predecessors are dropped before sending, and an in-flight predecessor is abandoned (its response's actions are dropped on arrival); either way the predecessor's promise rejects with the `superseded` reason and the drop event fires (the settle table, 5.2). Opting in is the author's statement that overlapping runs of this handler are safe (idempotent), because the server still executes every call it received. The default preserves every call: a killed save is data loss, so newest-wins is never a default (14.3.4). Like the timing hints, it travels in the class descriptor (4.4), which is how the runtime knows it at queue time. |

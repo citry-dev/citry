@@ -19,9 +19,15 @@
   `extensions_defaults["events"]`) instead of replacing it, and either
   one can refuse the call. A call the component's guard refuses now
   fails on every handler of the component, including handlers with
-  their own guard. A handler that must accept callers the rest of its
-  component refuses sets `@event(component_guard=False)`, which skips
-  the component's or app-wide `_guard` for that handler only. See
+  their own guard. To let a public handler through, return early from
+  `_guard` when `self.event.name` names it, or set
+  `@event(component_guard=False)` on the handler, which skips the
+  component's or app-wide `_guard` for that handler only. See
+  [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
+- Security: stacking two `@event(...)` decorators on one handler now
+  raises an error when the class is defined. The outer one used to
+  replace the inner one's settings, so an inner `guard=` never ran.
+  Merge the settings into one `@event(...)`. See
   [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
 - Security: an event guard that returns `False` now refuses the call
   with a 403, as if it had raised `EventError`. Before, a guard written

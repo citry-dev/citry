@@ -143,6 +143,42 @@ def event_options(func: Callable[..., Any]) -> EventOptions | None:
     return options if isinstance(options, EventOptions) else None
 
 
+def refuse_stacked_event(handler: Any, handler_name: str) -> None:
+    """
+    Raise ``ValueError`` when ``handler`` already carries ``@event`` settings.
+
+    Each ``@event(...)`` call stores one ``EventOptions`` on the function,
+    so a second call replaces the first one's settings instead of adding to
+    them. A decorator written with ``functools.wraps`` copies the stored
+    settings onto its wrapper, and one that only sets ``__wrapped__`` leaves
+    them on the function it wraps, so the ``__wrapped__`` chain is checked
+    too. A decorator that keeps neither cannot be seen.
+
+    Args:
+        handler: The function ``@event(...)`` is about to decorate.
+        handler_name: The handler's name, as the error message shows it.
+
+    Raises:
+        ValueError: When ``handler``, or a function it wraps, already has
+            ``@event`` settings.
+
+    """
+    func = handler
+    # A chain of wrappers is short in practice; the bound only stops a
+    # ``__wrapped__`` that points back at itself from looping.
+    for _ in range(32):
+        if func is None:
+            return
+        if event_options(func) is not None:
+            msg = (
+                f"@event(...) on handler {handler_name!r}: the handler already has @event settings,"
+                " and a second @event(...) would replace them, so the first one's guard= and other"
+                " settings would stop applying. Merge the settings into one @event(...)."
+            )
+            raise ValueError(msg)
+        func = getattr(func, "__wrapped__", None)
+
+
 def is_def_like(value: Any) -> bool:
     """
     Whether a class member's value is a ``def`` or a def-shaped descriptor
@@ -503,7 +539,9 @@ def event(
             handler that must accept callers the rest of its component
             refuses, such as a public sign-up call. ``guard`` and
             ``_context`` still run. Only ``True`` or ``False`` is
-            accepted.
+            accepted. To keep every access rule in one place, the
+            component's ``_guard`` can instead return early when
+            ``self.event.name`` is the name of a public handler.
         csrf: Per-handler CSRF policy: ``"auto"``, ``False``, or a plain
             (not async) function that raises ``EventError`` to refuse the
             request.
@@ -570,7 +608,9 @@ def event(
             string instead of a tuple, or an ``async def`` guard), or when
             ``methods`` names a method the per-event route does not accept
             (anything other than GET, HEAD, POST, PUT, PATCH, DELETE, and
-            OPTIONS), at decoration time.
+            OPTIONS), at decoration time. Also when the handler already
+            has ``@event`` settings, such as from a second ``@event(...)``
+            stacked on it: put every setting in one ``@event(...)``.
 
     """
     if name is not None and (not isinstance(name, str) or not name):
@@ -590,10 +630,14 @@ def event(
     )
 
     def wrap(handler: _F) -> _F:
+        handler_name = getattr(handler, "__qualname__", repr(handler))
+        # A second @event(...) would replace the settings the first one
+        # stored, so an inner guard= would silently stop running. Refusing
+        # it at decoration makes the author merge the two.
+        refuse_stacked_event(handler, handler_name)
         # The shape was checked above, when ``@event(...)`` was called; the
         # route check waits for the handler so its error can name it.
         if options.methods is not None:
-            handler_name = getattr(handler, "__qualname__", repr(handler))
             validate_route_methods(f"@event(methods=...) on handler {handler_name!r}", options.methods)
         setattr(handler, EVENT_OPTIONS_ATTR, options)
         return handler

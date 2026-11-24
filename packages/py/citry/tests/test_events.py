@@ -23,7 +23,7 @@ import pytest
 import citry as citry_module
 from citry import Citry as _Citry
 from citry import Component, NestedSchemaReplacedWarning
-from citry.ext.events import EventsExtension, event
+from citry.ext.events import EventsExtension, ViewEvents, event
 from citry.ext.events.emission import EventInstanceEntry, build_events_manifest
 from citry.ext.events.handlers import EventOptions, event_options
 from citry.ext.events.schemas import validate_args
@@ -1565,6 +1565,163 @@ class TestEventDecorator:
         with pytest.raises(ValueError, match="detached") as err:
             event(detached=1)
         assert "@event(detached=...) must be True or False; got 1." in str(err.value)
+
+
+def _allow(events):
+    return None
+
+
+def _owner_only(events):
+    return None
+
+
+class TestStackedEventDecorator:
+    """
+    Two ``@event(...)`` calls on one handler are refused at decoration.
+
+    The second call would replace the settings the first one stored, so an
+    inner ``guard=`` would silently stop running.
+    """
+
+    def test_a_second_event_call_is_refused(self):
+        with pytest.raises(ValueError, match=r"Merge the settings into one @event\(\.\.\.\)") as err:
+
+            class Events:
+                @event(debounce=300)
+                @event(guard=_owner_only)
+                def save(self):
+                    return None
+
+        assert "@event(...) on handler 'TestStackedEventDecorator." in str(err.value)
+        assert "Events.save'" in str(err.value)
+
+    def test_a_bare_event_over_a_configured_one_is_refused(self):
+        with pytest.raises(ValueError, match="already has @event settings"):
+
+            class Events:
+                @event
+                @event(guard=_owner_only)
+                def save(self):
+                    return None
+
+    def test_a_wraps_decorator_between_two_event_calls_is_refused(self):
+        # functools.wraps copies the inner settings onto the wrapper.
+        def logged(func):
+            @functools.wraps(func)
+            def wrapper(*args, **kwargs):
+                return func(*args, **kwargs)
+
+            return wrapper
+
+        def save(self):
+            return None
+
+        inner = event(guard=_owner_only)(save)
+        with pytest.raises(ValueError, match="already has @event settings"):
+            event(debounce=300)(logged(inner))
+
+    def test_a_decorator_that_only_sets_wrapped_is_followed(self):
+        # This wrapper keeps __wrapped__ but not the inner function's attributes.
+        def logged(func):
+            def wrapper(*args, **kwargs):
+                return func(*args, **kwargs)
+
+            return functools.update_wrapper(wrapper, func, updated=())
+
+        def save(self):
+            return None
+
+        inner = event(guard=_owner_only)(save)
+        with pytest.raises(ValueError, match="already has @event settings"):
+            event(debounce=300)(logged(inner))
+
+    def test_one_event_call_over_a_wraps_decorator_is_accepted(self):
+        def logged(func):
+            @functools.wraps(func)
+            def wrapper(self):
+                return func(self)
+
+            return wrapper
+
+        app = _Citry()
+
+        class Comp(Component):
+            citry = app
+
+            class Events:
+                @event(guard=_owner_only)
+                @logged
+                def save(self):
+                    return None
+
+        assert _events_ext(app).resolve(Comp).handlers["save"].guard is _owner_only
+
+    def test_one_decorated_function_reused_in_two_components_keeps_its_guard(self):
+        app = _Citry()
+
+        @event(guard=_owner_only, debounce=300)
+        def shared_save(self):
+            return None
+
+        class First(Component):
+            citry = app
+
+            class Events:
+                save = shared_save
+
+        class Second(Component):
+            citry = app
+
+            class Events:
+                save = shared_save
+
+        for comp in (First, Second):
+            handler = _events_ext(app).resolve(comp).handlers["save"]
+            assert handler.guard is _owner_only
+            assert handler.debounce == 300
+
+    def test_a_subclass_override_takes_its_own_event_call(self):
+        app = _Citry()
+
+        class Base(Component):
+            citry = app
+
+            class Events:
+                @event(guard=_owner_only)
+                def save(self):
+                    return None
+
+        class Child(Base):
+            class Events(Base.Events):
+                @event(guard=_allow, debounce=300)
+                def save(self):
+                    return None
+
+        base_handler = _events_ext(app).resolve(Base).handlers["save"]
+        child_handler = _events_ext(app).resolve(Child).handlers["save"]
+        assert base_handler.guard is _owner_only
+        assert child_handler.guard is _allow
+        assert child_handler.debounce == 300
+
+    def test_a_view_events_verb_with_one_event_call_is_accepted(self):
+        # ViewEvents fills the verb's method into the stored settings itself;
+        # that is not a second @event(...) call.
+        app = _Citry()
+
+        class Page(Component):
+            citry = app
+            template = """
+                <div>p</div>
+            """
+
+            class Events(ViewEvents):
+                @event(guard=_owner_only)
+                def post(self):
+                    return None
+
+        handler = _events_ext(app).resolve(Page).handlers["post"]
+        assert handler.guard is _owner_only
+        assert handler.methods == ("POST",)
 
 
 class TestConfigResolution:
