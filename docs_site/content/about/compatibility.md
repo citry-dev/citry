@@ -103,19 +103,14 @@ change how a page renders, and Citry still refuses a `Secret` in
 CPython. Issue [#434](https://github.com/citry-dev/citry/issues/434)
 tracks giving PyPy the same answers.
 
-On PyPy, Events refuses event data and State writes that nest more than
-32 levels, and more parts of a schema count as a level. Each wrap
-validator and each union counts two to four levels, and each
-`Sequence[...]` or `defaultdict` field and each `OnErrorOmit` item
-counts one more. Defining a component also raises `ValueError` when its
-event `data` class, or a State field the browser may write, holds a
-recursive type inside `Json[...]`. These rules keep Citry's own checks
-within the fixed amount of stack PyPy gives each thread, so deeply
-nested data gets a 422 instead of ending the server process. A schema
-with many validators at each level can still use that stack up, as with
-Pydantic alone. Citry applies the same rules on every Python
-implementation other than CPython. On CPython the limit is 64 levels
-(32 in Pyodide). See [Event data on PyPy](/security/#event-data-on-pypy).
+On PyPy, Events refuses event data that nests more than 32 levels,
+where CPython allows 64 (32 in Pyodide), and counts more parts of a
+schema as a level. Defining a component on PyPy also raises
+`ValueError` for some event data and State classes that CPython
+accepts: those with a recursive type inside `Json[...]`. Both rules
+keep deeply nested data from ending the server process; see
+[Event data on PyPy](/security/#event-data-on-pypy). Citry applies
+them on every Python implementation other than CPython.
 
 If you turn off the [expression sandbox](/security/#turning-the-sandbox-off)
 with `Citry(sandbox_expressions=False)`, template expressions on PyPy can

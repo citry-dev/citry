@@ -841,7 +841,7 @@ class WrappedJsonTree(pydantic.BaseModel):
     ("field_type", "reason"),
     [
         pytest.param(JsonTuple, "a recursive class", id="NamedTuple"),
-        pytest.param(JsonPair, "a recursive type that holds itself again inside Json", id="tuple alias"),
+        pytest.param(JsonPair, "a type that contains itself through Json", id="tuple alias"),
     ],
 )
 def test_on_pypy_a_type_that_holds_itself_inside_json_is_refused(
@@ -876,7 +876,7 @@ def test_on_pypy_the_refusal_names_the_field_that_holds_the_json(field_type: Any
     with pytest.raises(ValueError, match=r"the field 'x' of the event data class") as raised:
         bounded.check_data_class("Probe", data)
 
-    assert f"You can also replace Json[...] {where} with the type inside its brackets." in str(raised.value)
+    assert f"You can also replace Json[...] {where} with the type inside its brackets" in str(raised.value)
 
 
 @pytest.mark.usefixtures("pypy_stack_rules")

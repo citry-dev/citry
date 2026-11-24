@@ -7,27 +7,29 @@ still requires citry-core 2.1.2.
 
 ### Fixes
 
-- Security: on PyPy, Citry now checks event data and browser writes to
-  State against a nesting limit that fits PyPy's stack, so data nested
-  deeply enough to end the server process in 1.2.0 gets a 422 instead.
-  The limit there is now 32 levels (it was 64), and wrap validators,
-  unions, `Sequence[...]` fields and `OnErrorOmit` items count extra
-  levels, so on PyPy data that 1.2.0 accepted can get a 422 that says
-  it is nested too deeply: a tree of models nests up to 30 levels when
-  its children sit in a `list`, and 15 in a `Sequence`. A schema with
-  many validators at each level, or your own code that validates nested
-  data again, can still use up PyPy's stack. See
+- Security: on PyPy, Citry now limits how deeply event data and
+  browser writes to State may nest so that PyPy's stack can hold the
+  check, and data nested deeply enough to end the server process in
+  earlier releases gets a 422 instead. The limit there is now 32 levels
+  (it was 64), and wrap validators, unions, `Sequence[...]` fields and
+  `OnErrorOmit` items each count as more than one level, so on PyPy
+  some data that earlier releases accepted gets a 422 that says it is
+  nested too deeply. A schema with many validators at each level, or
+  your own code that validates nested data again, can still end the
+  process. See
+  [Event data on PyPy](https://citry.dev/security/#event-data-on-pypy)
+  and
   [GHSA-29wx-2wvw-8962](https://github.com/citry-dev/citry/security/advisories/GHSA-29wx-2wvw-8962).
-- Security: on PyPy, defining a component now raises `ValueError` when
-  its event `data` class or a State field the browser may write holds a
-  recursive class inside `Json[...]`, or a type that holds itself again
-  inside `Json[...]` text. Give that type a wrap validator, or, in a
-  `data` class, replace `Json[...]` with the type inside its brackets in
-  the field the error names.
+- Security: on PyPy, defining a component now raises `ValueError`, so
+  the app fails when it imports the component, when its event `data`
+  class or a State field the browser may write holds a recursive class
+  inside `Json[...]`, or a type that contains itself through
+  `Json[...]`. Give that type a wrap validator. In a `data` class you
+  can instead change `Json[Tree]` to `Tree`; the field then takes the
+  value itself, not JSON text.
 
-These rules apply on every Python implementation other than CPython,
-such as GraalPy, since Citry has not measured how much stack those give
-a check. CPython is unchanged.
+Nothing changes on CPython. The PyPy rules apply on every other Python
+implementation too, such as GraalPy, because only PyPy was measured.
 
 ## v1.2.0
 

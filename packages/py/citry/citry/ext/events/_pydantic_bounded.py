@@ -3461,8 +3461,8 @@ _RECURSIVE_CLASS_REASON = (
 # On PyPy only: a type that holds itself again inside Json[...] text, which
 # any type can do, not only a class.
 _JSON_LOOP_REASON = (
-    "a recursive type that holds itself again inside Json[...] text, whose nesting Citry cannot limit on this"
-    " Python, because each JSON string starts a fresh parse"
+    "a type that contains itself through Json[...], and on this Python implementation Citry cannot limit how"
+    " deeply JSON text nests inside JSON text, since Pydantic reads each string separately"
 )
 _EXTRAS_REASON = (
     "extra keys that the class allows and gives a type, whose values can fail with more than one error or with"
@@ -4139,7 +4139,10 @@ def _plain_type_fix(name: str | None, json_at: _FieldAt | None) -> str:
         where = "that field"
     else:
         where = "the class"
-    return f" You can also replace Json[...] in {where} with the type inside its brackets."
+    return (
+        f" You can also replace Json[...] in {where} with the type inside its brackets (Json[Node] becomes Node);"
+        " the field then takes the value itself, not JSON text."
+    )
 
 
 # The other fixes the messages offer, after the one for the reason.

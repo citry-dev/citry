@@ -688,8 +688,8 @@ such as in a computed field or a plain dataclass's `__post_init__`.
 
 Citry refuses data that nests more than 64 levels of models, dataclasses,
 TypedDicts, unions, wrap validators, and `Iterable` fields, when a
-Pydantic v2 class checks it (32 on PyPy, where more parts of a schema
-count; see [Event data on PyPy](#event-data-on-pypy)). Each model,
+Pydantic v2 class checks it (on PyPy the limit is 32 and some parts
+count more; see [Event data on PyPy](#event-data-on-pypy)). Each model,
 dataclass, TypedDict, wrap validator, and `Iterable[...]` or
 `Generator[...]` field that a value passes through counts one level.
 So does each union whose members could read the value. Citry checks the items of an `Iterable[...]` field
@@ -743,8 +743,9 @@ settings.
 
 Citry checks the data on a thread of its own with a 16 MiB stack, so on
 CPython the limit does not depend on the stack size your server gives
-its threads. On PyPy the stack size does not change how much stack a
-check may use ([Event data on PyPy](#event-data-on-pypy)).
+its threads. On PyPy a larger stack does not help, because PyPy caps
+each thread's stack use at a fixed amount
+([Event data on PyPy](#event-data-on-pypy)).
 Citry also builds State for a render, writes State out for its token
 and for the page, and checks State a handler changed, all on those
 threads. Your request thread waits each time Citry hands work to such
@@ -829,35 +830,38 @@ so the limits apply to it.
 
 ### Event data on PyPy { #event-data-on-pypy }
 
-On PyPy, Citry refuses event data and State writes that nest more than
-32 levels, and more kinds of field count as a level. Each
-`Sequence[...]` field, each other type that Pydantic checks with a
-Python function of its own (such as `defaultdict`), and each part that
-drops bad items (such as `OnErrorOmit`) counts one more level. A wrap
-validator or a union whose members could read the value counts two to
-four levels. So recursive data can nest fewer levels on PyPy than on
-CPython.
-Measured on PyPy 7.3.23, a tree of models passed 30 levels when each
-model held its children in a `list`, 15 in a `Sequence`, and 10 in two
-nested lists of `OnErrorOmit` items.
-
-On PyPy, defining a component also raises `ValueError` when its event
-`data` class, or a State field the browser may write, holds a recursive
-type inside `Json[...]`, as described in
-[Fix a refused schema](#schemas-citry-refuses). Give the recursive type
-a wrap validator, or replace `Json[...]` with the type inside its
-brackets in the field the error names.
-
 PyPy lets each thread use only a fixed amount of stack, set by
 `sys.setrecursionlimit()` and not by the thread's stack size. When
-Pydantic's compiled code uses it up, PyPy ends the whole server process
-instead of raising an error. The limits above keep Citry's checks
-within that amount, but two things can still use it up: a schema with
-many validators or other parts at each level, as with Pydantic alone,
-and your own code that validates nested data again, such as a validator
-that calls `model_validate` on a nested value. A larger thread stack
-does not help with either on PyPy. If your app takes deeply nested data
+Pydantic's compiled code uses it up while it checks deeply nested data,
+PyPy ends the whole server process instead of raising an error. So on
+PyPy, Citry checks event data and State writes with tighter rules.
+
+The limit is 32 levels, and some parts of a schema count as more than
+one level. A level is one model, dataclass, TypedDict, wrap validator
+or union that the data passes through. On PyPy a wrap validator counts
+three levels and a union two, and each `Sequence[...]` or
+`defaultdict` field and each `OnErrorOmit` item adds one more. So
+recursive data can nest fewer levels on PyPy than on CPython. Measured
+on PyPy 7.3.23, a tree of models was accepted down to 30 levels when
+each model held its children in a `list`, 15 in a `Sequence`, and 10
+in `list[OnErrorOmit[list[OnErrorOmit[Tree]]]]`.
+
+Defining a component also raises `ValueError` on PyPy when its event
+`data` class, or a State field the browser may write, holds a recursive
+type inside `Json[...]`, as described in
+[Fix a refused schema](#schemas-citry-refuses).
+
+These rules keep Citry's own checks inside PyPy's stack, but two things
+can still use it up and end the process: a schema with many validators
+or other parts at each level, which Pydantic without Citry cannot check
+either, and your own code that validates nested data again, such as a
+validator that calls `model_validate` on a nested value. A larger
+thread stack does not help on PyPy, and raising the recursion limit
+does not make the check safer. If your app takes deeply nested data
 from the browser, run it on CPython.
+
+Citry applies the same rules on every Python implementation other than
+CPython, such as GraalPy.
 
 ### Allow deep filter trees { #trees-in-event-data }
 
@@ -878,7 +882,7 @@ To check deeper trees, declare the discriminator where you define the
 recursive type (a type that contains itself, here `Node`), and give each
 class a `Literal` tag field. Then each node counts one level toward the
 [nesting limit](#check-event-data), so a tree can nest about 60 levels
-(fewer on PyPy, see [Event data on PyPy](#event-data-on-pypy)):
+(about 30 on PyPy, see [Event data on PyPy](#event-data-on-pypy)):
 
 ```python
 from typing import Annotated, Literal
@@ -923,9 +927,11 @@ class, when the part sits outside any field) and a change that fixes
 it, so you rarely need this list. The usual fixes are the discriminator
 above, another type for the extra keys or items, or `_model` set to the
 fields the browser may change, without that field. For a `data` class,
-the error also offers replacing `Json[...]` with the type inside its
-brackets, and names the field where `Json[...]` is written, which may
-be a field of a class inside the field it refuses.
+the error also offers declaring a field with the type inside
+`Json[...]`, as in `Tree` for `Json[Tree]`. It names the field that
+holds `Json[...]`, which can sit inside a class nested in the field
+the error is about. That field then takes the value itself, not JSON
+text, so change the browser code that sends it.
 
 - **A tree without a discriminator.** A union of node classes where two
   or more can hold more nodes, as in the filter tree above.
@@ -963,29 +969,6 @@ be a field of a class inside the field it refuses.
     - Fine: a wrap validator inside the `Json[...]`, as in
       `Json[Annotated[list[Item], WrapValidator(...)]]`. Your validator
       then does not run when the text is not valid JSON.
-- **On PyPy, a recursive type inside `Json[...]`.** A `Json[...]`
-  field of a `data` class, or of a State field the browser may write,
-  holds a type that can contain itself, and no wrap validator sits
-  between the type and the place where it contains itself:
-    - Refused: a model, dataclass, TypedDict or `NamedTuple` that can
-      hold itself.
-    - Refused: any type that can hold itself again inside the
-      `Json[...]` text, such as
-      `Pair = tuple[list[Pair], Json[Pair] | None]`. Each JSON string
-      is read on its own, so strings nested inside each other can nest
-      such a type as deeply as the data likes.
-    - Fine: a recursive list or dict type, such as
-      `Json[pydantic.JsonValue]`, whose loop does not pass through
-      `Json[...]`.
-
-  Nothing counts the levels while Pydantic reads the JSON text, so on
-  PyPy deep text could end the process
-  ([Event data on PyPy](#event-data-on-pypy)). Fix it with a wrap
-  validator on the recursive type, which Citry counts at each level.
-  Below a wrap validator the type reads Python values, not JSON, so a
-  strict model refuses a date, UUID or similar value that JSON writes
-  as a string. For a `data` class you can instead replace `Json[...]`
-  with the type inside its brackets in the field the error names.
 - **A `pydantic.v1` model or dataclass in a `data` class or in a
   Pydantic v2 State.** Citry checks event data, and the fields of a
   Pydantic v2 State, with dataclasses, annotated classes and Pydantic v2
@@ -1014,6 +997,28 @@ be a field of a class inside the field it refuses.
       the browser writes the field, but not when it restores the State
       at the start of a call.
     - Fix a refused class: make the v1 class a Pydantic v2 model.
+- **On PyPy, a recursive type inside `Json[...]`.** A `Json[...]`
+  field in a `data` class, or in a State field the browser may write,
+  holds a type that can contain itself:
+    - Refused: a model, dataclass, TypedDict or `NamedTuple` that can
+      contain itself.
+    - Refused: any type that contains itself through `Json[...]`, such
+      as a tuple alias `Pair` of `list[Pair]` and `Json[Pair] | None`.
+      A JSON string can hold another JSON string, and Pydantic reads
+      each one separately, so nothing limits how deeply they nest.
+    - Fine: a recursive list or dict type inside `Json[...]`, such as
+      `Json[pydantic.JsonValue]`, since the type does not contain
+      `Json[...]` itself.
+    - Fine: a refused type above with a wrap validator on it, such as
+      a `model_validator(mode="wrap")` that returns `handler(value)`,
+      or `WrapValidator` in a type alias. Citry counts each level there.
+      Below a wrap validator the type checks Python values instead of
+      JSON text, so a strict model refuses a date, UUID or similar
+      value that JSON writes as a string.
+    - Fine, in a `data` class: the field the error names declared with
+      the type inside `Json[...]`, as in `Tree` for `Json[Tree]`. The
+      field then takes the value itself, not JSON text, so change the
+      browser code that sends it.
 
 Citry looks for these parts when the component class is defined. It
 cannot look inside a class it meets only when a call arrives: a Pydantic
