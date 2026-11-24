@@ -2665,6 +2665,30 @@ class TestAsyncGuardsAreRefused:
         assert item["error"]["code"] == "handler_error"
         assert ran == []
 
+    def test_a_context_may_return_other_awaitable_data(self):
+        # _context's value is app data; only an unrun coroutine is refused.
+        class Pool:
+            closed = False
+
+            def __await__(self):
+                yield from ()
+
+            def close(self):
+                self.closed = True
+
+        pool = Pool()
+        seen = []
+
+        def go(self, context):
+            seen.append(context)
+
+        events_cls = type("Events", (), {"_context": lambda _events: pool, "go": go})
+        comp = type("Ctx", (Component,), {"citry": _citry(), "Events": events_cls, "template": "\n<div>c</div>\n"})
+        [item] = _dispatch(comp.citry, {"componentClassId": comp.class_id, "handlerName": "go"})["results"]
+        assert item["ok"] is True
+        assert seen == [pool]
+        assert pool.closed is False
+
     def test_a_plain_guard_still_runs(self):
         def deny(events):
             raise EventError("Denied.", status=403)

@@ -6,10 +6,13 @@
 
 - Security: an `async def` event guard, `_context` or `_csrf` function
   is now refused with an error when the component class is defined.
-  Citry calls these without awaiting them, so the code of an async
-  guard never ran and every call got through. An app that has one now
-  fails at startup: rewrite the function as a plain `def`. A plain
-  `def` that returns a coroutine now fails the call. See
+  Citry calls these without awaiting them, so the code inside an async
+  one never ran: an async guard let every call through, and an async
+  `_csrf` function skipped your own token check. An app that has one
+  now fails at startup: rewrite the function as a plain `def`. A plain
+  `def` guard or `_csrf` function that returns a coroutine, another
+  awaitable or a generator now fails the call, and so does a `_context`
+  that returns a coroutine. See
   [GHSA-gj9m-wwqx-m37j](https://github.com/citry-dev/citry/security/advisories/GHSA-gj9m-wwqx-m37j).
 
 ## v1.2.0

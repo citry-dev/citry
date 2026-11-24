@@ -242,6 +242,9 @@ def validate_csrf_value(source: str, value: Any) -> str | bool | Callable[..., A
     raise ValueError(msg)
 
 
+# What a guard does, for the error that refuses an async one.
+GUARD_PURPOSE = "that takes the Events instance and raises EventError to refuse the call, or None"
+
 # Calling one of these returns an object whose code has not run yet: a
 # coroutine (async def), an async generator, or a generator.
 _DEFERRED_BODY_CHECKS = (inspect.iscoroutinefunction, inspect.isasyncgenfunction, inspect.isgeneratorfunction)
@@ -304,32 +307,46 @@ def refuse_deferred_body(source: str, value: Any, purpose: str) -> None:
         raise ValueError(msg)
 
 
-def refuse_deferred_result(source: str, result: Any) -> None:
+def refuse_deferred_result(source: str, result: Any, *, coroutine_only: bool = False) -> None:
     """
     Raise ``TypeError`` when a call returned a coroutine or generator.
 
     The class-definition check cannot see every way to build such a
     function (a plain ``def`` that returns ``some_async_function(...)``,
-    for one), so the result is checked on every call too. The unrun object
-    is closed first, so Python does not also warn that it was never awaited.
+    for one), so the result is checked on every call too. An unrun
+    coroutine or generator is closed first, so Python does not also warn
+    that it was never awaited.
+
+    Args:
+        source: The function's name, as the error message shows it.
+        result: What the function returned.
+        coroutine_only: Refuse only a coroutine. ``_context`` passes this:
+            its value is app data, which may be some other awaitable or a
+            generator on purpose. A guard or CSRF function returns nothing
+            useful, so any of these means its code did not run.
 
     Raises:
-        TypeError: When ``result`` is awaitable, a generator, or an async
-            generator. The dispatcher answers the call with an error, so
-            the check fails closed.
+        TypeError: When ``result`` is a coroutine, or (without
+            ``coroutine_only``) any other awaitable, a generator, or an
+            async generator. The dispatcher answers the call with an
+            error, so the check fails closed.
 
     """
-    if inspect.isawaitable(result) or inspect.isgenerator(result) or inspect.isasyncgen(result):
-        close = getattr(result, "close", None)
-        # An async generator's aclose() is itself a coroutine, and running it
-        # here would need an event loop; it is left for the garbage collector.
-        if callable(close) and not inspect.isasyncgen(result):
-            close()
-        msg = (
-            f"{source} returned {type(result).__name__!r} instead of running. It must be a plain"
-            " (not async) function: Citry calls it without awaiting it, so this call is refused."
-        )
-        raise TypeError(msg)
+    if coroutine_only:
+        deferred = inspect.iscoroutine(result)
+    else:
+        deferred = inspect.isawaitable(result) or inspect.isgenerator(result) or inspect.isasyncgen(result)
+    if not deferred:
+        return
+    # Only objects Citry knows are unrun code are closed; closing some other
+    # awaitable the app returned could shut down a resource it still uses.
+    if inspect.iscoroutine(result) or inspect.isgenerator(result):
+        result.close()
+    msg = (
+        f"{source} returned a {type(result).__name__!r} object, so its code did not run. It must be"
+        " a plain (not async) function: Citry calls it without awaiting it, so this call is refused."
+    )
+    raise TypeError(msg)
 
 
 def validate_render_inputs_value(source: str, value: Any) -> Callable[..., Any] | None:
@@ -371,7 +388,9 @@ def _takes_one_argument(func: Callable[..., Any]) -> bool:
     return True
 
 
-def validate_callable_value(source: str, value: Any) -> Callable[..., Any] | None:
+def validate_callable_value(
+    source: str, value: Any, purpose: str = "that takes the Events instance, or None"
+) -> Callable[..., Any] | None:
     """Check a ``guard`` / ``context`` value: a plain (not async) function, or None."""
     if value is None:
         return value
@@ -379,7 +398,7 @@ def validate_callable_value(source: str, value: Any) -> Callable[..., Any] | Non
         # The dispatcher calls guards and _context without awaiting them. An
         # async guard would only create a coroutine, never raise, and so let
         # every call through; refusing it here fails at class definition.
-        refuse_deferred_body(source, value, "or None")
+        refuse_deferred_body(source, value, purpose)
         return value
     msg = f"{source} must be a callable or None; got {value!r}."
     raise ValueError(msg)
@@ -517,7 +536,7 @@ def event(
     options = EventOptions(
         name=name,
         methods=validate_methods_value("@event(methods=...)", methods) if methods is not None else None,
-        guard=validate_callable_value("@event(guard=...)", guard),
+        guard=validate_callable_value("@event(guard=...)", guard, GUARD_PURPOSE),
         csrf=validate_csrf_value("@event(csrf=...)", csrf) if csrf is not None else None,
         debounce=validate_timing_value("@event(debounce=...)", debounce),
         throttle=validate_timing_value("@event(throttle=...)", throttle),

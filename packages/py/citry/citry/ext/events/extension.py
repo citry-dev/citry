@@ -35,6 +35,7 @@ from citry.ext.events.emission import capture_instance, merge_instance_entries
 from citry.ext.events.handlers import (
     CONFIG_NAMES,
     ENGINE_CONFIG_NAMES,
+    GUARD_PURPOSE,
     collect_event_handlers,
     defers_its_body,
     event_options,
@@ -728,6 +729,7 @@ class EventsExtension(Extension):
         guard = validate_callable_value(
             f"Component {comp_name}: Events._guard",
             self._resolve_config_value(raw_events, "_guard", defaults),
+            GUARD_PURPOSE,
         )
         context = validate_callable_value(
             f"Component {comp_name}: Events._context",

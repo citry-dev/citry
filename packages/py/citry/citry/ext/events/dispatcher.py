@@ -1169,9 +1169,12 @@ class EventsDispatcher:
                 if info.context is not None:
                     events.context = info.context(events)
                     # Definition time refuses an async _context; this catches
-                    # the rest (a plain def returning a coroutine), so a
-                    # handler never receives an unrun coroutine as context.
-                    refuse_deferred_result(f"{comp_cls.__name__}: Events._context", events.context)
+                    # a plain def returning a coroutine, so a handler never
+                    # receives unrun code as context. Other awaitables may be
+                    # real app data, so only a coroutine is refused.
+                    refuse_deferred_result(
+                        f"{comp_cls.__name__}: Events._context", events.context, coroutine_only=True
+                    )
                 if handler.guard is not None:
                     # A guard refuses by raising, so a coroutine it returned
                     # unrun would pass the call; refusing it fails closed.

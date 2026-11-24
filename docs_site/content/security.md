@@ -175,8 +175,10 @@ validated.
 Write guards and `_context` as plain `def` functions, not `async def`.
 Citry calls them without awaiting them, on WSGI and ASGI servers alike,
 so it refuses an async one with an error when the component class is
-defined. A check that needs `await` belongs at the start of an
-`async def` handler, which raises `EventError` the same way.
+defined. A decorator you put on a guard must not call an async function
+either, because Citry cannot see inside it. Put a check that needs
+`await` at the start of an `async def` handler and raise `EventError`
+there, as a guard would. An `async def` handler needs an ASGI server.
 
 Citry does not log users in. Your web framework does, and a handler reads
 the user from the `request` it receives, or from `request.native` for the
