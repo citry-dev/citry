@@ -77,10 +77,12 @@ its own calls.
 The expiry limits how long a copied token stays useful only while nobody
 uses it. Anyone who sends calls with a copy at least every 12 hours keeps
 getting new tokens, as the page does, even when it calls only handlers
-that read State. A token that a GET handler receives in its URL can end up in
-server and proxy logs, so whoever can read those logs can keep that
-token alive the same way. A token grants no permission, so check
-permissions in every handler.
+that read State. Handlers use POST by default, which keeps the token out
+of the URL. A handler that opts into GET with `@event(methods=("GET",))`
+or `Events._methods`, and declares `state`, receives the token in its
+URL, where it can end up in server and proxy logs. Whoever can read those
+logs can keep that token alive the same way. A token grants no
+permission, so check permissions in every handler.
 
 A call with an expired token does not run its handler: it gets a
 `stale_state` error, and calls from that component keep failing until
@@ -88,20 +90,10 @@ the visitor reloads the page, which brings a fresh token.
 [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)
 shows how to tell the visitor.
 
-To change the lifetime, set `State._max_age` to a `timedelta` of at least
-one second. Token times are whole seconds, so a token can stop working up
-to one second early. No setting turns expiry off. Changing `_max_age`
-later does not change the tokens Citry has already issued. A call renews
-a token once it is past half its lifetime, so set `_max_age` to at least
-twice the longest time a page may go without a call.
-
-```python
-from datetime import timedelta
-
-class State:
-    project_id: int
-    _max_age = timedelta(days=7)
-```
+To change the lifetime, set [`State._max_age`](/events/state/#max-age).
+A call renews a token once it is past half its lifetime, so set it to at
+least twice the longest time a page may go without a call. No setting
+turns expiry off.
 
 To stop accepting every signed token issued so far, give
 `Citry(secret=...)` a new secret and drop the one that signed them. A page
@@ -116,15 +108,16 @@ of its own if you want to replace it separately. Citry accepts a value
 signed with any entry of the secret list, so `Citry(...)` raises an error
 when the secret or an entry is empty or only whitespace.
 
-Two State settings narrow what the browser sees and changes. Neither one
-replaces the permission check:
+Two [State settings](/events/state/#state-settings) narrow what the
+browser sees and changes. Neither one replaces the permission check:
 
 - `State._public` lists the fields the browser can read as plain values
   through `$state` and bindings. The other fields still travel to the
   browser, inside the signed value.
 - `State._model` lists the public fields the browser may change.
 
-To keep State values out of the page, set `State._storage = "server"`.
+To keep State values out of the page, set
+[`State._storage = "server"`](/events/state/#storage).
 Citry then keeps the values in its configured cache and sends only a lookup
 key. This hides only the fields left out of `_public`: public fields are
 still sent as plain values, so list the fields the browser needs in
@@ -137,7 +130,8 @@ above), and keeps each entry until it expires: after `State._max_age`,
 or after 24 hours when you do not set it. With several
 server processes, use a shared backend and set its memory limit and
 eviction policy. A browser write that would make the stored
-State larger than `State._max_bytes` (64 KiB by default) gets a 422
+State larger than [`State._max_bytes`](/events/state/#max-bytes)
+(64 KiB by default) gets a 422
 before the handler runs. With the default signed storage, Citry makes
 the same check when the call gets a new token. The limit covers only
 browser writes, so when a handler copies request data (anything a visitor

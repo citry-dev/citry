@@ -189,21 +189,14 @@ Server events exchange data in the `citry-events/1` protocol.
 
 ## State token lifetime { #state-token-lifetime }
 
-Unless you keep State on the server (`State._storage = "server"`), Citry
-sends each component's State to the page as a signed State token.
-
-- Signed tokens and State kept on the server both expire 24 hours after
-  Citry issues them, unless you set `State._max_age`.
-- A call made once a token is past half its lifetime gets a new token,
-  so a component that gets a call at least once every half lifetime
-  (12 hours by default) keeps working.
-- An expired token fails the call with `stale_state`. Show visitors a
-  message for it, as
-  [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)
-  shows.
-- For a longer lifetime, set `State._max_age` to a longer `timedelta`.
-  [Treat State as input](/security/#treat-state-as-client-input) explains
-  why tokens expire.
+A State token, the string that carries a component's State between
+calls, expires 24 hours after Citry issues it, with either storage,
+unless you set `State._max_age`. A call made once a token is past half
+its lifetime gets a new token, so a component that gets a call at least
+once every half lifetime keeps working. An expired token fails the call
+with `stale_state`. [`_max_age`](/events/state/#max-age) covers the
+lifetime, how to change it, and how to tell visitors when a token
+expires.
 
 ## What the promise covers { #what-is-covered }
 

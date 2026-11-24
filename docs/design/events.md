@@ -5143,11 +5143,13 @@ For a component with a handler that changes State, a `_model` field the
 browser may write, or a handler that renders the caller, a copy could
 always be kept alive that way, so renewal adds little there. For a
 component whose handlers only read State, renewal is what lets a copy
-outlive `_max_age`. The case that matters most is a GET handler that reads
-State: its token travels in the URL and can land in server and proxy
-logs, and whoever reads those logs can keep that token alive. Renewal does
-not change what a token permits, which is why every handler still checks
-permission. The token is bound to its component class and protocol
+outlive `_max_age`. The case that matters most is a handler that opts into
+GET (`@event(methods=("GET",))` or `Events._methods`) and declares `state`.
+A handler uses POST by default, so its token stays out of the URL. A GET
+call carries the token in its query only when the handler declares `state`
+(section 3.5), and that URL can land in server and proxy logs. Whoever
+reads those logs can keep that token alive. Renewal does not change what a
+token permits, which is why every handler still checks permission. The token is bound to its component class and protocol
 version, not to a user, session, page, instance, or latest State
 revision. Handlers must therefore reload authoritative data and perform
 authorization regardless of whether the token verifies.

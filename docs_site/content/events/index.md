@@ -58,7 +58,7 @@ Every public method on [`Events`][citry.Component.Events] can be called from
 the browser. A method whose name starts with an underscore cannot, so use that
 for helpers.
 
-## Set a signing secret { #configure-a-signing-secret-before-using-state }
+## Set a signing secret
 
 By default, Citry signs State before sending it to the browser, so it can
 detect when someone changes it. Signing needs a secret. Rendering a component
@@ -89,17 +89,22 @@ web_app = FastAPI(lifespan=lifespan)
 mount(web_app, citry_app)
 ```
 
+[Web frameworks](/advanced/web-frameworks/) shows how to mount Citry in other
+frameworks.
+
+### Use Django's secret key
+
 In Django, pass `citry.contrib.django.secret()` to reuse Django's own secret.
 When you rotate Django's key with `SECRET_KEY_FALLBACKS`, Citry follows the
 rotation: `SECRET_KEY` signs new values, and a value signed with a fallback
-key still verifies, so pages that visitors already have open keep working
+key still verifies. Pages that visitors already have open keep working
 until you remove the old key from the fallbacks.
 
-To rotate a secret of your own, pass a list: the first entry signs new
-values, and Citry checks values against every entry. Citry accepts a
-value signed with any entry, so an empty entry would let anyone sign one.
-`Citry(...)` raises an error for an entry that is empty or only
-whitespace, so leave out a key that is not set:
+### Rotate a secret
+
+To rotate a secret of your own, pass a list. The first entry signs new
+values, and Citry accepts a value signed with any entry. Pages that
+visitors already have open keep working until you remove the old entry:
 
 ```python
 keys = [
@@ -109,19 +114,29 @@ keys = [
 citry_app = Citry(secret=[key for key in keys if key])
 ```
 
-When old and new workers run at the same time during a deploy, rotate in
-two steps. First deploy the new secret as the second entry, so every
-worker can verify values signed with it. Then, in a later deploy, move it
-to the front. A worker that does not hold the new secret yet treats State
-signed with it as out of date, so the browser reports an out-of-date
-page, and it answers 404 for the URL of a `css_data()` stylesheet (the
-CSS Citry builds from a component's `css_data()` values) made with it.
-In Django, add the new key to `SECRET_KEY_FALLBACKS` first. In the later
-deploy, make it `SECRET_KEY` and move the old key into
-`SECRET_KEY_FALLBACKS`.
+The last line leaves out a key that is not set. An empty entry would let
+anyone sign a value, so `Citry(...)` raises an error for an entry that is
+empty or only whitespace.
 
-[Web frameworks](/advanced/web-frameworks/) shows how to mount Citry in other
-frameworks.
+### Rotate during a deploy
+
+During a deploy, old and new workers can run at the same time. Rotate in
+two deploys, so that every worker can check every value it receives:
+
+1. Add the new secret as the second entry, and deploy. Every worker can
+   now check values signed with it.
+2. In a later deploy, move the new secret to the front, so it signs new
+   values.
+
+In Django, step 1 adds the new key to `SECRET_KEY_FALLBACKS`. Step 2 makes
+it `SECRET_KEY` and moves the old key into `SECRET_KEY_FALLBACKS`.
+
+If you skip step 1, a worker that does not have the new secret yet
+treats State signed with that secret as out of date, and the page shows
+the [out-of-date error](/reference/browser-apis/#out-of-date-pages). The
+worker also answers 404 for the URL of a `css_data()` stylesheet (the
+CSS Citry builds from a component's `css_data()` values) made with the
+new secret.
 
 ## Choose your next step
 

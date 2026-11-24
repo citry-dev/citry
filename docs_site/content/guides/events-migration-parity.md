@@ -106,7 +106,8 @@ original view, so `get`, `head`, and `options` must only read data. See
 
     Signing lets Citry detect a changed token, but anyone can read the
     values in it. To keep a value out of the page, set
-    `_storage = "server"` and leave the field out of `_public`.
+    `_storage = "server"` and leave the field out of `_public` (see
+    [State settings](/events/state/#state-settings)).
 
 ## Bind events
 

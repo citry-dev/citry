@@ -165,12 +165,13 @@ def _extract(obj: Any, path: str, *, with_members: bool = True) -> SimpleNamespa
 
     project = current_docs_project()
     repository = project.settings.repository
+    # The per-page-unique anchor (falls back to the raw slug for a symbol
+    # rendered outside the category pages, e.g. a standalone <c-docstring>).
+    symbol_anchor = reference_anchor_map().get(path, anchor(path))
     return SimpleNamespace(
         name=obj.name,
         path=path,
-        # The per-page-unique anchor (falls back to the raw slug for a symbol
-        # rendered outside the category pages, e.g. a standalone <c-docstring>).
-        anchor=reference_anchor_map().get(path, anchor(path)),
+        anchor=symbol_anchor,
         kind=kind,
         signature=_signature(obj),
         description=_description_for(path, sections),
@@ -187,7 +188,7 @@ def _extract(obj: Any, path: str, *, with_members: bool = True) -> SimpleNamespa
         params=_params(sections),
         returns=_returns(sections),
         raises=_raises(sections),
-        attributes=_attributes(sections),
+        attributes=_attributes(sections, symbol_anchor, frozenset(m.name for m in members)),
         members=members,
     )
 
@@ -409,13 +410,21 @@ def _raises(sections: list) -> list[SimpleNamespace]:
     return []
 
 
-def _attributes(sections: list) -> list[SimpleNamespace]:
+def _attributes(
+    sections: list, symbol_anchor: str, member_names: frozenset[str] = frozenset()
+) -> list[SimpleNamespace]:
     resolve = make_type_resolver()
     for section in sections:
         if section.kind.value == "attributes":
             return [
                 SimpleNamespace(
                     name=a.name,
+                    # A row gets its own anchor so a guide page can link to one
+                    # setting, such as ``State._max_age``, whose ``_`` name keeps
+                    # it out of the members list. A row that is also rendered as
+                    # a member already has that member's anchor, and a second
+                    # element with the same id would break the link.
+                    anchor=None if a.name in member_names else f"{symbol_anchor}-{anchor(a.name)}",
                     annotation=_annotation_html(a.annotation, resolve),
                     description=_md_inline(a.description),
                 )

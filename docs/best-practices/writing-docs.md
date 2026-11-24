@@ -105,6 +105,12 @@ appears alone: in the sidebar, in search results, and in a link from
 another page. Write "Turn on development mode" instead. The same goes
 for "this", "its", and "them".
 
+A heading that gives an instruction must still name what the section is
+about. "Pass every input" tells the reader what to do but not what it
+applies to: in the sidebar, it could belong to forms, components, or
+events. "Access State in handlers" names the thing the section helps
+with, and the instruction follows in the text.
+
 Keep a heading to about four words and 24 characters. The "On this page"
 sidebar cuts longer headings off, and the words that get cut are usually
 the ones that tell sections apart. A longer heading is fine when the

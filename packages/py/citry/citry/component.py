@@ -868,23 +868,7 @@ class Component(metaclass=ComponentMeta):
     ``State`` can also be a Pydantic v2 or v1 model written by hand, which
     Pydantic then checks; see "Pydantic State" in the Events
     State guide. State must contain only JSON-serializable values, or, for a
-    model State, values Pydantic can write as JSON. By default, every field
-    is readable and writable in the browser. Use ``_public`` to choose which
-    fields the browser may read and ``_model`` to choose which public fields
-    it may change. ``_storage`` is ``"signed"`` by default and may be set to
-    ``"server"``. ``_max_bytes`` defaults to 8192 bytes, or 65536 with
-    server storage, where it caps how large browser writes may make the
-    stored State and ``None`` turns that check off. ``_max_age`` is a
-    ``datetime.timedelta`` of at least one second that sets how long the
-    State token (the string Citry sends to the page for the next call)
-    works after Citry issues it. With ``None``, the token expires after 24
-    hours in either storage. A call made once the token is past half its
-    lifetime gets a new token with a full lifetime, so a component that gets
-    a call at least once every half lifetime (12 hours by default) keeps
-    working. A call with an expired token
-    fails with ``stale_state``; see
-    [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)
-    for how to tell the visitor.
+    model State, values Pydantic can write as JSON.
 
     Citry starts State from same-named keyword arguments and field defaults.
     Define ``state_data(self, kwargs, slots)`` when the values need to be
@@ -897,14 +881,47 @@ class Component(metaclass=ComponentMeta):
     ``_storage = "server"`` without setting ``_storage`` raises
     ``ValueError``, because the values would move into the page. Assign
     ``State = None`` on a subclass to declare no State.
+
+    Citry carries State between calls in a State token: a string it puts
+    in the page and the browser sends back with each call. The settings
+    below start with ``_`` so they cannot clash with a field name. Citry
+    checks them when the class is defined and raises ``ValueError`` for a
+    value it does not accept, or for a misspelled setting. The
+    [State settings](/events/state/#state-settings) guide explains when to
+    use each one.
+
+    Attributes:
+        _public (tuple[str, ...] | None): The fields browser code can read.
+            Default: every field. A tuple or list of field names.
+            [Guide](/events/state/#public).
+        _model (tuple[str, ...] | None): The fields browser code can
+            change. Default: the ``_public`` fields. Each must also be in
+            ``_public``. [Guide](/events/state/#model).
+        _storage (Literal["signed", "server"]): Where Citry keeps the
+            values between calls. ``"signed"`` (the default) keeps them in
+            the page, inside a signed State token; ``"server"`` keeps them
+            in Citry's cache.
+            [Guide](/events/state/#storage).
+        _max_bytes (int | None): The largest State, in bytes of JSON.
+            Default: 8192, or 65536 with server storage. A positive
+            ``int``; ``None`` turns the check off and needs server storage.
+            With server storage, only browser writes are checked.
+            [Guide](/events/state/#max-bytes).
+        _max_age (datetime.timedelta | None): How long a State token works
+            after Citry issues it. Default: 24 hours, which ``None`` also
+            means. At least one second. A call made once the token is past
+            half its lifetime gets a new token with a full lifetime, so a
+            component that gets a call at least once every half lifetime
+            keeps working. A call with an expired token fails with
+            ``stale_state``. [Guide](/events/state/#max-age).
     """
 
     Events: ClassVar[type | None] = None
     """Optional server event handlers for this component.
 
     Define ``Events`` as a nested class. Every public method is an event
-    handler; underscore-prefixed methods and attributes are private helpers or
-    configuration::
+    handler. A method whose name starts with ``_`` is a private helper,
+    except ``_guard`` and ``_context``, which are settings::
 
         class Counter(Component):
             class State:
@@ -923,6 +940,48 @@ class Component(metaclass=ComponentMeta):
     as ``self.state`` and ``self.request``, subclass the generic
     [`Events`][citry.Events] base and parameterize it with the component's State
     class. See [`event`][citry.ext.events.event] for per-handler options.
+
+    The settings below configure every handler of the component. Their
+    names start with ``_`` so they cannot clash with a handler name. Citry
+    checks them when the class is defined and raises ``ValueError`` for a
+    value it does not accept, or for a misspelled setting. When a component
+    leaves a setting out, Citry uses the value in
+    ``extensions_defaults["events"]``, then the default listed here. The
+    matching [`@event(...)`][citry.ext.events.event] option (``guard``,
+    ``csrf``, ``methods``, ``debounce``, ``throttle``) replaces the setting
+    for one handler.
+
+    Attributes:
+        _guard (Callable | None): A method (or function) that runs before
+            each handler and rejects the call by raising
+            [`EventError`][citry.ext.events.EventError]. Default: no guard.
+            [Guide](/security/#authorize-every-event).
+        _context (Callable | None): A method (or function) that runs before
+            the guard. Its return value becomes ``self.context`` in the guard
+            and the handlers. Default: none.
+            [Guide](/security/#authorize-every-event).
+        _csrf (Literal["auto", False] | Callable): An extra CSRF token check for this
+            component: a function that receives the request and raises
+            ``EventError`` to reject the call. ``"auto"`` (the default) and
+            ``False`` add no extra check. Citry's own checks, and Django's
+            CSRF middleware, apply either way.
+            [Guide](/security/#other-frameworks).
+        _methods (tuple[str, ...]): The HTTP methods each handler's own URL
+            accepts.
+            Default: ``("POST",)``. Each must be one of GET, HEAD, POST,
+            PUT, PATCH, DELETE, or OPTIONS.
+            [Guide](/events/routes/#expose-a-read-only-get-endpoint).
+        _debounce (int | None): Milliseconds the browser waits after the
+            last trigger before it sends one call. Default: none.
+            [Guide](/events/bindings/).
+        _throttle (int | None): The browser sends at most one call per
+            this many milliseconds. Default: none.
+            [Guide](/events/bindings/).
+        _render_inputs (Callable | None): Experimental. A function that
+            returns the ``.render()`` keyword arguments, such as
+            ``template_globals`` and ``provides``, for each component a
+            handler's ``Render`` renders. Default: none.
+            [Guide](/events/actions/#give-every-render-the-request-values).
     """
 
     Lint: ClassVar[type | None] = None
