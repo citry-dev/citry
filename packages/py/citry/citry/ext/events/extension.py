@@ -11,7 +11,6 @@ everything else reads. Design: ``docs/design/events.md`` section 3.
 from __future__ import annotations
 
 import functools
-import inspect
 from dataclasses import dataclass
 from difflib import get_close_matches
 from types import FunctionType
@@ -37,6 +36,7 @@ from citry.ext.events.handlers import (
     CONFIG_NAMES,
     ENGINE_CONFIG_NAMES,
     collect_event_handlers,
+    defers_its_body,
     event_options,
     is_def_like,
     resolve_data_schema,
@@ -120,7 +120,7 @@ def _validate_engine_config_value(name: str, value: Any) -> None:
         # fixed string would put one nonce on every page's fragments, so only
         # a function is accepted. The dispatcher calls it without awaiting,
         # so an async function would hand back a coroutine.
-        if not callable(value) or inspect.iscoroutinefunction(value):
+        if not callable(value) or defers_its_body(value):
             msg = (
                 "'_csp_nonce' must be a plain (not async) function that takes the call's EventRequest"
                 " and returns the CSP nonce of the page that sent it (None when that page has no"

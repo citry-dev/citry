@@ -606,6 +606,51 @@ class TestCsrfCheckThroughDispatch:
         assert error == {"status": 403, "code": "csrf_failed", "message": "Bad token."}
         assert seen["request"] is request
 
+    def test_an_async_policy_fails_at_class_definition(self):
+        # The check treats "the policy did not raise" as a pass, so an async
+        # policy, which only creates a coroutine, would pass every request.
+        async def policy(request):
+            raise EventError("Bad token.", status=403)
+
+        with pytest.raises(ValueError, match=r"@event\(csrf=\.\.\.\) must be a plain \(not async\) function"):
+            event(csrf=policy)
+
+        c = _citry(extensions_defaults={"events": {"_csrf": policy}})
+        with pytest.raises(ValueError, match=r"Events\._csrf must be a plain \(not async\) function"):
+
+            class Locked(Component):
+                citry = c
+                template = """
+                    <div>l</div>
+                """
+
+                class Events:
+                    def go(self):
+                        return None
+
+    def test_a_policy_that_returns_a_coroutine_answers_csrf_failed(self):
+        ran = []
+
+        async def check_token(request):
+            raise EventError("Bad token.", status=403)
+
+        c = _citry()
+
+        class Locked(Component):
+            citry = c
+            template = """
+                <div>l</div>
+            """
+
+            class Events:
+                @event(csrf=lambda request: check_token(request))
+                def go(self):
+                    ran.append("go")
+
+        result = self._dispatch_with(c, Locked, "go", _request(headers=[("X-Citry-Events", "1")]))
+        assert result["results"][0]["error"] == {"status": 403, "code": "csrf_failed", "message": CSRF_FAILED_MESSAGE}
+        assert ran == []
+
     def test_csrf_false_drops_only_the_token_layer(self):
         c = _citry()
 

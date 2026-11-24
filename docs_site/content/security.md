@@ -172,6 +172,12 @@ Use a guard for a rule every handler shares. Put a check that depends on
 the submitted data in the handler body, where the data has already been
 validated.
 
+Write guards and `_context` as plain `def` functions, not `async def`.
+Citry calls them without awaiting them, on WSGI and ASGI servers alike,
+so it refuses an async one with an error when the component class is
+defined. A check that needs `await` belongs at the start of an
+`async def` handler, which raises `EventError` the same way.
+
 Citry does not log users in. Your web framework does, and a handler reads
 the user from the `request` it receives, or from `request.native` for the
 framework's own request object.
@@ -475,7 +481,8 @@ FastAPI, Starlette, Flask, and plain ASGI or WSGI apps have no standard
 CSRF token. If your app uses one, check it with a function set as `_csrf`
 on `Events` for the whole component, or with `@event(csrf=...)` for one
 handler. The function receives the request and raises `EventError` to
-reject the call:
+reject the call. Like a guard, it must be a plain `def` function, and
+Citry refuses an `async def` one when the component class is defined:
 
 ```citry
 from citry.ext.events import EventError, event

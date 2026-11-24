@@ -27,7 +27,7 @@ import pytest
 
 from citry import Citry, Component, InMemoryCache
 from citry._protocol import events
-from citry.ext.events import actions, event
+from citry.ext.events import ViewEvents, actions, event
 from citry.ext.events import dispatcher as dispatcher_module
 from citry.ext.events import renderers as dispatcher_module_renderers
 from citry.ext.events.dispatcher import (
@@ -2503,6 +2503,188 @@ class TestPipelineOrder:
         assert item["error"]["fieldErrors"] == fields
 
 
+async def _async_deny(events, *_extra):
+    raise EventError("Denied.", status=403)
+
+
+async def _async_context(events):
+    return {"user": "ada"}
+
+
+class _AsyncCallable:
+    """An object whose call is ``async def``: ``inspect.iscoroutinefunction`` misses it."""
+
+    async def __call__(self, events):
+        raise EventError("Denied.", status=403)
+
+
+async def _async_gen_guard(events):
+    raise EventError("Denied.", status=403)
+    yield
+
+
+def _gen_guard(events):
+    raise EventError("Denied.", status=403)
+    yield
+
+
+class TestAsyncGuardsAreRefused:
+    """
+    Citry calls guards and ``_context`` without awaiting them.
+
+    An async guard would only create a coroutine, never raise, and so let
+    every call through; Citry refuses it when the class is defined, and
+    refuses a call whose guard or ``_context`` still returns one.
+    """
+
+    def _guarded(self, c, **events_attrs):
+        ran = []
+
+        def go(self):
+            ran.append("go")
+            return {"ok": True}
+
+        events_cls = type("Events", (), {**events_attrs, "go": go})
+        comp = type(
+            "Guarded",
+            (Component,),
+            {"citry": c, "Events": events_cls, "template": "\n<div>g</div>\n"},
+        )
+        return comp, ran
+
+    @pytest.mark.parametrize(
+        "guard",
+        [
+            _async_deny,
+            staticmethod(_async_deny),
+            functools.partial(_async_deny),
+            _AsyncCallable(),
+            _async_gen_guard,
+            _gen_guard,
+        ],
+        ids=["async-def", "staticmethod", "partial", "async-call-object", "async-generator", "generator"],
+    )
+    def test_a_guard_whose_code_would_not_run_fails_at_class_definition(self, guard):
+        with pytest.raises(ValueError, match=r"Events\._guard must be a plain \(not async\) function"):
+            self._guarded(_citry(), _guard=guard)
+
+    def test_an_async_guard_written_in_the_events_class_fails_at_class_definition(self):
+        c = _citry()
+        with pytest.raises(ValueError, match=r"Events\._guard must be a plain \(not async\) function"):
+
+            class Guarded(Component):
+                citry = c
+                template = """
+                    <div>g</div>
+                """
+
+                class Events:
+                    async def _guard(self):
+                        raise EventError("Denied.", status=403)
+
+                    def go(self):
+                        return None
+
+    def test_an_async_event_guard_fails_at_decoration(self):
+        with pytest.raises(ValueError, match=r"@event\(guard=\.\.\.\) must be a plain \(not async\) function"):
+            event(guard=_AsyncCallable())
+
+    @pytest.mark.parametrize("name", ["_guard", "_context"])
+    def test_an_async_engine_default_fails_at_class_definition(self, name):
+        c = _citry(extensions_defaults={"events": {name: _async_deny}})
+        with pytest.raises(ValueError, match=rf"Events\.{name} must be a plain \(not async\) function"):
+            self._guarded(c)
+
+    def test_an_async_context_fails_at_class_definition(self):
+        with pytest.raises(ValueError, match=r"Events\._context must be a plain \(not async\) function"):
+            self._guarded(_citry(), _context=_async_context)
+
+    def test_an_async_guard_on_view_events_fails_at_class_definition(self):
+        c = _citry()
+        with pytest.raises(ValueError, match=r"Events\._guard must be a plain \(not async\) function"):
+
+            class Page(Component):
+                citry = c
+                template = """
+                    <div>p</div>
+                """
+
+                class Events(ViewEvents):
+                    _guard = _async_deny
+
+                    def post(self):
+                        return None
+
+    def test_a_plain_wrapper_around_an_async_function_is_accepted(self):
+        # A sync wrapper such as asgiref's async_to_sync points __wrapped__
+        # at the async function it runs; it is still a plain function.
+        def run_async(func):
+            @functools.wraps(func)
+            def wrapper(events):
+                asyncio.run(func(events))
+
+            return wrapper
+
+        comp, ran = self._guarded(_citry(), _guard=run_async(_async_deny))
+        [item] = _dispatch(comp.citry, {"componentClassId": comp.class_id, "handlerName": "go"})["results"]
+        assert item["error"]["code"] == "forbidden"
+        assert ran == []
+
+    def test_a_guard_that_returns_a_coroutine_refuses_the_call(self, recwarn):
+        # A plain def that returns a coroutine passes the definition check;
+        # the call still must not reach the handler.
+        comp, ran = self._guarded(_citry(), _guard=lambda events: _async_deny(events))
+        [item] = _dispatch(comp.citry, {"componentClassId": comp.class_id, "handlerName": "go"})["results"]
+        assert item["error"]["code"] == "handler_error"
+        assert ran == []
+        # The unrun coroutine is closed, so Python has nothing to warn about.
+        assert not [w for w in recwarn if "never awaited" in str(w.message)]
+
+    def test_an_event_guard_that_returns_a_coroutine_refuses_the_call(self):
+        c = _citry()
+        ran = []
+
+        class Guarded(Component):
+            citry = c
+            template = """
+                <div>g</div>
+            """
+
+            class Events:
+                @event(guard=lambda events: _async_deny(events))
+                def go(self):
+                    ran.append("go")
+
+        [item] = _dispatch(c, {"componentClassId": Guarded.class_id, "handlerName": "go"})["results"]
+        assert item["error"]["code"] == "handler_error"
+        assert ran == []
+
+    def test_a_context_that_returns_a_coroutine_refuses_the_call(self):
+        comp, ran = self._guarded(_citry(), _context=lambda events: _async_context(events))
+        [item] = _dispatch(comp.citry, {"componentClassId": comp.class_id, "handlerName": "go"})["results"]
+        assert item["error"]["code"] == "handler_error"
+        assert ran == []
+
+    def test_a_plain_guard_still_runs(self):
+        def deny(events):
+            raise EventError("Denied.", status=403)
+
+        comp, ran = self._guarded(_citry(), _guard=deny)
+        [item] = _dispatch(comp.citry, {"componentClassId": comp.class_id, "handlerName": "go"})["results"]
+        assert item["error"]["code"] == "forbidden"
+        assert ran == []
+
+    def test_the_async_dispatch_path_refuses_too(self):
+        comp, ran = self._guarded(_citry(), _guard=lambda events: _async_deny(events))
+        result = asyncio.run(
+            EventsDispatcher().dispatch_async(
+                _envelope({"componentClassId": comp.class_id, "handlerName": "go"}), _ctx(comp.citry)
+            )
+        )
+        assert result["results"][0]["error"]["code"] == "handler_error"
+        assert ran == []
+
+
 class TestInjection:
     def test_request_and_event_injectables(self):
         c = _citry()
@@ -3567,6 +3749,10 @@ class TestPageCspNonce:
         with pytest.raises(ValueError, match="plain \\(not async\\) function"):
             _counter(_citry(extensions_defaults={"events": {"_csp_nonce": page_nonce}}))
 
+    def test_an_object_with_an_async_call_is_refused(self):
+        with pytest.raises(ValueError, match="plain \\(not async\\) function"):
+            _citry(extensions_defaults={"events": {"_csp_nonce": _AsyncCallable()}})
+
 
 _NOT_SET = object()
 
@@ -3821,6 +4007,10 @@ class TestRenderInputs:
 
         with pytest.raises(ValueError, match="plain \\(not async\\) function"):
             _citry(extensions_defaults={"events": {"_render_inputs": render_inputs}})
+
+    def test_an_object_with_an_async_call_is_refused(self):
+        with pytest.raises(ValueError, match="plain \\(not async\\) function"):
+            _citry(extensions_defaults={"events": {"_render_inputs": _AsyncCallable()}})
 
     def test_a_component_can_set_its_own_function(self):
         seen = []

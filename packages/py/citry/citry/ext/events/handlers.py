@@ -14,6 +14,7 @@ from __future__ import annotations
 import __future__
 
 import ast
+import functools
 import inspect
 import re
 import sys
@@ -229,18 +230,113 @@ def validate_bool_value(source: str, value: Any) -> bool:
 
 
 def validate_csrf_value(source: str, value: Any) -> str | bool | Callable[..., Any]:
-    """Check a ``csrf`` value: ``"auto"``, ``False``, or a callable."""
-    if value == "auto" or value is False or callable(value):
+    """Check a ``csrf`` value: ``"auto"``, ``False``, or a plain (not async) function."""
+    if value == "auto" or value is False:
+        return value
+    if callable(value):
+        # The CSRF check calls the function and treats "it did not raise" as
+        # a pass, so an async one would pass every request unchecked.
+        refuse_deferred_body(source, value, "that takes the request and raises EventError to refuse it")
         return value
     msg = f'{source} must be "auto", False, or a callable; got {value!r}.'
     raise ValueError(msg)
+
+
+# Calling one of these returns an object whose code has not run yet: a
+# coroutine (async def), an async generator, or a generator.
+_DEFERRED_BODY_CHECKS = (inspect.iscoroutinefunction, inspect.isasyncgenfunction, inspect.isgeneratorfunction)
+
+
+def defers_its_body(func: Any) -> bool:
+    """
+    Whether calling ``func`` returns a coroutine or generator instead of running its code.
+
+    Citry calls guards and the other Events functions without awaiting or
+    iterating what they return, so the code of such a function would never
+    run. ``inspect.iscoroutinefunction`` alone misses an object whose
+    ``__call__`` is ``async def`` and a ``staticmethod`` or ``classmethod``
+    wrapper, so this unwraps those first. It does not follow ``__wrapped__``:
+    a plain wrapper such as ``asgiref.sync.async_to_sync`` sets it to the
+    async function it runs, and that wrapper is a valid plain function.
+    """
+    # A chain of wrappers is short in practice; the bound only stops a
+    # pathological self-referencing ``__call__`` from looping.
+    for _ in range(32):
+        if any(check(func) for check in _DEFERRED_BODY_CHECKS):
+            return True
+        if isinstance(func, (staticmethod, classmethod)):
+            func = func.__func__
+        elif isinstance(func, (functools.partial, functools.partialmethod)):
+            func = func.func
+        elif inspect.ismethod(func):
+            func = func.__func__
+        elif callable(func) and not isinstance(func, type) and not inspect.isroutine(func):
+            # An instance of a class with ``__call__``: what runs is that method.
+            call = type(func).__call__
+            if call is func:
+                return False
+            func = call
+        else:
+            return False
+    return False
+
+
+def refuse_deferred_body(source: str, value: Any, purpose: str) -> None:
+    """
+    Raise ``ValueError`` when ``value`` is an async (or generator) function.
+
+    Args:
+        source: The setting's name, as the error message shows it.
+        value: The callable the app gave.
+        purpose: What the function takes and does, completing "must be a
+            plain (not async) function ...".
+
+    Raises:
+        ValueError: When calling ``value`` would not run its code.
+
+    """
+    if defers_its_body(value):
+        msg = (
+            f"{source} must be a plain (not async) function {purpose}. Citry calls it without"
+            " awaiting it, so the code of an async (or generator) function would never run;"
+            f" got {value!r}."
+        )
+        raise ValueError(msg)
+
+
+def refuse_deferred_result(source: str, result: Any) -> None:
+    """
+    Raise ``TypeError`` when a call returned a coroutine or generator.
+
+    The class-definition check cannot see every way to build such a
+    function (a plain ``def`` that returns ``some_async_function(...)``,
+    for one), so the result is checked on every call too. The unrun object
+    is closed first, so Python does not also warn that it was never awaited.
+
+    Raises:
+        TypeError: When ``result`` is awaitable, a generator, or an async
+            generator. The dispatcher answers the call with an error, so
+            the check fails closed.
+
+    """
+    if inspect.isawaitable(result) or inspect.isgenerator(result) or inspect.isasyncgen(result):
+        close = getattr(result, "close", None)
+        # An async generator's aclose() is itself a coroutine, and running it
+        # here would need an event loop; it is left for the garbage collector.
+        if callable(close) and not inspect.isasyncgen(result):
+            close()
+        msg = (
+            f"{source} returned {type(result).__name__!r} instead of running. It must be a plain"
+            " (not async) function: Citry calls it without awaiting it, so this call is refused."
+        )
+        raise TypeError(msg)
 
 
 def validate_render_inputs_value(source: str, value: Any) -> Callable[..., Any] | None:
     """Check a ``_render_inputs`` value: a plain (not async) function that takes one argument, or None."""
     # The dispatcher calls the function without awaiting it, so an async
     # function would hand back a coroutine instead of the inputs.
-    if value is not None and (not callable(value) or inspect.iscoroutinefunction(value)):
+    if value is not None and (not callable(value) or defers_its_body(value)):
         msg = (
             f"{source} must be a plain (not async) function that takes the call's EventRequest"
             " and returns a dict with the optional keys 'template_globals' and 'provides', or None;"
@@ -276,8 +372,14 @@ def _takes_one_argument(func: Callable[..., Any]) -> bool:
 
 
 def validate_callable_value(source: str, value: Any) -> Callable[..., Any] | None:
-    """Check a ``guard`` / ``context`` value: a callable (or None)."""
-    if value is None or callable(value):
+    """Check a ``guard`` / ``context`` value: a plain (not async) function, or None."""
+    if value is None:
+        return value
+    if callable(value):
+        # The dispatcher calls guards and _context without awaiting them. An
+        # async guard would only create a coroutine, never raise, and so let
+        # every call through; refusing it here fails at class definition.
+        refuse_deferred_body(source, value, "or None")
         return value
     msg = f"{source} must be a callable or None; got {value!r}."
     raise ValueError(msg)
@@ -342,9 +444,12 @@ def event(
         methods: The allowed HTTP methods for this handler, e.g. ``("GET",)``.
             Each must be one of GET, HEAD, POST, PUT, PATCH, DELETE, or
             OPTIONS, the methods the per-event route accepts.
-        guard: Per-handler authorization callable; replaces (does not stack
-            on) the component's ``_guard``.
-        csrf: Per-handler CSRF policy: ``"auto"``, ``False``, or a callable.
+        guard: Per-handler authorization function; replaces (does not stack
+            on) the component's ``_guard``. It must be a plain ``def``, not
+            ``async def``: Citry calls it without awaiting it.
+        csrf: Per-handler CSRF policy: ``"auto"``, ``False``, or a plain
+            (not async) function that raises ``EventError`` to refuse the
+            request.
         debounce: Client-side debounce, in milliseconds.
         throttle: Client-side throttle, in milliseconds.
         latest_wins: Opt this handler into newest-wins queueing on the
@@ -400,10 +505,10 @@ def event(
 
     Raises:
         ValueError: When a value has the wrong shape (e.g. a ``methods``
-            string instead of a tuple), or when ``methods`` names a method
-            the per-event route does not accept (anything other than GET,
-            HEAD, POST, PUT, PATCH, DELETE, and OPTIONS), at decoration
-            time.
+            string instead of a tuple, or an ``async def`` guard), or when
+            ``methods`` names a method the per-event route does not accept
+            (anything other than GET, HEAD, POST, PUT, PATCH, DELETE, and
+            OPTIONS), at decoration time.
 
     """
     if name is not None and (not isinstance(name, str) or not name):

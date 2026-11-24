@@ -1,5 +1,19 @@
 # Release notes
 
+## v1.2.1
+
+Citry 1.2.1 is a security release. It still requires citry-core 2.1.2.
+
+### Fixes
+
+- Security: an `async def` event guard, `_context` or `_csrf` function
+  is now refused with an error when the component class is defined.
+  Citry calls these without awaiting them, so the code of an async
+  guard never ran and every call got through. An app that has one now
+  fails at startup: rewrite the function as a plain `def`. A plain
+  `def` that returns a coroutine now fails the call. See
+  [GHSA-gj9m-wwqx-m37j](https://github.com/citry-dev/citry/security/advisories/GHSA-gj9m-wwqx-m37j).
+
 ## v1.2.0
 
 Citry 1.2.0 adds Experimental APIs for host integrations such as

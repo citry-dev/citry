@@ -70,7 +70,7 @@ from citry.ext.events._pydantic_bounded import TOO_SLOW_MESSAGE, ValidationTooCo
 from citry.ext.events.actions import Render, _download_content_disposition
 from citry.ext.events.csrf import _MSG_CSRF_FAILED, csrf_field_names
 from citry.ext.events.errors import EventError, limit_unexpected_fields, unlisted_fields_note, wire_error
-from citry.ext.events.handlers import event_options
+from citry.ext.events.handlers import event_options, refuse_deferred_result
 from citry.ext.events.results import (
     HTML_RENDER_ENCODER,
     RenderEncoder,
@@ -1168,8 +1168,16 @@ class EventsDispatcher:
                 # it, so it runs first (design 3.6).
                 if info.context is not None:
                     events.context = info.context(events)
+                    # Definition time refuses an async _context; this catches
+                    # the rest (a plain def returning a coroutine), so a
+                    # handler never receives an unrun coroutine as context.
+                    refuse_deferred_result(f"{comp_cls.__name__}: Events._context", events.context)
                 if handler.guard is not None:
-                    handler.guard(events)
+                    # A guard refuses by raising, so a coroutine it returned
+                    # unrun would pass the call; refusing it fails closed.
+                    refuse_deferred_result(
+                        f"The guard of event {handler.name!r} on {comp_cls.__name__}", handler.guard(events)
+                    )
         except EventError as err:
             return build_error_result(wire_error(err), send_sequence)
         except Exception as err:  # noqa: BLE001 - a crash before the handler still answers 500
