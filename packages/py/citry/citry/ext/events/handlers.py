@@ -343,13 +343,16 @@ def refuse_deferred_result(source: str, result: Any, *, coroutine_only: bool = F
 
     """
     if coroutine_only:
-        # A compiled coroutine (Cython, mypyc) is registered only as a
-        # ``collections.abc.Coroutine``, so ``inspect.iscoroutine`` misses it.
+        # A compiled coroutine (Cython, mypyc) is a ``collections.abc.Coroutine``
+        # but not a native coroutine, so ``inspect.iscoroutine`` misses it.
         deferred = isinstance(result, Coroutine)
     else:
         deferred = inspect.isawaitable(result) or inspect.isgenerator(result) or inspect.isasyncgen(result)
     if not deferred:
         return
+    # _context may return other awaitables and generators, so its message
+    # names only what it refuses.
+    refused = "coroutine" if coroutine_only else "coroutine, awaitable or generator"
     # Closing an unstarted coroutine or generator stops Python warning that
     # it was never awaited. One the app already started may still be in use
     # elsewhere, and some other awaitable may be a resource the app owns, so
@@ -357,8 +360,8 @@ def refuse_deferred_result(source: str, result: Any, *, coroutine_only: bool = F
     if _not_started(result):
         result.close()
     msg = (
-        f"{source} returned a {type(result).__name__!r} object. It must be a plain (not async) function:"
-        " Citry calls it without awaiting or iterating what it returns, so this call is refused."
+        f"{source} returned a {type(result).__name__!r} object. Write it as a plain def that returns no"
+        f" {refused}: Citry does not await or iterate what it returns, so this call is refused."
     )
     raise TypeError(msg)
 

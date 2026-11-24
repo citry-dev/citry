@@ -11,8 +11,8 @@
   `_csrf` function skipped your own token check. An app that has one
   now fails at startup: rewrite the function as a plain `def`. A plain
   `def` guard or `_csrf` function that returns a coroutine, another
-  awaitable or a generator now fails the call, and so does a `_context`
-  that returns a coroutine. See
+  awaitable, a generator or an async generator now fails the call, and
+  so does a `_context` that returns a coroutine. See
   [GHSA-gj9m-wwqx-m37j](https://github.com/citry-dev/citry/security/advisories/GHSA-gj9m-wwqx-m37j).
 
 ## v1.2.0
