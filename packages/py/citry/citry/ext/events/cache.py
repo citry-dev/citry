@@ -80,7 +80,6 @@ def stage_events_cache(
 
     entries: dict[EventInstanceEntry, None] = {}
     writes: list[RenderCacheWrite] = []
-    markers: list[tuple[int, tuple[str, ...]]] = []
     seen: set[int] = set()
     for record_index, raw in enumerate(ctx.payload["instances"]):
         path = f"events.instances[{record_index}]"
@@ -194,15 +193,16 @@ def stage_events_cache(
             state_token=token or None,
             public_state_json=json.dumps(public_values, sort_keys=True),
         )
+        # Events records this occurrence only as a manifest entry that names
+        # its new render ID, as a live render does, so both renders give the
+        # same HTML.
         entries[entry] = None
-        markers.append((instance, (f'data-cid="{ctx.instance_ids[instance]}"',)))
 
     if seen != set(expected):
         raise CacheArtifactError("Events render-cache payload has incomplete instance coverage.")
     return StagedRenderCacheContribution(
         extra_items=((EXTRA_KEY, entries),) if entries else (),
         cache_writes=tuple(writes),
-        frame_markers=tuple(markers),
     )
 
 

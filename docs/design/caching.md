@@ -1068,7 +1068,11 @@ exactly.
 The ownership payload restores active instances, invocations, fills, regions,
 and init relations under fresh IDs. The client manifest generated from a replay
 must be indistinguishable from one produced by a fresh render except that the
-cached components' render lifecycle did not run. Page serialization and
+cached components' render lifecycle did not run. The same holds for the HTML:
+the browser finds an Events instance by the render ID in its manifest entry,
+so Events adds nothing to the component's root element. Given the same render
+IDs, a replay writes the same HTML and manifest as a fresh render, apart from
+the State tokens it creates. Page serialization and
 dependency discovery can still execute the hooks called out in section 5.4.
 
 No public cache feature ships for interactive subtrees until this path is

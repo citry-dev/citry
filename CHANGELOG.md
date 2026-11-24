@@ -62,6 +62,13 @@
 
     See [`Dispatch` browser events](https://citry.dev/events/actions/#notify-browser-code-that-something-happened).
 
+### Fixes
+
+- A component with Events that comes from the render cache now writes
+  the same HTML as when it renders without the cache. Earlier releases
+  gave its root element an extra `data-cid` attribute, so the browser
+  could load a second compiled template for the same component.
+
 ## v1.2.0
 
 Citry 1.2.0 adds Experimental APIs for host integrations such as
