@@ -911,9 +911,10 @@ class Component(metaclass=ComponentMeta):
             after Citry issues it. Default: 24 hours, which ``None`` also
             means. At least one second. A call made once the token is past
             half its lifetime gets a new token with a full lifetime, so a
-            component that gets a call at least once every half lifetime
-            keeps working. A call with an expired token fails with
-            ``stale_state``. [Guide](/events/state/#max-age).
+            component whose page keeps making calls keeps working; the
+            guide lists the calls that do not renew. A call with an expired
+            token fails with ``stale_state``.
+            [Guide](/events/state/#max-age).
     """
 
     Events: ClassVar[type | None] = None

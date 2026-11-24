@@ -66,23 +66,28 @@ cache entry expires or the cache drops it.
 
 A token expires 24 hours after Citry issues it, with either storage.
 Citry issues a new token each time it renders the component, after each
-call that changes State, and after a call made once the token is more
-than 12 hours old (half its lifetime). So a component that gets a call
-at least every 12 hours keeps working. A component that gets no call
-during the last 12 hours of its token's life expires, and so does a
-component whose calls all go to `detached` handlers, which never get a
-new token. Each component on the page has its own token, renewed only by
-its own calls.
+call that changes State, and after a call made once the token is past
+half its lifetime (12 hours by default). So a component that gets a call
+at least once every half lifetime keeps working. A component that gets no
+call in the second half of its token's life expires.
 
-The expiry limits how long a copied token stays useful only while nobody
-uses it. Anyone who sends calls with a copy at least every 12 hours keeps
-getting new tokens, as the page does, even when it calls only handlers
-that read State. Handlers use POST by default, which keeps the token out
-of the URL. A handler that opts into GET with `@event(methods=("GET",))`
-or `Events._methods`, and declares `state`, receives the token in its
-URL, where it can end up in server and proxy logs. Whoever can read those
-logs can keep that token alive the same way. A token grants no
-permission, so check permissions in every handler.
+Each component on the page has its own token, renewed only by its own
+calls. A component whose calls all go to
+[`detached`](/events/actions/#skip-the-queue-for-a-read-only-call)
+handlers, which are read-only handlers that skip the call queue, expires
+on schedule, because those calls never get a new token.
+
+A copied token stays useful until it expires, and longer if someone keeps
+calling with it. Anyone who sends calls with a copy at least once per
+half lifetime keeps getting new tokens, as the page does, even when it
+calls only handlers that read State.
+
+Handlers use POST by default, which keeps the token out of the URL. A
+handler that opts into GET with `@event(methods=("GET",))` or
+`Events._methods`, and declares `state`, receives the token in its URL,
+where it can end up in server and proxy logs. Whoever can read those logs
+can keep that token alive the same way. A token grants no permission, so
+check permissions in every handler.
 
 A call with an expired token does not run its handler: it gets a
 `stale_state` error, and calls from that component keep failing until

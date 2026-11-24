@@ -69,9 +69,9 @@ write to the store, even if nothing reads it again.
 
 Events State kept on the server
 ([`State._storage = "server"`](/events/state/#storage)) adds one
-entry for every render, every State change, and every call made once
-the current token is past half its lifetime. Each lasts 24 hours unless
-[`State._max_age`](/events/state/#max-age) sets another lifetime.
+entry for every render, every State change, and every call that renews
+the token (see [`State._max_age`](/events/state/#max-age)). Each lasts 24
+hours unless `State._max_age` sets another lifetime.
 `InMemoryCache` keeps these entries apart from everything else, under a
 budget of 64 MiB by default:
 
