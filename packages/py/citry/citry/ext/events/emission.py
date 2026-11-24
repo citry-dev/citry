@@ -71,11 +71,10 @@ def capture_instance(extension: EventsExtension, ctx: OnComponentDataContext) ->
         public_state_json=json.dumps(values, sort_keys=True, allow_nan=False),
     )
     entries: dict[EventInstanceEntry, None] = ctx.context.extra.setdefault(EXTRA_KEY, {})
+    # The browser finds the component through the manifest entry built from
+    # this one, so Events adds nothing to the root element. Render cache
+    # replay builds its entry the same way (see `cache.py`).
     entries[entry] = None
-    from citry._vue.capture import direct_prepared_render_active  # noqa: PLC0415
-
-    if not direct_prepared_render_active():
-        ctx.context._add_root_markers([f'data-cid="{ctx.component.id}"'])
 
 
 def _write_plain_values(state: Any) -> None:

@@ -61,6 +61,10 @@
 
 ### Fixes
 
+- A component with Events that comes from the render cache now writes
+  the same HTML as when it renders without the cache. Earlier releases
+  gave its root element an extra `data-cid` attribute, so the browser
+  could load a second compiled template for the same component.
 - On free-threaded Python with the GIL off, the request data from an
   Events check that failed, and the result of one that passed, are now
   freed about a second after your code lets go of them, not up to 60
