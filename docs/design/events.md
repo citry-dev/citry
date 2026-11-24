@@ -1443,12 +1443,16 @@ citry = Citry(
 - Call order per dispatch: verify token, run `_context` (may touch the
   DB), run guards (which read `self.context`), validate args against the
   handler's `data` class, run the handler. Guards run before the args
-  check so that a caller they refuse gets their 403, not a 422 that
-  describes its input, and so that the server does not check a large
+  check so that a caller they refuse gets their error, not a 422 that
+  describes its args, and so that the server does not check a large
   payload for a call it then refuses. Guards therefore read the args
-  unchecked, through `self.event.args`, as they would anyway: one guard
-  covers handlers with different `data` classes. `_context` never
-  receives the checked data either.
+  before they are checked, through `self.event.args`, and must expect a
+  missing key or a value of any type: one guard covers handlers with
+  different `data` classes. The guards get a copy of the args, so
+  a guard cannot change what the `data` class checks. `_context` never
+  receives the checked data either. A State write the server refuses
+  (7.2) still answers 422 before the guards run, because State is
+  rebuilt and written before them.
 - Guards see State after the browser's `stateUpdates` writes to `_model`
   fields (7.2), the same State the handler gets. A guard must never base
   its decision on a field the browser can write; the docs tell authors
@@ -1505,7 +1509,7 @@ request-derived context, which is `_context`.
   - `on_event` fires before the handler (after token verification,
   before `_context`, guards, and arg validation; `result="first"`, so
   a policy extension can veto or answer, and it is where rate limiting plugs in;
-  an answer replaces the handler, so Citry then skips the arg validation),
+  Citry uses an answer in the handler's place and then skips the arg validation),
   - `on_event_result` fires after the handler (`result="map"` over the
   encoded actions list),
   - `on_event_error` fires on an uncaught
@@ -5075,8 +5079,9 @@ Rules, each closing a named prior-art hole:
 On each call the order is: verify token (cheapest rejection first), check
 the class id against the route, rebuild `cls.State(**s)`, apply `stateUpdates`
 to `_model` fields (7.2), refuse the call with 422 when those writes grow
-server-stored State past `_max_bytes`, run `_context`, run guards, validate args, run the
-handler (3.6 says why guards come before the args check). After the handler, a mutated State is re-signed and returned
+server-stored State past `_max_bytes`, run `_context`, run guards,
+validate args, run the handler (3.6 says why guards come before the args
+check). After the handler, a mutated State is re-signed and returned
 (inside the fragment manifest when a render action exists, as a `state`
 action otherwise, each carrying the public State values beside the
 token), so the client's stored token and its `$state` values always

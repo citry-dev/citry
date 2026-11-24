@@ -168,10 +168,6 @@ class DocumentEditor(Component):
     class State:
         document_id: int
 
-        # The guard trusts this field, so the browser
-        # must not be able to change it.
-        _model = ()
-
     class Events:
         def _context(self):
             return build_event_context(self.request)
@@ -192,20 +188,23 @@ Use a guard for a rule every handler shares. Put a check that depends on
 the submitted data in the handler body, where the data has already been
 validated.
 
-A guard runs before Citry checks the call's data against the handler's
-`data` class, so a caller the guard refuses gets the guard's error, not a
-report about its data. Two things follow for the values a guard reads:
+A guard runs before Citry checks the call's args against the handler's
+`data` class (`SaveIn` above). A caller the guard refuses gets the
+guard's error, not a 422 error that lists what is wrong with its args.
+Two things to know about what a guard reads:
 
-- `self.event.args` holds the data as the caller sent it. A key may be
-  missing or hold a value of another type, such as text where the handler
-  expects a number, so read it with `.get()` and check its type before
-  you use it.
-- `self.state` already holds the browser's writes to the fields in
+- `self.state` holds the browser's writes to the fields in
   [`State._model`](/events/state/#model), which by default is every
-  public field. A guard that reads such a field checks a value the caller
-  chose. Never base a guard's decision on a field the browser can write:
-  leave the fields the guard relies on out of `_model`, as the example
-  does with `_model = ()`.
+  public field. A guard that decides on such a field trusts a value the
+  caller chose. For example, a guard that lets a call through when
+  `self.state.role == "admin"` lets in anyone who writes `"admin"` to
+  `role`. Leave the fields a guard decides on out of `_model`.
+- [`self.event.args`][citry.ext.events.CallEvent] holds the call's args
+  before Citry has checked them. A key can be missing, have another
+  type, such as text where the handler expects a number, or be longer
+  than the `data` class allows. Read it with `.get()` and check the type
+  before you use it. A guard that raises anything other than
+  `EventError` answers with a 500 error.
 
 Citry does not log users in. Your web framework does, and a handler reads
 the user from the `request` it receives, or from `request.native` for the

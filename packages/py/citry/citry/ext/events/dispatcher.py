@@ -289,9 +289,11 @@ class CallEvent:
             names removed (the ``_csrf_field_names`` key of
             ``extensions_defaults["events"]``).
             Guards read this when they need payload values, because one guard
-            covers handlers with different schemas. Guards run before
+            covers handlers with different schemas. A guard runs before
             Citry checks the args against the handler's ``data`` class, so
-            a key may be missing or hold a value of any JSON type.
+            a key may be missing, have another type, or be longer or more
+            deeply nested than the class allows. Read it with ``.get()``,
+            check the type, and keep the guard's work on it small.
 
     """
 
@@ -316,7 +318,9 @@ class OnEventContext:
     returns a non-``None`` value answers the call in the handler's place
     (the value is coerced exactly like a handler return value), and raising
     [`EventError`][citry.ext.events.EventError] denies the call.
-    This is where rate limiting plugs in.
+    This is where rate limiting plugs in. ``events.event.args`` is not
+    checked against the handler's ``data`` class yet, and when an extension
+    answers the call, Citry skips that check.
 
     Attributes:
         citry: The engine the call dispatches against.
@@ -1199,7 +1203,12 @@ class EventsDispatcher:
         events_cls = getattr(comp_cls, "Events")  # noqa: B009 - the woven config class, always present
         events = events_cls(None)
         event_request = request if request is not None else EventRequest(headers=ctx.headers, native=ctx.host_request)
-        call_event = CallEvent(name=event_name, instance_id=instance_id, transport=ctx.transport, args=args)
+        # The guards run before the data check and receive their own copy of
+        # the args, so a guard that changes `self.event.args` cannot change
+        # what the data class checks. The copy keeps the args' class.
+        call_event = CallEvent(
+            name=event_name, instance_id=instance_id, transport=ctx.transport, args=type(args)(args)
+        )
         events.state = state
         events.context = None
         events.request = event_request
@@ -1230,9 +1239,10 @@ class EventsDispatcher:
             )
 
         # Args validation against the handler's data schema (design 3.3, WP9).
-        # It runs after the guards, so a caller they refuse gets their 403
+        # It runs after the guards, so a caller they refuse gets their error
         # and the server does not check a large payload it will not use. An
-        # on_event answer replaces the handler, which then needs no data.
+        # on_event answer is used in the handler's place, and only the
+        # handler reads the checked data, so the check is skipped then.
         data_value: Any = None
         if answered is _NOT_ANSWERED:
             validation = None

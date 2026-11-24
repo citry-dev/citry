@@ -257,7 +257,8 @@ class State:
 - **Default:** the `_public` fields, so with neither setting the
   browser can read and change every field.
 - **Accepts:** a tuple or list of field names, each also in `_public`.
-  `None` means the default.
+  An empty tuple means the browser can change no field, and `None`
+  means the default.
 - **Invalid value:** a value `_public` rejects, or a field that is not
   in `_public`, raises `ValueError`.
 - **At call time:** a browser write to a field outside `_model` fails
@@ -269,9 +270,10 @@ the copy, and assign it back.
 
 A field the browser can change may arrive with any value, so validate it
 in the handler like any other user input. See
-[Security](/security/#treat-state-as-client-input). Guards see the
-browser's writes too, so leave a field that a guard relies on out of
-`_model` (see [Authorize every event](/security/#authorize-every-event)).
+[Security](/security/#treat-state-as-client-input). A guard, the check
+that runs before every handler, sees the same written values, so leave a
+field that a guard decides on out of `_model` (see
+[Authorize every event](/security/#authorize-every-event)).
 
 ### Choose State storage { #storage }
 

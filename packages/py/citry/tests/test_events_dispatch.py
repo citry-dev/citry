@@ -4506,3 +4506,105 @@ class TestGuardsBeforeDataCheck:
         assert refused["error"]["code"] == "forbidden"
         assert invalid["error"]["code"] == "invalid_args"
         assert runs == ["guard", "guard"]
+
+    def test_a_guard_that_changes_the_args_does_not_change_the_checked_data(self):
+        c = _citry()
+        runs: list[str] = []
+
+        class OnlyIn:
+            n: int
+
+        class Fixer(Component):
+            citry = c
+            template = "<div>f</div>"
+
+            class Events:
+                def _guard(self):
+                    # The guard gets its own copy of the args.
+                    self.event.args["n"] = 5
+
+                def go(self, data: OnlyIn):
+                    runs.append("handler")
+
+        [item] = _dispatch(c, {"componentClassId": Fixer.class_id, "handlerName": "go", "args": {"n": "x"}})["results"]
+        assert item["error"]["code"] == "invalid_args"
+        assert runs == []
+
+    def test_a_guard_that_crashes_on_invalid_args_answers_500(self):
+        c = _citry()
+
+        class OnlyIn:
+            n: int
+
+        class Strict(Component):
+            citry = c
+            template = "<div>s</div>"
+
+            class Events:
+                def _guard(self):
+                    # Indexing assumes valid data, which a guard cannot.
+                    if self.event.args["n"] > 10:
+                        raise EventError("Too many.", status=403)
+
+                def go(self, data: OnlyIn):
+                    return None
+
+        [item] = _dispatch(c, {"componentClassId": Strict.class_id, "handlerName": "go", "args": {}})["results"]
+        assert item["error"]["status"] == 500
+        assert item["error"]["code"] == "handler_error"
+
+
+class TestGuardsSeeStateWrites:
+    """
+    Guards see State after the browser's `_model` writes (design 3.6).
+
+    Only the args check moved after the guards: a State write the server
+    refuses still answers 422 before any guard runs.
+    """
+
+    def _panel(self, c, seen):
+        class PanelState:
+            role: str = "viewer"
+
+        class Panel(Component):
+            citry = c
+            State = PanelState
+            template = "<div>p</div>"
+
+            class Events:
+                def _guard(self):
+                    seen.append(self.state.role)
+                    raise EventError("Not allowed.", status=403)
+
+                def go(self, state):
+                    return None
+
+        return Panel
+
+    def test_the_guard_sees_the_written_value(self):
+        c = _citry()
+        seen: list[str] = []
+        panel = self._panel(c, seen)
+        call = {
+            "componentClassId": panel.class_id,
+            "handlerName": "go",
+            "stateToken": _token(panel),
+            "stateUpdates": {"role": "admin"},
+        }
+        [item] = _dispatch(c, call)["results"]
+        assert item["error"]["code"] == "forbidden"
+        assert seen == ["admin"]
+
+    def test_a_refused_state_write_answers_422_before_the_guard(self):
+        c = _citry()
+        seen: list[str] = []
+        panel = self._panel(c, seen)
+        call = {
+            "componentClassId": panel.class_id,
+            "handlerName": "go",
+            "stateToken": _token(panel),
+            "stateUpdates": {"role": 5},
+        }
+        [item] = _dispatch(c, call)["results"]
+        assert item["error"]["code"] == "invalid_args"
+        assert seen == []
