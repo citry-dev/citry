@@ -11,7 +11,6 @@ everything else reads. Design: ``docs/design/events.md`` section 3.
 from __future__ import annotations
 
 import functools
-import inspect
 from dataclasses import dataclass
 from difflib import get_close_matches
 from types import FunctionType
@@ -36,9 +35,12 @@ from citry.ext.events.emission import capture_instance, merge_instance_entries
 from citry.ext.events.handlers import (
     CONFIG_NAMES,
     ENGINE_CONFIG_NAMES,
+    GUARD_PURPOSE,
     collect_event_handlers,
+    defers_its_body,
     event_options,
     is_def_like,
+    refuse_hidden_event_settings,
     resolve_data_schema,
     user_level_classes,
     validate_callable_value,
@@ -60,7 +62,7 @@ from citry.ext.events.state import (
     resolve_state_meta,
     validate_state_class,
 )
-from citry.ext.events.view_events import view_events_routes
+from citry.ext.events.view_events import verb_handler_methods, view_events_routes
 from citry.extension import Extension
 from citry.library_component import LibraryComponent
 
@@ -120,7 +122,7 @@ def _validate_engine_config_value(name: str, value: Any) -> None:
         # fixed string would put one nonce on every page's fragments, so only
         # a function is accepted. The dispatcher calls it without awaiting,
         # so an async function would hand back a coroutine.
-        if not callable(value) or inspect.iscoroutinefunction(value):
+        if not callable(value) or defers_its_body(value):
             msg = (
                 "'_csp_nonce' must be a plain (not async) function that takes the call's EventRequest"
                 " and returns the CSP nonce of the page that sent it (None when that page has no"
@@ -174,13 +176,28 @@ class EventHandler:
         data_schema: The resolved ``data`` schema class, or ``None`` for a
             handler that declares no ``data``.
         methods: The allowed HTTP methods, uppercase.
-        guard: The authorization callable guarding this handler, or ``None``.
+        component_guard: The component-level guard that runs first: the
+            component's ``_guard``, or the engine default when the component
+            sets none. ``None`` when nothing configures one, or when the
+            handler opted out with ``@event(component_guard=False)``.
+        guard: The handler's own ``@event(guard=...)``, which runs after
+            ``component_guard``; ``None`` when the handler sets none.
         csrf: The CSRF policy: ``"auto"``, ``False``, or a callable.
         debounce: Client-side debounce in milliseconds, or ``None``.
         throttle: Client-side throttle in milliseconds, or ``None``.
         return_type_display: Safe copied return annotation text, or ``None``.
         return_type_fidelity: Whether ``return_type_display`` is normalized.
         description: The handler's cleaned docstring, or ``None``.
+        latest_wins: Whether ``@event(latest_wins=True)`` opted the handler
+            into newest-wins queueing.
+        bundle: ``False`` when ``@event(bundle=False)`` keeps the handler's
+            calls out of batched requests.
+        detached: Whether the handler was declared ``@event(detached=True)``.
+
+    Every ``@event`` setting is copied here when the class is created, and
+    nothing reads the function's settings after that, so decorating or
+    changing the function later cannot change how this class's handler
+    behaves.
 
     """
 
@@ -190,6 +207,7 @@ class EventHandler:
     params: tuple[str, ...]
     data_schema: type | None
     methods: tuple[str, ...]
+    component_guard: Callable[..., Any] | None
     guard: Callable[..., Any] | None
     csrf: str | bool | Callable[..., Any]
     debounce: int | None
@@ -197,6 +215,11 @@ class EventHandler:
     return_type_display: str | None
     return_type_fidelity: Literal["normalized", "unavailable"]
     description: str | None
+    # The defaults match an undecorated handler, so code that builds an
+    # EventHandler without these keeps its old meaning.
+    latest_wins: bool = False
+    bundle: bool = True
+    detached: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -728,6 +751,7 @@ class EventsExtension(Extension):
         guard = validate_callable_value(
             f"Component {comp_name}: Events._guard",
             self._resolve_config_value(raw_events, "_guard", defaults),
+            GUARD_PURPOSE,
         )
         context = validate_callable_value(
             f"Component {comp_name}: Events._context",
@@ -781,6 +805,10 @@ class EventsExtension(Extension):
                     nested = () if bounded.SUPPORTED else nested_pydantic_classes(data_schema)
                     bounded.check_supported(comp_name, data_schema, "event data class", nested)
                     bounded.check_data_class(comp_name, data_schema)
+                # A decorator that kept __wrapped__ but not the function's
+                # attributes hides an inner @event's settings; refuse it so
+                # an inner guard= is never dropped without an error.
+                refuse_hidden_event_settings(comp_name, method_name, func)
                 options = event_options(func)
                 wire_name = options.name if options is not None and options.name is not None else method_name
                 if wire_name in handlers:
@@ -792,20 +820,40 @@ class EventsExtension(Extension):
                     )
                     raise ValueError(msg)
                 return_type_display, return_type_fidelity, description = capture_handler_introspection(func)
+                # Guards add up: the component-level
+                # guard (its own _guard, else the engine default) runs for
+                # every handler, and a per-handler guard is an extra check on
+                # top. Only an explicit component_guard=False drops it, so a
+                # handler is never more open than its component by accident.
+                skips_component_guard = options is not None and options.component_guard is False
+                # An explicit @event(methods=...) wins; a ViewEvents verb
+                # accepts its own method; any other handler takes the
+                # component's _methods.
+                if options is not None and options.methods is not None:
+                    handler_methods = options.methods
+                else:
+                    handler_methods = verb_handler_methods(raw_events, method_name, func) or methods
                 handlers[wire_name] = EventHandler(
                     name=wire_name,
                     method_name=method_name,
                     func=func,
                     params=params,
                     data_schema=data_schema,
-                    methods=options.methods if options is not None and options.methods is not None else methods,
-                    guard=options.guard if options is not None and options.guard is not None else guard,
+                    methods=handler_methods,
+                    component_guard=None if skips_component_guard else guard,
+                    guard=options.guard if options is not None else None,
                     csrf=options.csrf if options is not None and options.csrf is not None else csrf,
                     debounce=options.debounce if options is not None and options.debounce is not None else debounce,
                     throttle=options.throttle if options is not None and options.throttle is not None else throttle,
                     return_type_display=return_type_display,
                     return_type_fidelity=return_type_fidelity,
                     description=description,
+                    # Copied now, like every setting above, so a later
+                    # decoration or edit of the shared function cannot
+                    # change this class's handler at call or render time.
+                    latest_wins=options is not None and options.latest_wins,
+                    bundle=options is None or options.bundle,
+                    detached=options is not None and options.detached,
                 )
 
         return EventsInfo(

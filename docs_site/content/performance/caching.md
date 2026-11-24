@@ -173,8 +173,9 @@ you change it. Reusing an entry does not restart its expiry time.
 
 An entry that holds a component with Events State also holds its State
 token, which expires 24 hours after Citry issued it unless the State's
-`_max_age` sets another lifetime. Once the token expires, Citry renders
-the component again instead of reusing the entry. To reuse an entry for
+[`_max_age`](/events/state/#max-age) sets another lifetime. Once the
+token expires, Citry renders the component again instead of reusing the
+entry. To reuse an entry for
 its whole `ttl`, set `_max_age` at least as long as the `ttl`.
 
 ## Protect private output

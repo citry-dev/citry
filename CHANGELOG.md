@@ -2,11 +2,143 @@
 
 ## v1.3.0
 
-Citry 1.3.0 includes a security fix for servers that run on PyPy. It
-still requires citry-core 2.1.2.
+Citry 1.3.0 is a security release. It fixes three problems in
+Events: an `async def` guard never ran, a handler's own guard turned
+off the component's guard, and deeply nested event data could end the
+server process on PyPy. The PyPy fix changes nothing on CPython; Citry
+applies it on every Python implementation other than CPython, such as
+GraalPy, since only CPython has been measured to be safe without it.
+Citry 1.3.0 still requires citry-core 2.1.2.
+
+### Added
+
+- A page that is in use no longer gets `stale_state` (the "page is out
+  of date" error) when its State token gets old. A call made once the
+  token is past half its lifetime (12 hours by default, or half your
+  `State._max_age`) now gets a new token, even when the call does not
+  change State. A component that gets no call in the second half of
+  its token's lifetime still expires. A renewal sends the public State
+  again, so a watcher on an object or list field of `$state` runs. With
+  server-stored State, each new token adds one cache entry. See
+  [Treat State as input](https://citry.dev/security/#treat-state-as-client-input).
+- You can now check that a redirect URL from the request stays on your
+  site with `local_url_or()` and `is_local_url()` from
+  `citry.ext.events`, for example
+  `actions.Redirect(local_url_or(data.next, "/"))`. They read the URL
+  the way a browser does, so `//other.example` and `/\other.example`
+  get the fallback. Pass `allowed_hosts` to also accept a full URL on
+  your site. See
+  [Check redirect URLs](https://citry.dev/security/#check-redirect-urls).
+- `RouteRequest` has a new `scheme` field: `"http"` or `"https"`, as
+  your server reports it. The ASGI, WSGI and Django adapters fill it in.
+  If you build a `RouteRequest` yourself, set it, because Events skip
+  the https `Origin` check when it is empty.
+- `citry check` now knows the `switch` attribute of `<input>`. It
+  reports `switch="false"`, which still turns the switch on
+  (`rule_invalid_attribute_value`), and suggests `switch` for a typo
+  such as `swich` (`rule_misspelled_attribute`). Both rules are errors
+  by default, so a template with either now fails `citry check`.
+
+### Changed
+
+- Events now refuse a call with status 403 and `csrf_failed` when your
+  server says it arrived over https and it carries an `Origin` header
+  that is not https. This stops a plain-http page on the same host from
+  calling your app. 1.2.x accepted these calls. Citry already refused
+  them from browsers that send `Sec-Fetch-Site`, so browser traffic on
+  a correctly configured site should not change. Behind a proxy that
+  serves your site over https and passes plain http to your app,
+  nothing changes. If your site is served to
+  browsers over plain http while your server says https, every call
+  that is not a `GET` now fails; see
+  [Fix an http Origin](https://citry.dev/advanced/web-frameworks/#fix-an-http-origin).
+- Citry's browser code now sends a GET event call's State token in the
+  `X-Citry-State-Token` header instead of the URL, so server and proxy
+  access logs do not record it by default. The server still reads the
+  `_citry_state_token` query parameter, so clients that send it there
+  keep working. If a server from an earlier release answers
+  `invalid_state`, as during a deploy or after a rollback, the browser
+  sends the call once more with the token in the URL; a custom
+  transport's `send` then runs twice for that call. If your event URL is
+  on another origin and your CORS setup lists the allowed request
+  headers, add `X-Citry-State-Token`. When a GET call sends the header
+  and the handler sets its own `Cache-Control`, Citry makes the policy
+  `private` and drops `public`, `s-maxage`, and CDN-only headers such as
+  `CDN-Cache-Control`, so a CDN that ignores `Vary` cannot give one
+  visitor's answer to another. See
+  [Allow GET requests](https://citry.dev/events/routes/#expose-a-read-only-get-endpoint).
+- Security: a GET event call whose header and query parameter carry
+  different State tokens is now refused with a `400` error, so a URL
+  cannot choose a token other than the one the browser sent.
+- Security: `actions.Dispatch` now raises `ValueError` for the name of
+  a standard DOM event, such as `click`, `submit`, `input`, `change`,
+  `keydown` or `focus`, because the event would run the page's own
+  listeners for it, including `@c-*` bindings that call the server.
+  This includes common words that are also browser events, such as
+  `close`, `toggle`, `error`, `load`, `message`, `select` and
+  `progress`. It also refuses names that start with `vue:`, `vnode-` or
+  `citry:`. Letter case is ignored in every check, so `Citry:ready` is
+  now refused too. Citry's browser code refuses the same names,
+  so `Citry.events.applyActions` rejects them too. If you dispatch such
+  a name, prefix it with your component's name and listen for the new
+  name:
+
+    ```python
+    actions.Dispatch("click")          # now raises ValueError
+    actions.Dispatch("TaskRow:click")  # works
+    ```
+
+    See [`Dispatch` browser events](https://citry.dev/events/actions/#notify-browser-code-that-something-happened).
 
 ### Fixes
 
+- Security: an `async def` event guard, `_context` or `_csrf` function
+  is now refused with an error when the component class is defined.
+  Citry calls these without awaiting them, so the code inside an async
+  one never ran: an async guard let every call through, and an async
+  `_csrf` function skipped your own token check. An app that has one
+  now fails at startup: rewrite the function as a plain `def`. A plain
+  `def` guard or `_csrf` function that returns a coroutine, another
+  awaitable, a generator or an async generator now fails the call, and
+  so does a `_context` that returns a coroutine. See
+  [GHSA-gj9m-wwqx-m37j](https://github.com/citry-dev/citry/security/advisories/GHSA-gj9m-wwqx-m37j).
+- Security: a handler's own `@event(guard=...)` now runs after the
+  component's `_guard` (or the app-wide `_guard` in
+  `extensions_defaults["events"]`) instead of replacing it, and either
+  one can refuse the call. A call the component's guard refuses now
+  fails on every handler of the component, including handlers with
+  their own guard. To let a public handler through, return early from
+  `_guard` when `self.event.name` names it, or set
+  `@event(component_guard=False)` on the handler, which skips the
+  component's or app-wide `_guard` for that handler only. See
+  [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
+- Security: applying `@event(...)` to a function that already has
+  `@event` settings (two stacked decorators, or one function decorated
+  again for another class) now raises an error, and so does a decorator
+  above `@event(...)` that keeps `__wrapped__` but drops the settings.
+  Code that did this loaded in 1.2.0, but only one set of settings took
+  effect, so a `guard=` could be dropped without an error. Put every
+  setting in one `@event(...)`, and write decorators with
+  `functools.wraps`. A handler now also keeps the `@event` settings it
+  had when its class was created, so changing the function's `@event`
+  settings later does not change how that class's handler behaves, and
+  a function used as a `ViewEvents` verb handler in one class no longer
+  changes the HTTP methods it accepts in another class. See
+  [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
+- Security: an event guard that returns a false value other than
+  `None` (`False`, `0`, an empty list or QuerySet) or an exception other
+  than `EventError`
+  now refuses the call with a 403, and one that returns an `EventError`
+  refuses it with that error's status and message, as if it had raised
+  it. Before, a guard written as `return user.is_staff` or
+  `return Document.objects.filter(owner=user)` let every caller
+  through. `None` and `True` let the call go ahead. A guard that
+  returns a function, as `return self.can_edit` does without the `()`,
+  fails the call with a 500 and logs the guard's name. Any other true
+  value lets the call go ahead and logs a warning that names the guard
+  and the component. A returned value whose true-or-false test raises
+  an error fails the call with a 500. See
+  [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
 - Security: on PyPy, Citry now limits how deeply event data and
   browser writes to State may nest so that PyPy's stack can hold the
   check, and data nested deeply enough to end the server process in
@@ -56,10 +188,22 @@ still requires citry-core 2.1.2.
   `field_serializer` for a date field, and a recursive Pydantic
   dataclass whose wrap `field_serializer` is annotated as returning its
   own type. Annotate those serializers as returning `Any`.
-
-CPython accepts and refuses the same data as before. Citry applies the
-PyPy rules on every Python implementation other than CPython, such as
-GraalPy, since only CPython has been measured to be safe without them.
+- When an event guard, `_context`, an `on_event` hook or a State
+  validator raises an unexpected error, the server log, and in debug
+  mode the error message, now name it instead of saying the event
+  handler raised, since the handler never ran.
+- A component with Events that comes from the render cache now writes
+  the same HTML as when it renders without the cache. Earlier releases
+  gave its root element an extra `data-cid` attribute, so the browser
+  could load a second compiled template for the same component.
+- On free-threaded Python with the GIL off, the request data from an
+  Events check that failed, and the result of one that passed, are now
+  freed about a second after your code lets go of them, not up to 60
+  seconds later.
+- With `State._storage = "server"`, a call that changes State no longer
+  leaves an unused entry in your cache when its answer cannot carry the
+  new token. That covers a form posted without JavaScript, and a call
+  that fails because a public State value is one the browser cannot read.
 
 ## v1.2.0
 

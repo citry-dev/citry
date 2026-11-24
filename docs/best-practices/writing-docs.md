@@ -105,6 +105,12 @@ appears alone: in the sidebar, in search results, and in a link from
 another page. Write "Turn on development mode" instead. The same goes
 for "this", "its", and "them".
 
+A heading that gives an instruction must still name what the section is
+about. "Pass every input" tells the reader what to do but not what it
+applies to: in the sidebar, it could belong to forms, components, or
+events. "Access State in handlers" names the thing the section helps
+with, and the instruction follows in the text.
+
 Keep a heading to about four words and 24 characters. The "On this page"
 sidebar cuts longer headings off, and the words that get cut are usually
 the ones that tell sections apart. A longer heading is fine when the
@@ -207,10 +213,10 @@ A message such as "Invalid name" leaves the reader to work out all three.
 This one, from `actions.Dispatch`, says all three:
 
 ```text
-actions.Dispatch: event names starting with 'citry:' are reserved
-for the citry runtime; got 'citry:saved'. Pick another name (the
-convention is prefixing with the component name, e.g.
-'MyCard:submit').
+actions.Dispatch: 'citry:saved' starts with 'citry:' (letter case
+is ignored), which is reserved for Citry's own events. Pick another
+name; the convention is prefixing it with the component name, e.g.
+'MyCard:submit'.
 ```
 
 Keep internals out of the message, the same as on a page. When there are

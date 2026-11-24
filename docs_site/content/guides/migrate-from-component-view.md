@@ -20,7 +20,7 @@ or build an `HttpResponse`. It receives the form fields as a typed object,
 and what it returns decides what the page does next.
 
 The Citry examples assume the `citry_app` instance configured in
-[Server events](/events/#configure-a-signing-secret-before-using-state)
+[Server events](/events/#set-a-signing-secret)
 and these imports:
 
 ```python

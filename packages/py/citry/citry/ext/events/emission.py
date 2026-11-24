@@ -13,7 +13,6 @@ from citry._protocol.events import (
 )
 from citry.constness import const_value
 from citry.ext.events import _pydantic_bounded as bounded
-from citry.ext.events.handlers import event_options
 from citry.ext.events.state import public_state_values, state_field_names
 from citry.ext.events.tokens import mint_state_token
 
@@ -71,11 +70,10 @@ def capture_instance(extension: EventsExtension, ctx: OnComponentDataContext) ->
         public_state_json=json.dumps(values, sort_keys=True, allow_nan=False),
     )
     entries: dict[EventInstanceEntry, None] = ctx.context.extra.setdefault(EXTRA_KEY, {})
+    # The browser finds the component through the manifest entry built from
+    # this one, so Events adds nothing to the root element. Render cache
+    # replay builds its entry the same way (see `cache.py`).
     entries[entry] = None
-    from citry._vue.capture import direct_prepared_render_active  # noqa: PLC0415
-
-    if not direct_prepared_render_active():
-        ctx.context._add_root_markers([f'data-cid="{ctx.component.id}"'])
 
 
 def _write_plain_values(state: Any) -> None:
@@ -105,15 +103,14 @@ def build_events_manifest(
         info = extension.resolve(citry.get_component_by_class_id(entry.component_class_id))
         event_handlers: dict[str, dict[str, object]] = {}
         for handler in info.handlers.values():
-            options = event_options(handler.func)
             event_handlers[handler.name] = build_handler_descriptor(
                 handler.methods[0],
                 uses_state="state" in handler.params,
                 debounce_milliseconds=handler.debounce,
                 throttle_milliseconds=handler.throttle,
-                latest_call_wins=options is not None and options.latest_wins,
-                allow_batching=options is None or options.bundle,
-                detached=options is not None and options.detached,
+                latest_call_wins=handler.latest_wins,
+                allow_batching=handler.bundle,
+                detached=handler.detached,
             )
         writable = (
             info.state_meta.model

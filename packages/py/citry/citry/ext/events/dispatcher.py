@@ -35,6 +35,7 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+import sys
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -70,7 +71,7 @@ from citry.ext.events._pydantic_bounded import TOO_SLOW_MESSAGE, ValidationTooCo
 from citry.ext.events.actions import Render, _download_content_disposition
 from citry.ext.events.csrf import _MSG_CSRF_FAILED, csrf_field_names
 from citry.ext.events.errors import EventError, limit_unexpected_fields, unlisted_fields_note, wire_error
-from citry.ext.events.handlers import event_options
+from citry.ext.events.handlers import refuse_deferred_result
 from citry.ext.events.results import (
     HTML_RENDER_ENCODER,
     RenderEncoder,
@@ -95,10 +96,12 @@ from citry.ext.events.tokens import (
     StaleStateError,
     StateUpdateError,
     apply_state_updates,
-    mint_state_token,
+    commit_state_token,
     oversized_state_decimals,
+    prepare_state_token,
     state_bytes,
     state_growth_error,
+    state_renewal_due,
     verify_state_token,
 )
 from citry.extension import _as_list_of_items
@@ -111,6 +114,7 @@ if TYPE_CHECKING:
     from citry.citry import Citry
     from citry.component import Component
     from citry.ext.events.extension import EventHandler, EventsInfo
+    from citry.ext.events.state import StateMeta
 
 __all__ = [
     "CAPABILITIES_BASELINE_V1",
@@ -135,6 +139,10 @@ _MSG_UNENCODABLE_RESULT = (
     "The handler returned a value strict JSON cannot encode (for example, a Decimal or a non-finite number such as "
     "inf or nan)."
 )
+# The refusal a guard gets by returning False. Written for the visitor,
+# like the 403 messages guards raise themselves ("Log in first."),
+# because the page may show it.
+_MSG_GUARD_REFUSED = "You are not allowed to make this call."
 
 # Sentinel: "the on_event hook did not answer the call" (None is a valid
 # answer, meaning acknowledged with no actions).
@@ -475,6 +483,9 @@ class _CallPlan:
     kwargs: dict[str, Any]
     state: Any
     state_fingerprint: str | None
+    # The verified token is past half its lifetime, so the call sends a new
+    # one even when State does not change (see `_resign_state`).
+    renew_state: bool
     instance_id: str | None
     send_sequence: int | None
     # The on_event hook's answer, when an extension answered the call in the
@@ -532,10 +543,65 @@ def _too_deep_to_write(state: Any) -> bool:
     return False
 
 
+# The component class ids and error kinds whose failed State token renewal was
+# already logged, so each warns once rather than on every call for up to half
+# a token lifetime, while a different kind of failure still warns. Later
+# repeats log at debug level.
+_RENEWAL_FAILURES_LOGGED: set[tuple[str, str]] = set()
+
+
+def _log_failed_renewal(comp_cls: type[Component], err: Exception) -> None:
+    """Log why a State token could not be renewed: a warning once per component class and error kind, then debug."""
+    message = (
+        f"Component {comp_cls.__name__}: the State token is past half its lifetime, but a new one could not be"
+        f" made, so the page keeps its current token until it expires: {type(err).__name__}: {err}"
+    )
+    seen = (comp_cls.class_id, type(err).__name__)
+    if seen in _RENEWAL_FAILURES_LOGGED:
+        logger.debug(message)
+        return
+    _RENEWAL_FAILURES_LOGGED.add(seen)
+    # A value that cannot be signed or a cache that is down is expected and
+    # explained by the message. Anything else may be a bug in Citry, which
+    # would otherwise show only as pages expiring, so it keeps its traceback.
+    logger.warning(message, exc_info=not isinstance(err, (ValueError, OSError)))
+
+
+def _can_send_state_action(ctx: TransportContext, capabilities: dict[str, frozenset[str]]) -> bool:
+    """
+    Whether the answer to this call can hand the browser a new State token.
+
+    Every place in the dispatcher that makes a token after a call asks this
+    first, before it makes one: in server storage a token is a cache entry,
+    and an entry that no browser receives is never read.
+    """
+    if ctx.response_mode == "compat":
+        # A form posted without JavaScript, or another request that asks for
+        # HTML, is answered with plain HTML, a redirect, or a status, so it
+        # drops `state` actions even though the baseline capabilities list
+        # the kind.
+        return False
+    return "state" in capabilities["actions"]
+
+
+def _instances_given_a_token(wire_actions: list[dict[str, Any]]) -> set[str]:
+    """The render ids that these result actions give a new State token."""
+    ids: set[str] = set()
+    for action in wire_actions:
+        if action.get("action") == "state":
+            ids.add(action["targetRenderId"])
+        elif action.get("action") == "render":
+            # A render of a component carries that component's new token in
+            # the content it sends; a `mark:` region inside one carries none.
+            target = action.get("target")
+            if isinstance(target, str) and target.startswith("render:"):
+                ids.add(target.removeprefix("render:"))
+    return ids
+
+
 def _is_detached(handler: EventHandler) -> bool:
     """Whether the handler was declared ``@event(detached=True)``."""
-    options = event_options(handler.func)
-    return options is not None and options.detached
+    return handler.detached
 
 
 def _detached_render_message(plan: _CallPlan) -> str:
@@ -545,6 +611,170 @@ def _detached_render_message(plan: _CallPlan) -> str:
         f" @event(detached=True) but returned actions.Render (or a component). A detached handler may"
         f" return data, dispatch an event, redirect, update the URL, or return a Download; remove"
         f" detached=True to render."
+    )
+
+
+def _callable_name(func: Any) -> str:
+    """The name the server log uses for a guard or another callable: its qualified name, else its type's name."""
+    # A callable object may answer `__qualname__` with anything, or raise.
+    # Only a non-empty string is used; otherwise the type's name stands in,
+    # so naming a guard for the log can never fail the call.
+    try:
+        name = getattr(func, "__qualname__", None)
+    except Exception:  # noqa: BLE001 - see the comment above
+        name = None
+    return name if isinstance(name, str) and name else type(func).__name__
+
+
+def _drop_tracebacks(error: BaseException, *, keep: BaseException | None) -> None:
+    """
+    Clear the traceback of ``error`` and of every exception chained to it, down to ``keep``.
+
+    A guard may keep one exception object and return or raise it on every
+    call. Its traceback, and those of the exceptions on its ``__cause__``
+    and ``__context__`` chain (or inside an exception group), hold the
+    frames of the call that raised them, and through them the request and
+    the State, so they are cleared once the call is answered. A chain can
+    loop back on itself, so each exception is visited once.
+
+    ``keep`` is the exception the host was handling when it called the
+    dispatcher (``None`` outside an ``except`` block). Python chains it
+    onto every exception raised during the call, and the host may still
+    re-raise or log it, so it and everything below it keep their
+    tracebacks.
+
+    Clearing is best effort and never raises: the call has its answer, and
+    an exception class whose ``__cause__`` or ``exceptions`` raises must
+    not turn that answer into an error that ends the whole request.
+    """
+    seen: set[int] = set()
+    pending: list[BaseException] = [error]
+    while pending:
+        current = pending.pop()
+        if current is keep or id(current) in seen:
+            continue
+        seen.add(id(current))
+        try:
+            current.__traceback__ = None
+            pending.extend(
+                chained for chained in (current.__cause__, current.__context__) if isinstance(chained, BaseException)
+            )
+            # Python 3.11+, which citry requires; ruff still checks for 3.10 (#331).
+            if isinstance(current, BaseExceptionGroup):  # noqa: F821
+                pending.extend(member for member in current.exceptions if isinstance(member, BaseException))
+        except Exception:  # noqa: BLE001, S112 - app exception classes may raise here; see the docstring
+            continue
+
+
+def _apply_guard_result(source: str, guard: Any, result: Any) -> None:
+    """
+    Refuse the call when a guard's result says no, and warn about a result Citry ignores.
+
+    A guard refuses by raising ``EventError``, and also by returning
+    anything that means "no", because an author who writes
+    ``return user.is_staff`` or ``return Document.objects.filter(...)``
+    means a refusal when the value is false, and letting that call
+    through fails open:
+
+    - A returned ``EventError`` refuses with that error, as if the guard
+      had raised it.
+    - Any other returned exception (``PermissionDenied()``, say), or an
+      exception class, refuses with a 403 and the standard message. Its
+      text never reaches the browser, since it was not written for it.
+    - Any other false value (``False``, ``0``, an empty list or QuerySet)
+      refuses with a 403.
+
+    ``None`` and ``True`` let the call go ahead. A function or other
+    callable is refused as an error (500), since ``return self.can_edit``
+    with the call's ``()`` missing never ran the check. Any other true
+    value lets the call go ahead with a warning, so a guard that returns
+    something by mistake shows up in the server log.
+
+    Args:
+        source: The guard's place, such as "The guard of event 'save' on
+            Editor", as the messages show it.
+        guard: The guard function, named in the messages.
+        result: What the guard returned.
+
+    Raises:
+        TypeError: When the result is a coroutine, another awaitable, a
+            generator, an async generator, or a callable, so the guard's
+            check did not run, or when testing the result for true or false
+            raises; the dispatcher answers ``handler_error`` (500) to these.
+        EventError: The returned error itself when the result is an
+            ``EventError``, the error that testing the result raised, or
+            a 403 for any other refusal above.
+
+    """
+    # Unrun code first: its body never ran, so whatever it would have
+    # returned is unknown and the call is refused as handler_error.
+    refuse_deferred_result(source, result)
+    # None is the documented "go ahead", and True reads as "allowed" in a
+    # guard written as `return user.is_staff`, so neither needs a warning.
+    if result is None or result is True:
+        return
+    # A returned EventError is a refusal the author wrote out in full, with
+    # its own status and message, so it answers exactly as raising it would.
+    # Clearing the traceback first stops an error kept in a module constant
+    # and returned on every call from collecting one traceback per call.
+    if isinstance(result, EventError):
+        # The exception the host is handling, if any, is chained below the
+        # returned one and stays as it is.
+        _drop_tracebacks(result, keep=sys.exc_info()[1])
+        raise result
+    # Any other exception, or an exception class, is a refusal too (a
+    # Django `return PermissionDenied()`, say). Its text was not written for
+    # the browser, so the answer is the standard 403. The exception is not
+    # raised, so it gains no traceback here; the ones it already carries
+    # (from a guard that caught it and returned it, and on the exceptions
+    # it was raised from) are cleared so a shared object does not keep that
+    # call's frames alive.
+    if isinstance(result, BaseException):
+        _drop_tracebacks(result, keep=sys.exc_info()[1])
+        raise EventError(_MSG_GUARD_REFUSED, status=403)
+    if isinstance(result, type) and issubclass(result, BaseException):
+        raise EventError(_MSG_GUARD_REFUSED, status=403)
+    guard_name = _callable_name(guard)
+    # Testing the value runs app code (`__bool__` or `__len__`; a lazy
+    # QuerySet queries the database here). When that raises, the guard
+    # never gave an answer: the call is refused as a 500, the same answer a
+    # guard that raises an unexpected error gets, so a broken check shows
+    # up as an error in the log rather than as a user who is not allowed.
+    try:
+        allowed = bool(result)
+    except EventError:
+        # A value whose test refuses with an EventError means "no" in the
+        # author's own words, so that error answers, as a raised one would.
+        raise
+    except Exception as error:
+        msg = (
+            f"{source}: guard {guard_name!r} returned a value of type {type(result).__name__!r}, and testing it"
+            f" for true or false raised {type(error).__name__}, so the call is refused. Return True, False or"
+            " None from a guard."
+        )
+        raise TypeError(msg) from error
+    # Every false value refuses, not only the bool False: an empty QuerySet,
+    # 0 or numpy.False_ from `return <check>` means "no" just the same.
+    if not allowed:
+        raise EventError(_MSG_GUARD_REFUSED, status=403)
+    # A callable is almost always a check the guard forgot to call
+    # (`return self.can_edit` without the `()`). Its check never ran, so
+    # letting the call through would fail open; a 500 with the guard named
+    # in the log shows the author the slip on the first call.
+    if callable(result):
+        returned = _callable_name(result)
+        msg = (
+            f"{source}: guard {guard_name!r} returned the callable {returned!r} instead of a result, so the call"
+            " is refused. Call it and return what it returns (add the missing parentheses), or return True,"
+            " False or None."
+        )
+        raise TypeError(msg)
+    # The type name, not the value: the value may hold request data, and
+    # the log line should not carry text the caller chose.
+    logger.warning(
+        f"{source}: guard {guard_name!r} returned a value of type {type(result).__name__!r}, which Citry ignores,"
+        " so the call goes ahead. To refuse it, raise or return an EventError, or return False; return None or"
+        " True to allow it without this warning."
     )
 
 
@@ -649,6 +879,9 @@ class EventsDispatcher:
             return checked
         envelope_id, calls, capabilities = checked
         results: list[dict[str, Any]] = []
+        # The caller instances that an earlier call in this request already
+        # sent a token, so a later call does not renew from older State.
+        token_sent_to: set[str] = set()
         # The calls of one request share one work budget for data that can be
         # checked more than once.
         with request_work():
@@ -657,6 +890,7 @@ class EventsDispatcher:
                     call,
                     ctx,
                     capabilities=capabilities,
+                    token_sent_to=token_sent_to,
                     request=request,
                     url_component=url_component,
                     url_event=url_event,
@@ -707,6 +941,9 @@ class EventsDispatcher:
             return checked
         envelope_id, calls, capabilities = checked
         results: list[dict[str, Any]] = []
+        # The caller instances that an earlier call in this request already
+        # sent a token, so a later call does not renew from older State.
+        token_sent_to: set[str] = set()
         # The calls of one request share one work budget for data that can be
         # checked more than once.
         with request_work():
@@ -715,6 +952,7 @@ class EventsDispatcher:
                     call,
                     ctx,
                     capabilities=capabilities,
+                    token_sent_to=token_sent_to,
                     request=request,
                     url_component=url_component,
                     url_event=url_event,
@@ -756,6 +994,7 @@ class EventsDispatcher:
         ctx: TransportContext,
         *,
         capabilities: dict[str, frozenset[str]],
+        token_sent_to: set[str],
         request: EventRequest | None,
         url_component: str | None,
         url_event: str | None,
@@ -803,7 +1042,7 @@ class EventsDispatcher:
                     handler=plan.handler.name,
                 )
                 warn_unreturned_actions(plan.events, actions, plan.handler.name)
-            return self._complete_call(plan, ctx, actions, capabilities)
+            return self._complete_call(plan, ctx, actions, capabilities, token_sent_to)
         except EventError as err:
             return build_error_result(wire_error(err), plan.send_sequence)
         except Exception as err:  # noqa: BLE001 - the dispatcher answers 500, never crashes the host
@@ -815,6 +1054,7 @@ class EventsDispatcher:
         ctx: TransportContext,
         *,
         capabilities: dict[str, frozenset[str]],
+        token_sent_to: set[str],
         request: EventRequest | None,
         url_component: str | None,
         url_event: str | None,
@@ -855,7 +1095,7 @@ class EventsDispatcher:
                     handler=plan.handler.name,
                 )
                 warn_unreturned_actions(plan.events, actions, plan.handler.name)
-            return self._complete_call(plan, ctx, actions, capabilities)
+            return self._complete_call(plan, ctx, actions, capabilities, token_sent_to)
         except EventError as err:
             return build_error_result(wire_error(err), plan.send_sequence)
         except Exception as err:  # noqa: BLE001 - the dispatcher answers 500, never crashes the host
@@ -934,6 +1174,7 @@ class EventsDispatcher:
         # Token verification and two-way binding updates (design 6.1, WP8).
         state = None
         state_fingerprint: str | None = None
+        renew_state = False
         token = call.get("stateToken")
         updates = call.get("stateUpdates")
         needs_state = "state" in handler.params
@@ -1001,7 +1242,12 @@ class EventsDispatcher:
                     # Not a value that no longer fits: a State validator
                     # failed, which is the author's bug and answers 500.
                     return self._unexpected_error(
-                        ctx, err, comp_cls=comp_cls, handler=handler, send_sequence=send_sequence
+                        ctx,
+                        err,
+                        comp_cls=comp_cls,
+                        handler=handler,
+                        send_sequence=send_sequence,
+                        failed_step=f"a validator of {comp_cls.__name__}.State",
                     )
                 # A model State validates its values here, and a
                 # ValidationError means the same as a dataclass's TypeError.
@@ -1040,6 +1286,7 @@ class EventsDispatcher:
                 )
                 return build_error_result(error, send_sequence)
             state_fingerprint = _state_fingerprint(state)
+            renew_state = state_renewal_due(verified)
             if state_fingerprint is None and _too_deep_to_write(state):
                 # Pydantic's limit on writing nested values depends on the
                 # platform, so a token signed by a server with a higher limit
@@ -1062,14 +1309,12 @@ class EventsDispatcher:
                 if meta.storage != "server":
                     # Signed State is signed again only for a caller instance
                     # that accepts the `state` action (see `_resign_state`).
-                    # A call that makes no token, such as an API call, keeps
-                    # working with a State it never sends back.
-                    accepted = (
-                        CAPABILITIES_BASELINE_V1["actions"]
-                        if ctx.response_mode == "compat"
-                        else capabilities["actions"]
+                    # A call that makes no token, such as an API call or a
+                    # form posted without JavaScript, keeps working with a
+                    # State it never sends back.
+                    capped = (
+                        capped and call.get("callerRenderId") is not None and _can_send_state_action(ctx, capabilities)
                     )
-                    capped = capped and call.get("callerRenderId") is not None and "state" in accepted
                 # Server storage may hold a State the server itself made
                 # larger than the cap, which the browser may still change
                 # as long as it does not grow it. A signed State over the cap
@@ -1154,6 +1399,13 @@ class EventsDispatcher:
         events.event = call_event
 
         answered: Any = _NOT_ANSWERED
+        # The exception the host was handling when it called the dispatcher,
+        # if any. Python chains it onto errors the guards raise, and clearing
+        # their tracebacks below must leave the host's own one alone.
+        host_exception = sys.exc_info()[1]
+        # Which step is running, so a crash before the handler is logged
+        # against the code that failed (a guard, say), not the handler.
+        step = "the on_event hook"
         try:
             # on_event: veto or answer (design 3.7); fires before _context
             # and guards.
@@ -1167,14 +1419,55 @@ class EventsDispatcher:
                 # _context builds the per-call context injectable; guards read
                 # it, so it runs first (design 3.6).
                 if info.context is not None:
+                    step = "Events._context"
                     events.context = info.context(events)
-                if handler.guard is not None:
-                    handler.guard(events)
+                    # Definition time refuses an async _context; this catches
+                    # a plain def returning a coroutine, so a handler never
+                    # receives unrun code as context. Other awaitables may be
+                    # real app data, so only a coroutine is refused.
+                    refuse_deferred_result(
+                        f"{comp_cls.__name__}: Events._context", events.context, coroutine_only=True
+                    )
+                # The component-level guard runs first and the handler's own
+                # guard second, so a per-handler check (an owner check, say)
+                # adds to the component's login check instead of replacing
+                # it. Either one refusing refuses the call. Each result goes
+                # through _apply_guard_result: a coroutine returned unrun
+                # would pass the call, and a false value or a returned
+                # exception means "refuse", so all of them fail closed there.
+                if handler.component_guard is not None:
+                    step = f"the component guard {_callable_name(handler.component_guard)!r}"
+                    _apply_guard_result(
+                        f"The component guard of event {handler.name!r} on {comp_cls.__name__}",
+                        handler.component_guard,
+                        handler.component_guard(events),
+                    )
+                # The same function set at both levels runs once, so a guard
+                # that counts calls (a rate limit) counts each call once.
+                if handler.guard is not None and handler.guard is not handler.component_guard:
+                    step = f"the guard {_callable_name(handler.guard)!r}"
+                    _apply_guard_result(
+                        f"The guard of event {handler.name!r} on {comp_cls.__name__}",
+                        handler.guard,
+                        handler.guard(events),
+                    )
         except EventError as err:
-            return build_error_result(wire_error(err), send_sequence)
+            error = wire_error(err)
+            # A guard may raise one error object kept in a module constant;
+            # dropping its tracebacks (and those of the exceptions chained to
+            # it) stops that object holding this call's frames (the request,
+            # the State) until the next call.
+            _drop_tracebacks(err, keep=host_exception)
+            return build_error_result(error, send_sequence)
         except Exception as err:  # noqa: BLE001 - a crash before the handler still answers 500
             return self._unexpected_error(
-                ctx, err, comp_cls=comp_cls, handler=handler, events=events, send_sequence=send_sequence
+                ctx,
+                err,
+                comp_cls=comp_cls,
+                handler=handler,
+                events=events,
+                send_sequence=send_sequence,
+                failed_step=step,
             )
 
         injectables: dict[str, Any] = {
@@ -1193,6 +1486,7 @@ class EventsDispatcher:
             kwargs=kwargs,
             state=state,
             state_fingerprint=state_fingerprint,
+            renew_state=renew_state,
             instance_id=instance_id,
             send_sequence=send_sequence,
             answered=answered,
@@ -1285,8 +1579,10 @@ class EventsDispatcher:
                 f" and call their per-event URL."
             )
             raise ValueError(msg)
-        options = event_options(plan.handler.func)
-        if options is None or options.bundle:
+        # Read from the handler, which copied the setting when the class
+        # was created, so a later change to the function cannot turn the
+        # batch-route refusal off.
+        if plan.handler.bundle:
             msg = (
                 f"Event handler {plan.handler.name!r} on component {plan.comp_cls.__name__} returned"
                 f" {result_name} but is eligible for bundled requests. Mark it with"
@@ -1308,6 +1604,7 @@ class EventsDispatcher:
         ctx: TransportContext,
         actions: list[Any],
         capabilities: dict[str, frozenset[str]],
+        token_sent_to: set[str],
     ) -> dict[str, Any]:
         """Encode, apply capabilities, emit ``on_event_result``, re-sign state, echo send_sequence."""
         if ctx.response_mode == "compat":
@@ -1421,12 +1718,13 @@ class EventsDispatcher:
         # handler itself may not return.
         self._check_detached_result(plan, final_actions)
         try:
-            final_actions = self._resign_state(plan, ctx, final_actions, capabilities)
+            final_actions = self._resign_state(plan, ctx, final_actions, capabilities, token_sent_to)
         except ProtocolValueError:
             # A public State value the browser cannot read (such as an integer wider
             # than a browser number) is a result encoding failure, not a handler bug.
             return build_error_result(build_error(500, "handler_error", _MSG_UNENCODABLE_RESULT), plan.send_sequence)
         final_actions = self._apply_capabilities(final_actions, capabilities, handler=plan.handler.name)
+        token_sent_to.update(_instances_given_a_token(final_actions))
 
         if _debug_enabled() and plan.state is not None and self._state_changed(plan):
             kinds = {action.get("action") for action in final_actions}
@@ -1533,6 +1831,7 @@ class EventsDispatcher:
         ctx: TransportContext,
         wire_actions: list[dict[str, Any]],
         capabilities: dict[str, frozenset[str]],
+        token_sent_to: set[str],
     ) -> list[dict[str, Any]]:
         """
         Changed State means a fresh token and fresh public values in the response (design 4.3).
@@ -1543,9 +1842,18 @@ class EventsDispatcher:
         placement breaks no ordering promise: the action is server-added, and
         the client applies a result's State refresh before the actions array
         either way.
+
+        A token past half its lifetime gets the same ``state`` action with
+        unchanged State, so a component that keeps getting calls never
+        reaches the expiry (design 7.1). ``_renewal_wanted`` and ``_renew_state`` skip it
+        wherever it could do harm or nobody would store it.
         """
-        if plan.state is None or not self._state_changed(plan):
+        if plan.state is None:
             return wire_actions
+        if not self._state_changed(plan):
+            if not self._renewal_wanted(plan, token_sent_to):
+                return wire_actions
+            return self._renew_state(plan, ctx, wire_actions, capabilities)
         if plan.instance_id is not None:
             self_target = f"render:{plan.instance_id}"
             if any(
@@ -1555,7 +1863,7 @@ class EventsDispatcher:
         meta = plan.info.state_meta
         if meta is None:  # pragma: no cover - a state instance implies its meta
             return wire_actions
-        # Both checks below come before the token is made: for server storage,
+        # The checks below come before any token is made: for server storage,
         # making one writes a cache entry, and an entry no client receives is
         # never read, so it would only fill the cache.
         if plan.instance_id is None:
@@ -1566,27 +1874,105 @@ class EventsDispatcher:
                 f" instance to address the token refresh to; the response omits it."
             )
             return wire_actions
-        if "state" not in capabilities["actions"]:
-            # The client explicitly advertised a set without the state kind;
-            # emitting one anyway would violate the capability contract.
-            logger.warning(
-                f"Event handler {plan.handler.name!r} mutated state, but the client's advertised"
-                f" capabilities exclude the 'state' action; the State refresh is dropped."
-            )
+        if not _can_send_state_action(ctx, capabilities):
+            if ctx.response_mode == "compat":
+                # Expected for every such form, so it is not worth a warning.
+                logger.debug(
+                    f"Event handler {plan.handler.name!r} mutated state, but the call is answered as plain HTML"
+                    f" (a form posted without JavaScript, for example), which drops 'state' actions; the response"
+                    f" omits the token refresh."
+                )
+            else:
+                # The client explicitly advertised a set without the state kind;
+                # emitting one anyway would violate the capability contract.
+                logger.warning(
+                    f"Event handler {plan.handler.name!r} mutated state, but the client's advertised"
+                    f" capabilities exclude the 'state' action; the State refresh is dropped."
+                )
             return wire_actions
-        token = mint_state_token(
+        # The browser shows public State through `$state` and State bindings, and
+        # nothing else will refresh them: the caller is not rendered again here.
+        return [self._new_state_action(plan, ctx, meta), *wire_actions]
+
+    @staticmethod
+    def _new_state_action(plan: _CallPlan, ctx: TransportContext, meta: StateMeta) -> dict[str, Any]:
+        """
+        Make a new token from the call's State, and the ``state`` action that carries it.
+
+        A State change and a renewal both come through here, so both write a
+        server-storage entry in the same order: the token is prepared first,
+        the action is built from it, and the entry is written last. A token
+        that cannot be made, or an action that cannot be built, then leaves no
+        entry behind that no browser will read. A failure after the write,
+        such as an ``on_event_result`` hook that adds an action the client did
+        not advertise, still leaves the entry until it expires. The caller has
+        already checked that the answer can carry a ``state`` action
+        (``_can_send_state_action``).
+        """
+        if plan.instance_id is None or plan.state is None:  # pragma: no cover - checked by the callers
+            msg = "A state action needs a caller instance and a State."
+            raise ValueError(msg)
+        prepared = prepare_state_token(
             plan.state,
             class_id=plan.comp_cls.class_id,
             secret=ctx.citry.settings.secret,
             max_age=meta.max_age,
             max_bytes=meta.max_bytes,
             storage=meta.storage,
-            cache=ctx.citry.cache,
             component_name=plan.comp_cls.__name__,
         )
-        # The browser shows public State through `$state` and State bindings, and
-        # nothing else will refresh them: the caller is not rendered again here.
-        state_action = build_state_action(plan.instance_id, token, public_state_values(plan.state, meta))
+        state_action = build_state_action(plan.instance_id, prepared.token, public_state_values(plan.state, meta))
+        commit_state_token(prepared, ctx.citry.cache)
+        return state_action
+
+    @staticmethod
+    def _renewal_wanted(plan: _CallPlan, token_sent_to: set[str]) -> bool:
+        """Whether a call whose State did not change should still send a new token."""
+        if not plan.renew_state or plan.instance_id is None:
+            # A young token needs nothing, and a call without a caller
+            # instance (an API client or a plain form) has nowhere to store one.
+            return False
+        if _is_detached(plan.handler):
+            # The browser may send a detached call while queued calls are in
+            # flight, so its token could replace the newer one a queued call
+            # returns. A later call that is not detached renews instead.
+            return False
+        # An earlier call in this request may already have sent this caller a
+        # token, possibly for State it changed. Renewing from this call's
+        # older State would undo that change in the browser.
+        return plan.instance_id not in token_sent_to
+
+    def _renew_state(
+        self,
+        plan: _CallPlan,
+        ctx: TransportContext,
+        wire_actions: list[dict[str, Any]],
+        capabilities: dict[str, frozenset[str]],
+    ) -> list[dict[str, Any]]:
+        """Send unchanged State with a new token, or return the result as it is when a new token cannot help."""
+        meta = plan.info.state_meta
+        if meta is None or plan.instance_id is None:  # pragma: no cover - checked by the caller
+            return wire_actions
+        self_target = f"render:{plan.instance_id}"
+        if any(action.get("action") == "render" and action.get("target") == self_target for action in wire_actions):
+            # A render of the caller already carries a token with a full lifetime.
+            return wire_actions
+        if not _can_send_state_action(ctx, capabilities):
+            # The client cannot store a token from a `state` action: it said
+            # so in its capabilities, or it is a form posted without
+            # JavaScript, whose answer drops the action. Its current token
+            # keeps working until it expires.
+            return wire_actions
+        try:
+            state_action = self._new_state_action(plan, ctx, meta)
+        except Exception as err:  # noqa: BLE001 - a renewal is optional and must not fail the call
+            # The handler did not change State, so the call itself succeeded.
+            # A State that cannot be signed again (one over a `_max_bytes`
+            # lowered since the token was made, a public value the browser
+            # cannot read, or a cache that refuses the write) keeps its
+            # current token until it expires rather than failing the call.
+            _log_failed_renewal(plan.comp_cls, err)
+            return wire_actions
         return [state_action, *wire_actions]
 
     @staticmethod
@@ -1651,6 +2037,7 @@ class EventsDispatcher:
         events: Any = None,
         send_sequence: int | None = None,
         checking_args: bool = False,
+        failed_step: str | None = None,
     ) -> dict[str, Any]:
         """
         An uncaught exception: log it, fire ``on_event_error``, answer a 500.
@@ -1659,7 +2046,9 @@ class EventsDispatcher:
         rides only in debug mode, and a traceback never rides at all
         (design 3.7). ``checking_args`` says the exception came from checking
         the call's data, so the handler never ran, and the log and the
-        debug text say so.
+        debug text say so. ``failed_step`` names the code that raised
+        before the handler ran (``"the guard 'require_owner'"``, say), and
+        the log and the debug text name it in place of the handler.
         """
         if plan is not None:
             comp_cls = plan.comp_cls
@@ -1668,10 +2057,20 @@ class EventsDispatcher:
             send_sequence = plan.send_sequence
         handler_label = handler.name if handler is not None else "<unresolved>"
         comp_label = comp_cls.__name__ if comp_cls is not None else "<unresolved>"
-        source = "checking the data for" if checking_args else "from"
-        logger.exception(f"Uncaught exception {source} event handler {handler_label!r} on component {comp_label}.")
-        if _debug_enabled():
+        if failed_step is not None:
+            # The handler never ran, so the log names the code that failed.
+            logger.exception(
+                f"Uncaught exception from {failed_step} of event {handler_label!r} on component {comp_label};"
+                " the event handler did not run."
+            )
+            # "failed", not "raised": a guard's result that Citry refuses
+            # (a callable, a coroutine) lands here too, and it raised nothing.
+            raised = f"{failed_step[0].upper()}{failed_step[1:]} failed with"
+        else:
+            source = "checking the data for" if checking_args else "from"
+            logger.exception(f"Uncaught exception {source} event handler {handler_label!r} on component {comp_label}.")
             raised = "Checking the event's data raised" if checking_args else "The event handler raised"
+        if _debug_enabled():
             message = f"{raised} an unexpected error: {type(err).__name__}: {err}"
         else:
             message = _MSG_HANDLER_ERROR

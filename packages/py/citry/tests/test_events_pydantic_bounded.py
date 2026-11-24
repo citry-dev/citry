@@ -32,7 +32,7 @@ import sys
 import threading
 import time
 import uuid
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Annotated, Any, Literal, NamedTuple, cast, get_args
 from weakref import WeakKeyDictionary, ref
 
@@ -1505,11 +1505,9 @@ def test_a_check_that_raises_lets_go_of_the_request_data_without_the_cycle_colle
     # With the GIL off, an object the check thread made (the error, its
     # traceback and the check's frame, which holds the data) is freed only
     # once that thread runs Python code again after the caller lets go of
-    # it. An idle check thread runs Python code only when its wait times
-    # out, so a short wait frees them during the test. The thread stays
-    # alive and keeps its last job, so the test still fails if the job
-    # keeps the data.
-    monkeypatch.setattr(bounded, "_CHECK_THREAD_IDLE_SECONDS", 0.01)
+    # it, so this also checks that an idle check thread wakes to free them
+    # well before its idle time ends. The thread stays alive and keeps its
+    # last job, so the test still fails if the job keeps the data.
     payload = Payload()
     gone = ref(payload)
     gc.disable()
@@ -1524,6 +1522,106 @@ def test_a_check_that_raises_lets_go_of_the_request_data_without_the_cycle_colle
         assert gone() is None
     finally:
         gc.enable()
+
+
+@pytest.mark.skipif(
+    IS_PYPY, reason="PyPy has no reference counting, so it frees an object only when its garbage collector runs"
+)
+def test_a_check_result_the_caller_drops_is_freed_without_the_cycle_collector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Result:
+        pass
+
+    monkeypatch.setattr(bounded, "_CHECK_THREADS", bounded._CheckThreads())
+    gc.disable()
+    try:
+        # The result is made on the check thread, so with the GIL off it is
+        # freed only once that idle thread wakes after the caller drops it.
+        result = bounded.run_on_check_thread(Result)
+        gone = ref(result)
+        del result
+        deadline = time.monotonic() + 5
+        while gone() is not None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert gone() is None
+    finally:
+        gc.enable()
+
+
+class _RecordingLock:
+    """A lock that records each timed wait, which only an idle check thread makes."""
+
+    waits: list[float]
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+
+    def acquire(self, blocking: bool = True, timeout: float = -1) -> bool:
+        if timeout >= 0:
+            self.waits.append(timeout)
+        return self.lock.acquire(blocking, timeout)
+
+    def release(self) -> None:
+        self.lock.release()
+
+
+def _recording_pool() -> tuple[bounded._CheckThreads, list[float]]:
+    waits: list[float] = []
+    recording = type("Recording", (_RecordingLock,), {"waits": waits})
+    pool = bounded._CheckThreads()
+    pool.allocate_lock = recording
+    return pool, waits
+
+
+def _wait_until(done: Callable[[], bool]) -> None:
+    deadline = time.monotonic() + 5
+    while not done() and time.monotonic() < deadline:
+        time.sleep(0.01)
+
+
+def test_an_idle_check_thread_wakes_often_without_the_gil(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(bounded, "_IS_GIL_ENABLED", lambda: False)
+    monkeypatch.setattr(bounded, "_CHECK_THREAD_WAKE_SECONDS", 0.01)
+    pool, waits = _recording_pool()
+    assert pool.run(lambda: "first") == (True, "first")
+    _wait_until(lambda: len(waits) >= 5)
+
+    # Each short wait ends with the thread running Python code, which frees
+    # what callers dropped, and the thread still takes the next job.
+    assert waits[:5] == [0.01] * 5
+    assert pool.run(lambda: "second") == (True, "second")
+    assert pool.count == 1
+
+
+def test_an_idle_check_thread_without_the_gil_still_ends_after_its_idle_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(bounded, "_IS_GIL_ENABLED", lambda: False)
+    monkeypatch.setattr(bounded, "_CHECK_THREAD_WAKE_SECONDS", 0.01)
+    monkeypatch.setattr(bounded, "_CHECK_THREAD_IDLE_SECONDS", 0.05)
+    monkeypatch.setattr(bounded, "_KEPT_CHECK_THREADS", 0)
+    pool, waits = _recording_pool()
+    assert pool.run(lambda: "checked") == (True, "checked")
+    _wait_until(lambda: pool.count == 0)
+
+    assert pool.count == 0
+    assert waits == [0.01] * 5
+
+
+@pytest.mark.parametrize("gil_enabled", [lambda: True, None], ids=["gil-on", "before-3.13"])
+def test_an_idle_check_thread_with_the_gil_waits_out_its_idle_time_at_once(
+    monkeypatch: pytest.MonkeyPatch, gil_enabled: Callable[[], bool] | None
+) -> None:
+    monkeypatch.setattr(bounded, "_IS_GIL_ENABLED", gil_enabled)
+    monkeypatch.setattr(bounded, "_CHECK_THREAD_IDLE_SECONDS", 0.05)
+    pool, waits = _recording_pool()
+    assert pool.run(lambda: "checked") == (True, "checked")
+    _wait_until(lambda: len(waits) >= 2)
+
+    # A kept thread then goes on waiting the whole idle time at a time.
+    assert waits[:2] == [0.05, 0.05]
+    assert pool.count == 1
 
 
 def test_a_check_keeps_its_outcome_when_the_thread_loop_fails_after_it(monkeypatch: pytest.MonkeyPatch) -> None:

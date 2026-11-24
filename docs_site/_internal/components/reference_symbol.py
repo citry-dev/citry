@@ -115,7 +115,7 @@ class ReferenceSymbol(Component):
             <p class="doc-section">Attributes</p>
             <ul class="doc-list">
               <c-for each="a in data.attributes">
-                <li>
+                <li c-id="a.anchor">
                   <code>{{ a.name }}</code>
                   <c-if cond="a.annotation">
                     <code>{{ a.annotation }}</code>

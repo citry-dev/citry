@@ -193,16 +193,20 @@ under [Error benchmark apps](#frameworks).
 
     - the child's event sends a number where the parent expects text:
       clicking the child's button changes nothing
-    - a handler that takes more arguments than the event sends: the
-      extra argument is `undefined`
+    - the parent's handler takes more arguments than the child's event
+      sends: the extra argument is `undefined`
     - the server and browser render different content in a part that
       passes values to a child component: the page shows the browser's
-      version with no error
+      version with no error. Citry's development mode can warn about this
+      in the browser console, but the benchmark runs in the default
+      production mode.
     - a secret sent to the browser through `js_data()`: the page looks
-      right, but the secret is in what the browser receives. No
-      framework here reports this one, and in Next.js and Nuxt even
-      reading a server-only value in browser code puts it in the page
-      before an error appears.
+      right, but the secret is in what the browser receives. Citry
+      refuses a value wrapped in [`Secret`](/advanced/secrets/), but
+      the benchmark's secret is a plain string, which Citry can't tell
+      from any other text. No framework here reports this one, and in
+      Next.js and Nuxt even reading a server-only value in browser code
+      puts it in the page before an error appears.
 
 ??? "Why Next.js, Nuxt and Reflex come next"
 

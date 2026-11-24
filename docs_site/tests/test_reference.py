@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import griffe
 from lxml import html as lxml_html
 
 from docs_site._internal.pipeline import render_page
-from docs_site._internal.reference import extract_symbol
+from docs_site._internal.reference import _attributes, extract_symbol
 
 
 def test_extract_function() -> None:
@@ -80,3 +81,26 @@ def test_docstring_directive_renders_members_recursively() -> None:
 def test_docstring_directive_unknown_symbol() -> None:
     html = render_page('<c-docstring path="citry.Nope" />').html
     assert "Unknown symbol: citry.Nope" in html
+
+
+def test_attribute_rows_get_their_own_anchor() -> None:
+    # A guide links to one setting of a nested class, such as a State
+    # setting whose `_` name keeps it out of the members list, so each row
+    # of an `Attributes:` section needs an anchor under its symbol's.
+    docstring = griffe.Docstring(
+        "Settings.\n\nAttributes:\n    _max_age (int): How long it lasts.\n",
+        parser="google",
+    )
+    rows = _attributes(docstring.parse(), "citry-thing-state")
+    assert [row.anchor for row in rows] == ["citry-thing-state-max-age"]
+
+
+def test_attribute_row_that_is_also_a_member_gets_no_second_anchor() -> None:
+    # The member entry already carries the anchor, and two elements with
+    # one id on a page would break links to it.
+    docstring = griffe.Docstring(
+        "Settings.\n\nAttributes:\n    enabled (bool): Whether it runs.\n",
+        parser="google",
+    )
+    rows = _attributes(docstring.parse(), "citry-thing", frozenset({"enabled"}))
+    assert rows[0].anchor is None

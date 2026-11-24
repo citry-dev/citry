@@ -123,8 +123,16 @@ kind of check. Considered and left off:
   input's outer type then, and ty checks inputs in the editor, so
   Pydantic would add only checks of nested types, such as the items of
   a `list[str]`.
-- `mode="development"` changes only how translations are loaded, and
-  the browser gets Vue's production build in either mode.
+- `mode="development"`. The app keeps the default, `production`, so
+  every result here is a production-mode result. Development mode reads
+  translations straight from the `.ftl` files, asks a visitor to reload
+  an out-of-date page, and adds two warnings: one when two elements on
+  a page share an `id` (the mistake m57 writes), and a browser console
+  warning when Vue's first render of a part it builds in the browser
+  differs from the HTML the server sent (the mistake m14 writes). A
+  production page does not load that browser check. Vue's own
+  development warnings stay off in either mode, because the browser
+  gets Vue's production build.
 """
 
 [setup]

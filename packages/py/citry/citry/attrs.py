@@ -318,8 +318,8 @@ def reject_script_capable_attr_name(
 
 # Attribute names that Citry writes into the page and reads again later.
 # After rendering, the server replaces each empty `<template c-render-id>`
-# with a child component's HTML; `data-cid` and `data-cid-*` mark component
-# roots and Events instances; `data-ccss-*` scopes CSS variables; the
+# with a child component's HTML; `data-cid-*` marks component roots, and
+# `data-cid` stays reserved beside it; `data-ccss-*` scopes CSS variables; the
 # `data-cev-*` and `data-citry-*` names below are read by the Events, i18n,
 # Vue, and stylesheet code in the browser and by the render cache. Citry UI
 # writes names of its own under `data-citry-` through `c-bind`, so only the

@@ -65,26 +65,52 @@ State holds, as in the example above. With server storage
 cache entry expires or the cache drops it.
 
 A token expires 24 hours after Citry issues it, with either storage.
-Citry issues a new token each time it renders the component and after
-each call that changes State. The expiry limits how long a copied token
-stays useful. A call with an expired token does not run its handler: it
-gets a `stale_state` error, and calls from that component keep failing
-until the visitor reloads the page, which brings a fresh token.
+Citry issues a new token each time it renders the component, after each
+call that changes State, and after a call made once the token is past
+half its lifetime (12 hours by default). So a component that gets a call
+at least once every half lifetime keeps working. A component that gets no
+call in the second half of its token's life expires.
+
+Each component on the page has its own token, renewed only by its own
+calls. A component whose calls all go to
+[`detached`](/events/actions/#skip-the-queue-for-a-read-only-call)
+handlers, which are read-only handlers that skip the call queue, expires
+on schedule, because those calls never get a new token.
+
+A copied token stays useful until it expires, and longer if someone keeps
+calling with it. Anyone who sends calls with a copy at least once per
+half lifetime keeps getting new tokens, as the page does, even when it
+calls only handlers that read State.
+
+Citry's browser code keeps the State token out of the URL, which server
+and proxy logs record. Handlers use POST unless they opt into GET with
+`@event(methods=("GET",))` or `Events._methods`. A POST call sends the
+token in the request body. A GET call to a handler that declares `state`
+sends it in the `X-Citry-State-Token` header.
+
+Four things can still put a token in a log. The server also reads a
+token from the `_citry_state_token` query parameter, so a client of your
+own that sends it there logs it. Logs written before 1.3.0 hold the
+tokens that Citry's browser code sent in the URL. When a GET call
+gets an `invalid_state` answer from a server from before 1.3.0, or from
+any server when the event URL is on another origin or the call goes
+through a custom transport, Citry's browser code sends the call once
+more with the token in the URL. A log or tracing tool that records
+request headers also records `X-Citry-State-Token`, so
+leave that header out of it. Whoever can read a logged token can keep
+it alive by calling with it, as described above. A token grants no
+permission, so check permissions in every handler.
+
+A call with an expired token does not run its handler: it gets a
+`stale_state` error, and calls from that component keep failing until
+the visitor reloads the page, which brings a fresh token.
 [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)
 shows how to tell the visitor.
 
-To change the lifetime, set `State._max_age` to a `timedelta` of at least
-one second. Token times are whole seconds, so a token can stop working up
-to one second early. No setting turns expiry off. Changing `_max_age` later does not change the tokens
-Citry has already issued.
-
-```python
-from datetime import timedelta
-
-class State:
-    project_id: int
-    _max_age = timedelta(days=7)
-```
+To change the lifetime, set [`State._max_age`](/events/state/#max-age).
+A call renews a token once it is past half its lifetime, so set it to at
+least twice the longest time a page may go without a call. No setting
+turns expiry off.
 
 To stop accepting every signed token issued so far, give
 `Citry(secret=...)` a new secret and drop the one that signed them. A page
@@ -99,15 +125,16 @@ of its own if you want to replace it separately. Citry accepts a value
 signed with any entry of the secret list, so `Citry(...)` raises an error
 when the secret or an entry is empty or only whitespace.
 
-Two State settings narrow what the browser sees and changes. Neither one
-replaces the permission check:
+Two [State settings](/events/state/#state-settings) narrow what the
+browser sees and changes. Neither one replaces the permission check:
 
 - `State._public` lists the fields the browser can read as plain values
   through `$state` and bindings. The other fields still travel to the
   browser, inside the signed value.
 - `State._model` lists the public fields the browser may change.
 
-To keep State values out of the page, set `State._storage = "server"`.
+To keep State values out of the page, set
+[`State._storage = "server"`](/events/state/#storage).
 Citry then keeps the values in its configured cache and sends only a lookup
 key. This hides only the fields left out of `_public`: public fields are
 still sent as plain values, so list the fields the browser needs in
@@ -115,12 +142,13 @@ still sent as plain values, so list the fields the browser needs in
 them. Server storage does not replace the permission check either: still
 authorize every use of the restored values.
 
-Server storage adds a cache entry at every render and after every call
-that changes State, and keeps each one until it expires: after
-`State._max_age`, or after 24 hours when you do not set it. With several
+Server storage adds a cache entry for each token Citry issues (see
+above), and keeps each entry until it expires: after `State._max_age`,
+or after 24 hours when you do not set it. With several
 server processes, use a shared backend and set its memory limit and
 eviction policy. A browser write that would make the stored
-State larger than `State._max_bytes` (64 KiB by default) gets a 422
+State larger than [`State._max_bytes`](/events/state/#max-bytes)
+(64 KiB by default) gets a 422
 before the handler runs. With the default signed storage, Citry makes
 the same check when the call gets a new token. The limit covers only
 browser writes, so when a handler copies request data (anything a visitor
@@ -139,10 +167,15 @@ the page. Check that the current user may perform the action, in one of
 three places:
 
 - `_guard` on `Events`, which runs before every handler of the component;
-- `@event(guard=...)`, which runs before one handler;
+- `@event(guard=...)`, which adds a second check for one handler and
+  runs after `_guard`;
 - a check inside the handler body.
 
-A guard rejects a call by raising `EventError`:
+A guard refuses a call by raising `EventError`, or by returning
+`False` or another value that means "no" (see below). An `EventError`,
+raised or returned, lets you choose the message and status; returning
+`False` answers with status 403 and the message "You are not allowed to
+make this call." For example:
 
 ```citry
 from citry.ext.events import EventError
@@ -172,6 +205,125 @@ Use a guard for a rule every handler shares. Put a check that depends on
 the submitted data in the handler body, where the data has already been
 validated.
 
+Return `None` (or nothing) or `True` to let the call go ahead. A guard
+can also refuse the call by returning a value that means "no":
+
+- A returned `EventError` refuses the call as if the guard had raised
+  it, with the error's own status and message.
+- Any other exception, such as Django's `PermissionDenied()`, refuses
+  it with a 403 and the message above. The exception's own text never
+  reaches the browser.
+- Any false value other than `None`, such as `False`, `0`, an empty
+  list or an empty QuerySet, refuses it with a 403.
+
+A guard that returns a function or other callable, as
+`return self.can_edit` does when the `()` is missing, fails the call
+with a 500, and the server log names the guard, since the check it
+meant to run never ran. Any other true value lets the call go ahead,
+and Citry logs a warning that names the guard.
+
+Citry tests a returned value for true or false once, which runs a
+QuerySet's database query; return `queryset.exists()` instead of the
+QuerySet so the query loads no rows.
+If that test raises an error, the call fails with a 500, as when the
+guard itself raises one. Under an async server such as Starlette or
+FastAPI, Citry runs guards on the event loop, where Django refuses a
+database query (including `.exists()`) with `SynchronousOnlyOperation`,
+so such a guard refuses every call with a 500.
+
+`None` lets the call go ahead, so return `False` explicitly: an
+expression such as `user and user.is_staff` gives `None` when there is
+no user.
+
+A handler's own guard runs in addition to the component's `_guard`.
+Citry first builds `self.context` with `_context`, so both guards can
+read it. It then runs `_guard`, then the handler's guard. The first one
+that refuses the call stops it, and nothing after it runs.
+
+To check every component the same way, set an app-wide guard once:
+
+```python
+citry = Citry(
+    extensions_defaults={"events": {"_guard": require_login}},
+)
+```
+
+It runs wherever a component's `Events` class does not define `_guard`.
+A component that defines its own `_guard`, even `_guard = None`,
+replaces the app-wide one, so return `require_login(self)` from the
+component's `_guard` when both must run. Return its result rather than
+only calling it: a guard that refuses by returning `False` or an
+error refuses nothing when its caller drops that value.
+
+Some handlers must accept callers the rest of the component refuses,
+such as a public `ping` on a component that needs a login. The
+component's `_guard` can let them through by checking `self.event.name`,
+the name of the handler being called:
+
+```citry
+class Dashboard(Component):
+    class Events:
+        def _guard(self):
+            if self.event.name == "ping":  # public
+                return
+            return require_login(self)
+
+        def ping(self):
+            return {"ok": True}
+
+        def save(self, data: SaveIn):
+            ...
+```
+
+This keeps every access rule of the component in one place, so a
+reader sees which handlers are public without opening each one.
+`self.event.name` is the name the browser calls: the method name, or
+the `name=` given to `@event`. Renaming a handler changes which rule
+applies to it, and Citry does not warn you: a renamed `ping` no longer
+matches, so it falls back to the login check. Update the guard when you
+rename a handler.
+
+For an occasional public handler, set `@event(component_guard=False)`
+on the handler instead. It skips the component's `_guard`, or the
+app-wide one when the component has none, for that handler only.
+`_context` still runs. Anyone who can reach the page can then call the
+handler, so check inside it if it needs a check. `component_guard`
+takes only `True` or `False`:
+
+```citry
+from citry.ext.events import event
+
+
+class Newsletter(Component):
+    class Events:
+        _guard = require_login
+
+        @event(component_guard=False)
+        def sign_up(self, data: SignUpIn):
+            ...
+```
+
+A `guard=` on the same handler still runs, so a public handler can keep
+a check of its own, as in
+`@event(component_guard=False, guard=rate_limit)`.
+
+Put every setting for a handler in one `@event(...)`. Citry raises an
+error when a second `@event(...)` decorates the same function, or when
+one function is decorated for two classes, because only one set of
+settings would take effect and a `guard=` could be dropped. Give each
+class its own function. It also raises one when a decorator above `@event(...)`
+hides its settings; write such a decorator with `functools.wraps`.
+
+Write guards and `_context` as plain `def` functions, not `async def`.
+Citry calls them without awaiting them, on WSGI and ASGI servers alike,
+so it refuses an async one with an error when the component class is
+defined. A decorator you put on a guard must run any async function it
+calls to the end, for example with `asgiref.sync.async_to_sync`. Citry
+cannot see inside the decorator, so a call it starts and never finishes
+refuses nothing. Put a check that needs `await` at the start of an
+`async def` handler and raise `EventError` there, as a guard would. An
+`async def` handler needs an ASGI server.
+
 Citry does not log users in. Your web framework does, and a handler reads
 the user from the `request` it receives, or from `request.native` for the
 framework's own request object.
@@ -195,68 +347,69 @@ if data.next.startswith("/"):
     return actions.Redirect(data.next)
 ```
 
-Use a check that parses the URL the way a browser does. Under Django, use
-`url_has_allowed_host_and_scheme`. In this example the login page copies
-its `next` query parameter into a hidden `<input name="next">`, so the
-handler receives it as `data.next`:
+Use [`local_url_or()`][citry.ext.events.local_url_or] instead. It reads
+the URL the way a browser does and returns it when the browser would
+load it from your site, or the fallback you pass when it would not. In
+this example the login page copies its `next` query parameter into a
+hidden `<input name="next">`, so the handler receives it as `data.next`:
 
 ```python
-from django.utils.http import (
-    url_has_allowed_host_and_scheme,
-)
+from citry.ext.events import actions, local_url_or
 
 
 class Events:
     def login(self, data: LoginIn, request):
         # log_in is your own code that checks the password
         log_in(request, data)
-        host = request.native.get_host()
-        is_safe = url_has_allowed_host_and_scheme(
-            data.next,
-            allowed_hosts={host},
-            require_https=request.native.is_secure(),
-        )
-        target = data.next if is_safe else "/"
-        return actions.Redirect(target)
+        return actions.Redirect(local_url_or(data.next, "/"))
 ```
 
-In a Flask or FastAPI app, install the `django` package and call the
-same function. It needs no Django settings. Pass the host names your
-site serves:
+By default only a URL with no host name passes, such as `/orders/7` or
+`?page=2`. To also accept a full URL on your own site, pass your host
+names as `allowed_hosts`. Write a port as part of the name, such as
+`"shop.example:8000"`; a URL must spell the host the same way. If your
+site is served over HTTPS, also pass `require_https=True`. It refuses
+`http:` URLs and URLs that start with `//`, so a redirect cannot drop to
+plain HTTP:
 
 ```python
-from django.utils.http import (
-    url_has_allowed_host_and_scheme,
-)
-
-is_safe = url_has_allowed_host_and_scheme(
+target = local_url_or(
     data.next,
+    "/",
     allowed_hosts={"shop.example"},
     require_https=True,
 )
-target = data.next if is_safe else "/"
 ```
 
-`actions.Redirect` raises `ValueError` for a URL with a control
-character, such as a tab, even when Django's function accepts it. The
-call then fails instead of redirecting, which is safe.
+List your host names in code rather than reading them from the
+request's `Host` header, which the client sends and can set to
+anything.
 
-If you write your own check, do what Django's function does: check the
-URL twice, once as written and once with every `\` changed to `/`, and
-refuse it when either reading leaves your site. A check that only reads
-`urllib.parse.urlsplit(url).hostname`, and accepts an empty host name or
-your own, lets these through:
+The check returns the fallback for:
 
-- `https://other.example\@shop.example/`: Python sees `shop.example`,
-  browsers go to `other.example`;
-- `https:\\other.example/` and `/\/other.example/`: Python sees no host
-  name, browsers go to `other.example`;
-- `https:other.example/`, `https:/other.example/`, and
-  `///other.example/`: Python sees no host name, and browsers can go to
-  `other.example`.
+- a host that is not in `allowed_hosts`, including `//other.example/`
+  and `/\other.example/`;
+- any scheme other than `http:` and `https:`, such as `javascript:`;
+- a user name before `@`, such as `https://me@shop.example/`;
+- a control character anywhere, such as a tab or a newline.
 
-Citry plans a built-in check
-([#568](https://github.com/citry-dev/citry/issues/568)).
+The fallback goes through the same check, with the same
+`allowed_hosts` and `require_https`. A fallback that fails it, such as
+`"https://shop.example/"` with no `allowed_hosts`, raises `ValueError` on
+every call, so a mistyped fallback fails the first time the handler
+runs.
+
+When you need `True` or `False` instead, for example to show an error,
+call [`is_local_url(data.next)`][citry.ext.events.is_local_url]. It
+takes the same `allowed_hosts` and `require_https`, and has no
+fallback.
+
+You do not need Django for this. The rules follow Django's
+`url_has_allowed_host_and_scheme`. The main differences: host names
+match regardless of ASCII letter case, and a URL with a control
+character, or with whitespace other than a space at either end, is
+refused. Django accepts a URL with a tab or a newline, which
+`actions.Redirect` then refuses with `ValueError`.
 
 ## Check URL attributes { #check-url-attributes }
 
@@ -313,6 +466,15 @@ Every event call that is not a `GET` must pass these checks:
   request's `Host` header. Behind a reverse proxy, the proxy must pass the
   browser's `Host` header on; see
   [Run behind a proxy](/advanced/web-frameworks/#run-behind-a-proxy).
+- When the browser sends an `Origin` header and your server says the
+  call arrived over https, the `Origin` must start with `https:`.
+  Anyone on the network can rewrite a plain-http page on the same host,
+  and this check stops such a page from calling your app. When your
+  server says the call arrived over plain http, Citry accepts an
+  `Origin` of either scheme. So behind a proxy that serves your site
+  over https and passes plain http to your app, this check runs only if
+  your server reads the scheme the proxy forwards; see
+  [Read the proxy's scheme](/advanced/web-frameworks/#read-the-proxys-scheme).
 - When the browser sends a `Sec-Fetch-Site` header, it must be
   `same-origin` or `none`.
 
@@ -475,7 +637,10 @@ FastAPI, Starlette, Flask, and plain ASGI or WSGI apps have no standard
 CSRF token. If your app uses one, check it with a function set as `_csrf`
 on `Events` for the whole component, or with `@event(csrf=...)` for one
 handler. The function receives the request and raises `EventError` to
-reject the call:
+reject the call. A handler's `csrf=` replaces the component's `_csrf`
+for that handler; unlike guards, the two do not both run. Like a guard,
+the function must be a plain `def` function, and Citry refuses an
+`async def` one when the component class is defined:
 
 ```citry
 from citry.ext.events import EventError, event

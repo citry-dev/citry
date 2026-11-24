@@ -2,7 +2,7 @@
 HTML, ARIA, SVG, and DOM event names and HTML attribute values. Generated; do not edit.
 
 Run python scripts/generate_html_attribute_values.py to refresh it.
-WHATWG HTML Standard, Last Updated 20 October 2026. Generated 2026-10-21 from these sources:
+WHATWG HTML Standard, Last Updated 24 November 2026. Generated 2026-11-24 from these sources:
 - WHATWG HTML Standard, index: https://html.spec.whatwg.org/multipage/indices.html
 - WHATWG HTML Standard, obsolete features: https://html.spec.whatwg.org/multipage/obsolete.html
 - WAI-ARIA 1.2, W3C Recommendation: https://www.w3.org/TR/wai-aria-1.2/
@@ -219,8 +219,8 @@ ELEMENT_ATTRIBUTES: Final[dict[str, tuple[str, ...]]] = {'a': ('download', 'href
  'input': ('accept', 'alpha', 'alt', 'autocomplete', 'checked', 'colorspace', 'dirname', 'disabled', 'form',
            'formaction', 'formenctype', 'formmethod', 'formnovalidate', 'formtarget', 'height', 'list', 'max',
            'maxlength', 'min', 'minlength', 'multiple', 'name', 'pattern', 'placeholder', 'popovertarget',
-           'popovertargetaction', 'readonly', 'required', 'size', 'src', 'step', 'title', 'type', 'value',
-           'width'),
+           'popovertargetaction', 'readonly', 'required', 'size', 'src', 'step', 'switch', 'title', 'type',
+           'value', 'width'),
  'ins': ('cite', 'datetime'),
  'label': ('for',),
  'li': ('value',),
@@ -288,7 +288,8 @@ BOOLEAN_ATTRIBUTES: Final[dict[str, tuple[str, ...]]] = {'allowfullscreen': ('if
  'shadowrootclonable': ('template',),
  'shadowrootcustomelementregistry': ('template',),
  'shadowrootdelegatesfocus': ('template',),
- 'shadowrootserializable': ('template',)}
+ 'shadowrootserializable': ('template',),
+ 'switch': ('input',)}
 
 # Every aria-* state and property of WAI-ARIA 1.2 and the 1.3 draft, deprecated ones included.
 ARIA_ATTRIBUTES: Final[frozenset[str]] = frozenset(('aria-activedescendant', 'aria-atomic', 'aria-autocomplete', 'aria-braillelabel',
@@ -319,22 +320,32 @@ OBSOLETE_ELEMENTS: Final[frozenset[str]] = frozenset(('acronym', 'applet', 'base
  'isindex', 'keygen', 'listing', 'marquee', 'menuitem', 'multicol', 'nextid', 'nobr', 'noembed', 'noframes',
  'param', 'plaintext', 'rb', 'rtc', 'spacer', 'strike', 'tt', 'xmp'))
 
-# Lowercase DOM event names a listener such as @click may name, without the on prefix.
-DOM_EVENT_NAMES: Final[frozenset[str]] = frozenset(('abort', 'afterprint', 'animationcancel', 'animationend', 'animationiteration', 'animationstart', 'auxclick',
- 'beforeinput', 'beforematch', 'beforeprint', 'beforetoggle', 'beforeunload', 'blur', 'cancel', 'canplay',
+# Lowercase DOM event names, without the on prefix: the ones a listener such as @click may
+# name, and the ones the browser fires at document or window, which Dispatch refuses too.
+DOM_EVENT_NAMES: Final[frozenset[str]] = frozenset(('abort', 'afterprint', 'animationcancel', 'animationend', 'animationiteration', 'animationstart',
+ 'appinstalled', 'auxclick', 'beforecopy', 'beforecut', 'beforeinput', 'beforeinstallprompt', 'beforematch',
+ 'beforepaste', 'beforeprint', 'beforetoggle', 'beforeunload', 'beforexrselect', 'blur', 'cancel', 'canplay',
  'canplaythrough', 'change', 'click', 'close', 'command', 'compositionend', 'compositionstart',
  'compositionupdate', 'contentvisibilityautostatechange', 'contextlost', 'contextmenu', 'contextrestored',
- 'copy', 'cuechange', 'cut', 'dblclick', 'drag', 'dragend', 'dragenter', 'dragexit', 'dragleave', 'dragover',
- 'dragstart', 'drop', 'durationchange', 'emptied', 'encrypted', 'ended', 'error', 'focus', 'focusin',
- 'focusout', 'formdata', 'fullscreenchange', 'fullscreenerror', 'gotpointercapture', 'hashchange', 'input',
- 'invalid', 'keydown', 'keypress', 'keyup', 'languagechange', 'load', 'loadeddata', 'loadedmetadata',
- 'loadstart', 'lostpointercapture', 'message', 'messageerror', 'mousedown', 'mouseenter', 'mouseleave',
- 'mousemove', 'mouseout', 'mouseover', 'mouseup', 'offline', 'online', 'pagehide', 'pagereveal', 'pageshow',
+ 'copy', 'cuechange', 'cut', 'dblclick', 'devicemotion', 'deviceorientation', 'deviceorientationabsolute',
+ 'domactivate', 'domattrmodified', 'domcharacterdatamodified', 'domcontentloaded', 'domfocusin',
+ 'domfocusout', 'dommousescroll', 'domnodeinserted', 'domnodeinsertedintodocument', 'domnoderemoved',
+ 'domnoderemovedfromdocument', 'domsubtreemodified', 'drag', 'dragend', 'dragenter', 'dragexit', 'dragleave',
+ 'dragover', 'dragstart', 'drop', 'durationchange', 'emptied', 'encrypted', 'ended', 'enterpictureinpicture',
+ 'error', 'focus', 'focusin', 'focusout', 'formdata', 'freeze', 'fullscreenchange', 'fullscreenerror',
+ 'gamepadconnected', 'gamepaddisconnected', 'gotpointercapture', 'hashchange', 'input', 'installresult',
+ 'invalid', 'keydown', 'keypress', 'keyup', 'languagechange', 'leavepictureinpicture', 'load', 'loadeddata',
+ 'loadedmetadata', 'loadstart', 'lostpointercapture', 'message', 'messageerror', 'mousedown', 'mouseenter',
+ 'mouseleave', 'mousemove', 'mouseout', 'mouseover', 'mouseup', 'mousewheel', 'mozfullscreenchange',
+ 'mozfullscreenerror', 'offline', 'online', 'orientationchange', 'pagehide', 'pagereveal', 'pageshow',
  'pageswap', 'paste', 'pause', 'play', 'playing', 'pointercancel', 'pointerdown', 'pointerenter',
- 'pointerleave', 'pointermove', 'pointerout', 'pointerover', 'pointerrawupdate', 'pointerup', 'popstate',
- 'progress', 'ratechange', 'rejectionhandled', 'reset', 'resize', 'scroll', 'scrollend', 'scrollsnapchange',
- 'scrollsnapchanging', 'securitypolicyviolation', 'seeked', 'seeking', 'select', 'selectionchange',
- 'selectstart', 'slotchange', 'stalled', 'storage', 'submit', 'suspend', 'timeupdate', 'toggle',
- 'touchcancel', 'touchend', 'touchmove', 'touchstart', 'transitioncancel', 'transitionend', 'transitionrun',
- 'transitionstart', 'unhandledrejection', 'unload', 'visibilitychange', 'volumechange', 'waiting',
- 'webglcontextcreationerror', 'webglcontextlost', 'webglcontextrestored', 'wheel'))
+ 'pointerleave', 'pointerlockchange', 'pointerlockerror', 'pointermove', 'pointerout', 'pointerover',
+ 'pointerrawupdate', 'pointerup', 'popstate', 'prerenderingchange', 'progress', 'ratechange',
+ 'readystatechange', 'rejectionhandled', 'reset', 'resize', 'resume', 'scroll', 'scrollend',
+ 'scrollsnapchange', 'scrollsnapchanging', 'search', 'securitypolicyviolation', 'seeked', 'seeking', 'select',
+ 'selectionchange', 'selectstart', 'slotchange', 'stalled', 'storage', 'submit', 'suspend', 'timeupdate',
+ 'toggle', 'touchcancel', 'touchend', 'touchmove', 'touchstart', 'transitioncancel', 'transitionend',
+ 'transitionrun', 'transitionstart', 'unhandledrejection', 'unload', 'visibilitychange', 'volumechange',
+ 'waiting', 'waitingforkey', 'webglcontextcreationerror', 'webglcontextlost', 'webglcontextrestored',
+ 'webkitanimationend', 'webkitanimationiteration', 'webkitanimationstart', 'webkitfullscreenchange',
+ 'webkitfullscreenerror', 'webkittransitionend', 'wheel'))

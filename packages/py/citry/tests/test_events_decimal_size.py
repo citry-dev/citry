@@ -709,7 +709,8 @@ def test_a_cached_render_with_money_in_its_state_is_replayed():
                 return None
 
     entry = next(iter(render_prepared_direct(Card()).context.extra[EVENTS_EXTRA_KEY]))
-    assert _stage_cached_render(c, entry).frame_markers == ((0, ('data-cid="c1abcdef"',)),)
+    staged = _stage_cached_render(c, entry)
+    assert [item.render_id for item in dict(staged.extra_items)[EVENTS_EXTRA_KEY]] == ["c1abcdef"]
 
 
 ################################################

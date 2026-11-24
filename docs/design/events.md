@@ -978,7 +978,7 @@ declarations and no State on the subclass fail at definition, the same as
   | `_public` | tuple of field names | all fields | Which fields templates and client bindings may touch, and the only fields whose plain values ship client-side (4.4, 7.2). Omission from `_public` is how a field becomes server-only. |
   | `_model` | tuple of field names | same as `_public` | Which public fields the client may write, through two-way bindings or `$state`; declare it only to clamp down. Must be a subset of `_public` (7.2). |
   | `_storage` | `"signed"` \| `"server"` | `"signed"` | Where the round-trip State lives: signed into the client token (7.1), or, opt-in, a server-side store keyed by an opaque token (the livecomponents migration's step one, 10). |
-  | `_max_bytes` | `int`, or `None` with server storage | `8192`; `65536` with server storage | Signed storage: mint-time cap on the serialized State, a design-smell canary, not a technical limit (7.1); a browser write that would make the State larger answers 422 `invalid_args` before the handler runs, when the call would return a new token (a caller instance that accepts the `state` action). Server storage: browser writes may not grow the stored State past it; the call answers 422 `invalid_args` before the handler runs. `None` turns that check off, and is a definition error for signed storage. |
+  | `_max_bytes` | `int`, or `None` with server storage | `8192`; `65536` with server storage | Signed storage: mint-time cap on the serialized State, a design-smell canary, not a technical limit (7.1); a browser write that would make the State larger answers 422 `invalid_args` before the handler runs, when the call would return a new token (a caller instance whose answer can carry the `state` action; a form posted without JavaScript cannot). Server storage: browser writes may not grow the stored State past it; the call answers 422 `invalid_args` before the handler runs. `None` turns that check off, and is a definition error for signed storage. |
   | `_max_age` | `timedelta` | 24 hours | Token expiry in both storage modes; expired tokens answer `stale_state` and degrade per component, not per page (7.1). Server storage uses it as the cache entry's lifetime. A page that stays open longer sets a longer `timedelta`; there is no "never expires" value, and a value under one second raises `ValueError`. |
 
   Details and the security doctrine in 7.2.
@@ -1143,7 +1143,7 @@ anything when called:
 | `actions.Render(element, target=None, swap="morph")` | `render` | Render the element server-side, deliver it as a fragment, morph it into `target` (default: the calling instance). |
 | `actions.Data(value)` | `data` | Resolve an imperative client caller's promise with this JSON value. Declarative `@c-*` bindings do not expose the promise result. |
 | `actions.Dispatch(name, detail=None)` | `event` | Dispatch a named browser event (DOM CustomEvent; `onEvent` listeners and plain `addEventListener` react). |
-| `actions.Redirect(url)` | `redirect` | Navigate the page. |
+| `actions.Redirect(url)` | `redirect` | Navigate the page. The action checks only the scheme; a handler checks a URL from the request with `local_url_or()` (`citry/ext/events/local_urls.py`) before it builds the action. |
 | `actions.PushUrl(url)` / `actions.ReplaceUrl(url)` (v1.x) | `url` | History update without navigation, pushing onto or replacing the top of the history stack (the htmx `HX-Push-Url` / `HX-Replace-Url` sibling pair). The client preserves `history.state`; Citry does not synthesize `popstate` or restore component HTML or State on later Back/Forward navigation. |
 | `actions.Download(content, filename, content_type=...)` (v1.x) | none (escape) | A file download. Sugar over the raw-response escape below, so its handler uses `@event(bundle=False)`, runs through the per-event HTTP route, leaves State unchanged, and returns the download bare or as a list's only element. It cannot share a list or request with another result. The client accepts a successful attachment response for one call, buffers the blob, and starts the save only after the call survives timeout and supersession checks. |
 
@@ -1325,9 +1325,9 @@ The component-level config surface, exhaustively:
 
 | Attribute | Type / signature | Default | What it does |
 |---|---|---|---|
-| `_guard` | `def _guard(self): ...` inline, or `_guard = my_check` assigning any `callable(events)`; both bind identically. Receives the Events instance with the ambient per-call attributes populated (`self.state`, `self.context`, `self.request`, `self.event`; the unvalidated payload is `self.event.args`, with the host CSRF field names of 3.5 removed). Raise `EventError` (e.g. `status=403`) to deny, return to allow. It takes no `data` because one guard covers handlers with different schemas; payload-dependent authorization belongs in the handler body, where `data` is typed. | engine default from `extensions_defaults["events"]`, else none | Authorization for every handler of the component. Resolution is most-specific-wins: `@event(guard=...)` beats `_guard` beats the engine default (7.4). |
-| `_context` | `def _context(self) -> Any`; receives the Events instance (request populated, guards not yet run) | engine default from `extensions_defaults["events"]`, else none | Builds the per-call `context` injectable (3.6). Usually configured once, engine-wide. |
-| `_csrf` | `"auto"` \| `False` \| `callable(request) -> None` (raise to reject) | `"auto"` | HTTP CSRF policy for the component's handlers (7.4). Beneath any setting sits the always-on baseline: the `X-Citry-Events` header requirement (HTML forms cannot attach custom headers, and cross-origin JS attempting it hits a CORS preflight the browser blocks) plus `Origin` / `Sec-Fetch-Site` same-origin checks (browser-set, unforgeable by page JS). `"auto"` adds the host token where the host has one (Django); `False` drops only citry's own token layer (the baseline never turns off, and a host framework's token check, like Django's `CsrfViewMiddleware`, is governed by the host and stays on, 7.4); a callable replaces citry's token check and runs on top of the baseline and any host check. |
+| `_guard` | `def _guard(self): ...` inline, or `_guard = my_check` assigning any plain `callable(events)`; both bind identically. It must not be `async def` (nor a generator, nor an object whose `__call__` is either): the dispatcher calls it without awaiting, so its body would never run, and `validate_callable_value` refuses one at class definition (at decoration for `@event(guard=...)`). A call whose guard still returns a coroutine, another awaitable, a generator, or an async generator answers `handler_error`; a `_context` that returns a coroutine does too. Receives the Events instance with the ambient per-call attributes populated (`self.state`, `self.context`, `self.request`, `self.event`; the unvalidated payload is `self.event.args`, with the host CSRF field names of 3.5 removed). Raise `EventError` (e.g. `status=403`), or return a value that means "no", to deny: a returned `EventError` answers exactly as raising it would (its own status, message and field errors); any other returned exception instance or exception class, and any false value other than `None` (`False`, `0`, an empty list, an empty QuerySet, `numpy.False_`), answers 403 `forbidden` with the message "You are not allowed to make this call.", so the exception's own text never reaches the browser. Return `None` or `True` to allow. A returned function or other callable (`return self.can_edit` without the `()`) answers 500 `handler_error` and logs a `TypeError` naming the guard and the callable: the check it names never ran, so allowing the call would let every caller through. Any other true value also allows the call and logs a warning naming the guard and the component (the value's type, never the value), so a stray value shows up in the server log. The dispatcher tests the value for true or false once; that runs app code (`__bool__` or `__len__`, a lazy QuerySet's query), and when it raises, the call answers 500 `handler_error` (or, for an `EventError`, that error), as a guard that raises does: the guard gave no answer, and a 403 would show a broken check as a caller who is not allowed. It takes no `data` because one guard covers handlers with different schemas; payload-dependent authorization belongs in the handler body, where `data` is typed. | engine default from `extensions_defaults["events"]`, else none | Authorization for every handler of the component. The component's `_guard` replaces the engine default; a handler's `@event(guard=...)` does not replace either one but runs after it, and either refusing refuses the call. Only `@event(component_guard=False)` skips this guard for one handler (7.4). |
+| `_context` | `def _context(self) -> Any`, plain (not `async def`, refused at class definition like `_guard`); receives the Events instance (request populated, guards not yet run) | engine default from `extensions_defaults["events"]`, else none | Builds the per-call `context` injectable (3.6). Usually configured once, engine-wide. |
+| `_csrf` | `"auto"` \| `False` \| plain `callable(request) -> None` (raise to reject; `async def` refused at class definition, and a returned coroutine answers `csrf_failed`) | `"auto"` | HTTP CSRF policy for the component's handlers (7.4). Beneath any setting sits the always-on baseline: the `X-Citry-Events` header requirement (HTML forms cannot attach custom headers, and cross-origin JS attempting it hits a CORS preflight the browser blocks) plus `Origin` / `Sec-Fetch-Site` same-origin checks (browser-set, unforgeable by page JS). `"auto"` adds the host token where the host has one (Django); `False` drops only citry's own token layer (the baseline never turns off, and a host framework's token check, like Django's `CsrfViewMiddleware`, is governed by the host and stays on, 7.4); a callable replaces citry's token check and runs on top of the baseline and any host check. |
 | `_methods` | tuple of HTTP method names | `("POST",)` | The allowed methods for handlers that do not set `@event(methods=...)`. GET opts a handler into read-only, cacheable-in-principle (served `no-store` until GET caching lands, section 16), pasteable-URL calls (7.4). |
 | `_debounce` / `_throttle` | `int`, milliseconds | none | Component-wide client-timing defaults; see the `@event` row below for the mechanics. |
 
@@ -1335,13 +1335,29 @@ State's own meta lives on State (`_public` / `_model`, sections 3.2 and
 7.2), not here: Events holds handlers, State holds state.
 
 The per-handler decorator, exhaustively (kwargs need no underscore, they
-live in no shared namespace):
+live in no shared namespace). Each call stores one `EventOptions` on the
+function, so one `@event(...)` carries every setting of a handler: a
+second `@event(...)` on a function that already has settings (directly,
+copied by `functools.wraps`, or further down its `__wrapped__` chain)
+raises `ValueError` at decoration (`refuse_stacked_event`), since it
+would replace the first one's settings and drop its `guard=`. Applying
+`@event` once and assigning the result to several `Events` classes is
+fine. Apart from `@event`, which stores its settings on the function it
+decorates, Citry writes nothing onto a handler function: the
+`ViewEvents` verb shim gives a verb handler its HTTP method from the
+class when the component class is created (`verb_handler_methods`), so
+one function used in several classes accepts, in each, the methods that
+class gives it. When the component class is defined, a handler that
+does not carry the `@event` settings of a function down its
+`__wrapped__` chain (a decorator that kept `__wrapped__` but not the
+attributes) is refused too (`refuse_hidden_event_settings`).
 
 | `@event(...)` key | Type | Default | What it does |
 |---|---|---|---|
 | `name` | `str` | the method name | Wire name override: rename the Python method without touching templates. |
 | `methods` | tuple of HTTP method names | the component's `_methods` | Per-handler method allowlist. |
-| `guard` | same signature as `_guard` | the component's `_guard` | Per-handler authorization; most specific wins, it replaces rather than stacks. |
+| `guard` | same signature as `_guard` | none | Per-handler authorization that adds to the component's guard: the dispatcher runs `_context`, then the component-level guard (the component's `_guard`, else the engine default), then this one, and either refusing (raising, or returning an exception or a false value other than `None`) refuses the call. The same function given at both levels runs once. |
+| `component_guard` | `bool` (`True` or `False` only; any other value fails at decoration) | `True` | `False` skips the component-level guard (the component's `_guard`, or the engine default when the component sets none) for this handler only, for a handler that must be more open than its component, such as a public sign-up call. `guard` and `_context` still run. The user docs lead with the other way to open a handler, a component `_guard` that returns early for named handlers (`if self.event.name == "ping": return`), because it keeps every access rule in one place; its cost is that renaming a handler silently moves it to the guard's other branch (fail closed when that branch is the stricter rule). `component_guard=False` is the only per-handler setting that drops the component-level guard; a component's `_guard = None` removes the engine default for every handler of that component, and an `on_event` hook that answers a call skips every guard (3.7). |
 | `csrf` | same values as `_csrf` | the component's `_csrf` | Per-handler CSRF override (e.g. `csrf=False` on a token-authenticated endpoint). |
 | `debounce` / `throttle` | `int`, milliseconds | the component's `_debounce` / `_throttle` | Client-side timing instructions, not server machinery: they travel in the class descriptor (4.4) and the runtime holds calls back before sending, so the server never sees the suppressed ones (server-side rate limiting is the `on_event` hook or a guard). An explicit modifier on a binding overrides both levels. |
 | `latest_wins` | `bool` | `False` | Newest-wins for this handler on one instance, opt-in (5.6): when a newer call to this handler enqueues from the same anchor, queued-not-sent predecessors are dropped before sending, and an in-flight predecessor is abandoned (its response's actions are dropped on arrival); either way the predecessor's promise rejects with the `superseded` reason and the drop event fires (the settle table, 5.2). Opting in is the author's statement that overlapping runs of this handler are safe (idempotent), because the server still executes every call it received. The default preserves every call: a killed save is data loss, so newest-wins is never a default (14.3.4). Like the timing hints, it travels in the class descriptor (4.4), which is how the runtime knows it at queue time. |
@@ -1354,15 +1370,22 @@ semantics are two handlers, which keeps a binding's behavior readable
 from the handler it names. `detached` only allows a call outside the
 queue; the call site still asks for it with `wait: false`.
 
+The extension copies every `@event` setting onto the class's
+`EventHandler` when the class is created. The dispatcher and
+`build_events_manifest`, which writes the handler list for the browser,
+read them from there, never from the function. So changing a shared
+function's `@event` settings later cannot change how a class that
+already exists handles its calls.
+
 Two per-handler knobs from earlier drafts are **derived, not
 configured**. Token requirement follows the signature. A handler
 declaring `state` on a component with no State class is a
 class-definition error. On a State-declaring component, POST calls
 always carry the token: pending two-way updates ride the next call and
 must be verified, applied, and re-signed whether or not the handler
-reads state. GET calls carry the token in the query only when the
-handler declares `state`, which is what keeps read-only GET URLs
-pasteable and token-free. Token expiry is a property of the one shared
+reads state. GET calls carry the token only when the handler declares
+`state`, which is what keeps read-only GET URLs pasteable and
+token-free, and they carry it in the `X-Citry-State-Token` header (6.2). Token expiry is a property of the one shared
 State, not of any handler, so it lives on State meta (`_max_age`, 3.2
 and 7.1) alongside `_storage` and `_max_bytes`.
 
@@ -1783,7 +1806,7 @@ Streams and htmx out-of-band swaps are the same shape):
 | `render` | `target`, `swap`, `html` | Insert or update HTML. `html` is a complete citry fragment. A `vue-prepared/1` render instead carries the prepared Vue payload, whose occurrences hold the Events descriptors and State tokens, and must use `swap: "morph"`. |
 | `data` | `value` | Resolve an imperative caller's promise with this JSON value. A declarative `@c-*` binding has no caller-owned promise and does not expose the value. At most one per result: a handler whose return would encode two `data` actions is an encode-time error naming the fix (two bare dicts in one list is semantically contradictory, which promise value wins?), unlike the trailing-after-redirect case, whose actions are individually valid and merely unreliable, so it warns. It carries no `wait` field; receiving one is a protocol validation error. |
 | `state` | `targetRenderId`, `stateToken`, `publicState` | Replace the stored state token and the public State values for a rendered component occurrence whose handler mutated state without re-rendering; the server places it before the handler's own actions. `publicState` holds every public field after the handler ran (never a field outside `_public`), and the browser writes it into `$state` under the reconcile rule of 5.5: a field with an unsent browser write keeps the browser's value. (A `render` action needs no companion; the fresh fragment's manifest carries the new token and values.) Client rule, either carrier: the runtime applies a result's State refresh to its registry before applying the actions array, so user code running mid-application (a dispatch listener that immediately sends) already carries the fresh token and sees the fresh values. |
-| `event` | `eventName`, `detail`, `target` | Dispatch one bubbling DOM CustomEvent under the **exact given name** on the target instance's first live root, or on `document`. A multi-root or mirrored instance uses one canonical root deliberately: dispatching the same logical action on every root would duplicate document/global delivery and `onEvent` callbacks. Raw names are the field's converged interop choice (Livewire and htmx both fire developer-chosen names verbatim); `citry:*` is reserved for the runtime's own events, and the documented best practice is prefixing with the component name (`MyCard:submit`, the BEM idea applied to events). A handler-returned `event` action with no explicit target is self-addressed by the server at encode time to the caller's `callerRenderId`; only calls without a rendered caller produce a document-targeted dispatch. |
+| `event` | `eventName`, `detail`, `target` | Dispatch one bubbling DOM CustomEvent under the **exact given name** on the target instance's first live root, or on `document`. A multi-root or mirrored instance uses one canonical root deliberately: dispatching the same logical action on every root would duplicate document/global delivery and `onEvent` callbacks. Raw names are the field's converged interop choice (Livewire and htmx both fire developer-chosen names verbatim); `citry:*` is reserved for the runtime's own events, and a standard DOM event name (`click`, `submit`, `keydown`, any ASCII letter case) or a Vue lifecycle name (`vue:*`, `vnode-*`) is refused by `actions.Dispatch` and again by the browser runtime before it fires, because a bubbling event under such a name would run the page's own listeners for it ([#704](https://github.com/citry-dev/citry/issues/704)); the documented best practice is prefixing with the component name (`MyCard:submit`, the BEM idea applied to events). A handler-returned `event` action with no explicit target is self-addressed by the server at encode time to the caller's `callerRenderId`; only calls without a rendered caller produce a document-targeted dispatch. |
 | `redirect` | `url` | Navigate the page. |
 | `url` | `url`, `mode` | History push or replace without navigation. `PushUrl` and `ReplaceUrl` are its two producers; the client accepts only exact `push` or `replace` modes, preserves `history.state`, and skips invalid or browser-rejected updates without interrupting later actions. |
 
@@ -2113,7 +2136,18 @@ Error modes:
           even while a validator waits for I/O.
         - Free-threaded Python runs the check threads in parallel; the
           several threads can spend from the request's work budget at
-          once.
+          once. With the GIL off, an object one thread made and another
+          thread drops is freed only when the thread that made it next
+          runs Python code, or when the cycle collector next runs. The
+          caller drops a failed check's error (whose traceback reaches
+          the request data) and a check's result after the check thread
+          has gone idle. So with the GIL off, an idle check thread splits
+          its 60 seconds of idle time into 60 waits of one second
+          (`_CHECK_THREAD_WAKE_SECONDS`), and
+          each wake frees what callers dropped since the last one. The
+          idle time is counted in waits, so code that replaces
+          `time.monotonic` (such as freezegun) does not change it. A kept
+          thread past its idle time waits 60 seconds at a time.
     - How the limit is sized: each level takes room on the C stack of
       the check thread, so data at the limit must be checked in half of
       its stack. A test, run in a process of its own, checks data at the
@@ -4793,7 +4827,7 @@ transports would both need belongs in the dispatcher, never duplicated):
 | Component and event resolution | The per-event URL is authoritative; explicit `componentClassId` and `handlerName` fields must match it. A failed lookup produces the wire error codes `unknown_component` / `unknown_event` (protocol constants from the 3.7 table, status 404), never a lookup of any user-defined name: there is no magic fallback component or handler to define. Custom not-found behavior hangs off the `on_event_error` hook or host middleware on the real URLs. | `Citry.get_component_by_class_id` resolves the class; wire names come from the handler metadata captured at class creation (plan WP7). |
 | Token verification and updates | Verify the signed `stateToken` (malformed 403, expired, rotated-out, or unknown-version 409; the split is payload well-formedness, per the error-codes rule in 4.3), rebuild State, apply `_model`-gated `stateUpdates` with per-field 422s. | `verify_state_token` / `apply_state_updates` (plan WP8). |
 | Args validation | Validate the wire args payload against the handler's `data` schema with the 3.3 coercions; failures are per-field 422s, never host 500s. | The data-schema machinery (plan WP9) returns structured results that the error mapping consumes. |
-| Per-call context and guards | `on_event` emit (veto), then the `_context` hook, then guards most-specific-wins (engine default, component `_guard`, `@event(guard=...)`). | Pipeline order is normative (3.6, 3.7): a guard must see `_context`'s result. |
+| Per-call context and guards | `on_event` emit (veto), then the `_context` hook, then the component-level guard (the component's `_guard`, else the engine default; skipped only under `@event(component_guard=False)`), then the handler's `@event(guard=...)`. | Pipeline order is normative (3.6, 3.7): a guard must see `_context`'s result. |
 | Handler invocation | By-name injection of `data` / `state` / `context` / `request` / `event`; the same values populate the ambient attributes on the per-call events instance. | Async dispatch awaits `async def` handlers; sync handlers offload to a worker thread via the routing helper `call_maybe_sync` (plan WP2). |
 | Action encoding | Return-value coercion, result resolvers, faithful ordering, and the render-to-fragment serialize. | The actions module (plan WP11); a `Render` re-enters the normal fragment serialize, so its HTML carries a fresh manifest. |
 | State re-sign | Changed State means a fresh token and fresh public values in the response: riding the render action's manifest when there is one, else as an explicit `state` action placed before the handler's actions (4.3). | Mint via plan WP8; the request's `sendSequence` echoes per result. |
@@ -4832,7 +4866,7 @@ registry keyed by content type; user codecs ride
 | Envelope | `application/citry-events+json` | v1 | The identity codec: the body already is the envelope. What the runtime sends. The vendor media type is what distinguishes an envelope from flat JSON, so classification never depends on body shape (a user schema could legitimately declare fields named `v` or `calls`). The batch route takes only the envelope and accepts it under plain `application/json` too, since a batch body has no flat reading. |
 | Flat JSON | `application/json` | v1 | Flat handler fields as one JSON object (`POST {"email": "a@b.c"}`), per-event route only: what an external API client sends without knowing the protocol. Fields bind per 3.3's JSON rules (native types, strict); the reserved `_citry_state_token` / `_citry_caller_render_id` keys map into the envelope like the form codec's. |
 | Form | `application/x-www-form-urlencoded` | v1 | Classic form posts: fields become the args payload; the reserved `_citry_state_token` / `_citry_caller_render_id` fields map into the envelope; the source-aware binding rule (3.3) turns the strings into typed values, including `int` / `float` / `bool` fields. |
-| Query | GET query string | v1 | Args ride as query parameters, bound per the same source-aware rule (3.3); the state token rides `_citry_state_token` only when the handler declares State (3.5). Browser calls additionally reserve `_citry_protocol`, `_citry_request_id`, and JSON `_citry_capabilities` for the flattened envelope, plus `_citry_caller_render_id` and `_citry_send_sequence` for call metadata. |
+| Query | GET query string | v1 | Args ride as query parameters, bound per the same source-aware rule (3.3); the state token counts only when the handler declares State (3.5), read from the `X-Citry-State-Token` header or the `_citry_state_token` parameter (two different values are refused with 400). Browser calls additionally reserve `_citry_protocol`, `_citry_request_id`, and JSON `_citry_capabilities` for the flattened envelope, plus `_citry_caller_render_id` and `_citry_send_sequence` for call metadata. |
 | Multipart | `multipart/form-data` | v1.x | File uploads: the envelope JSON rides as one part, each file as its own part, bound to `UploadedFile` fields ("Files, precisely" below). |
 | Msgpack | `application/msgpack` | candidate, unscheduled | A binary envelope for apps where payload size matters; would pair with symmetric response encoding negotiated via `Accept`. Open an issue when someone measures the need. |
 
@@ -5018,6 +5052,63 @@ Citry always writes `x`: `_max_age` after the mint time, or 24 hours when
 secret changes. `_max_age` must be at least one second, because the times
 are whole seconds and a shorter lifetime would expire every token at once.
 
+A page that is in use renews its token before the expiry. When a call
+arrives with a valid token that is past half its lifetime (the server's
+clock reads at least `t + (x - t) / 2`), the server sends a new token with
+a full lifetime from now, even when the handler did not change State. So
+a component that gets a call at least once per half lifetime never
+expires. A component that gets no call during the second half of its
+token's lifetime still expires, after an idle time between half and the
+whole lifetime depending on when its last call came. Renewal is per
+component: a `state` action renews only the calling instance's token.
+
+The cost is about one extra token per instance per half lifetime (two
+calls in flight with the same old token each get one). A client that
+names made-up caller instances can get one per call, up to the envelope's
+call limit, which is the same scale as a call that changes State (see the
+server storage paragraphs below).
+
+The half-way point comes from the token's own `t` and `x`, so a token
+minted under an older `_max_age` is due at half its own lifetime (12 hours
+for `"x": null`), and the new token gets the lifetime the component
+declares now. Each server compares with its own clock: a token from a
+server whose clock runs ahead is renewed later, never refused for it.
+The new token travels in the `state` action described in 4.3, so the v1
+protocol carries it unchanged. Because that action reassigns every public
+State value, browser watchers on an object or list field of `$state` fire
+once per renewal, as they do on any State refresh.
+
+The server skips the renewal when it would do harm or nobody could store
+the token:
+
+- The handler changed State, or the result renders the calling instance.
+  The call already returns a new token with a full lifetime, so it returns
+  exactly one.
+- The call names no caller instance (an API client), the client's
+  capabilities leave out the `state` action, or the call is a form posted
+  without JavaScript (the compatibility mode), whose answer drops `state`
+  actions. The current token keeps working until it expires.
+- The handler is detached (`@event(detached=True)`). The browser may send
+  a detached call while queued calls are in flight, so a renewed token
+  could replace the newer token a queued call returns. A component whose
+  calls all go to detached handlers therefore expires on schedule.
+- An earlier call in the same request already sent the caller instance a
+  token, through a `state` action or a render of that instance. All calls
+  in a request carry the token from before the request, so a later call
+  that only reads State would send a token for the State from before the
+  earlier call's change, and the browser would store that older State.
+- Making the token fails: the State no longer fits a lowered `_max_bytes`,
+  a public value cannot be sent to the browser, or the cache refuses the
+  write. The handler did not change State, so the call still succeeds.
+  The server logs a warning once per component class (debug after that),
+  and the current token keeps working until it expires. In server
+  storage the cache entry is written only after the `state` action is
+  built, so a dropped token leaves no entry behind.
+
+A call that sends no token (a GET handler that does not read State) cannot
+renew one. A render replayed from the render cache already signs its State
+again with a new mint time, as a fresh render does.
+
 A later 1.x release may move State tokens to a new version, because only
 Citry reads them. That works because a server answers `stale_state` (409)
 for a token whose version it does not know, and the browser then reports
@@ -5068,8 +5159,11 @@ Rules, each closing a named prior-art hole:
   at 150 to 300 bytes (section 1.4), so a component approaching the cap
   is holding state that belongs in the database, and the error says so
   (keep an id in State, reload the rest in the rebuild). The one nearby
-  technical budget is GET handlers, whose token rides a query parameter
-  under practical URL length limits of roughly 2 KB.
+  technical budget is GET handlers, whose token rides the
+  `X-Citry-State-Token` header, which nginx, Apache and Gunicorn cap at
+  about 8 KB per header by default (the `_citry_state_token` query
+  parameter instead counts against the request-line limit, 4 KB in
+  Gunicorn and 8 KB in nginx).
 - Signed, not encrypted: State values are visible to their own user, like
   anything rendered into HTML. The docs lead with the symptom ("anything
   in State is visible in the page source"); the mitigations, in order: do
@@ -5089,7 +5183,8 @@ handler. After the handler, a mutated State is re-signed and returned
 (inside the fragment manifest when a render action exists, as a `state`
 action otherwise, each carrying the public State values beside the
 token), so the client's stored token and its `$state` values always
-reflect the latest state.
+reflect the latest state. An unchanged State is re-signed the same way
+when its token is past half its lifetime, under the rules above.
 
 An optional server-side state store (the token carries a random key, and
 the State lives in `Citry.cache` under `citry:state:<key>`) ships in v1 as
@@ -5110,9 +5205,19 @@ The protocol does not change either way; that is the point of the
 opaque token.
 
 Server storage writes a new cache entry each time it makes a token: at
-every render, and after every call that changes State. It writes one only
-when a client receives the token, so a call with no caller instance, or
-from a client that does not accept the `state` action, stores nothing.
+every render, after every call that changes State, and when a call renews
+a token past half its lifetime. Renewal writes a new entry under a new
+key, as a State change does, so both storage modes renew through the same
+`state` action, and an entry is never rewritten after a client received
+its key. Server storage writes an entry only for a token that goes into an
+answer the client can store. A call with no caller instance, a client
+that does not accept the `state` action, and a form posted without
+JavaScript or another request that asks for HTML (whose answer drops
+`state` actions) store nothing. For a State change and for a renewal
+alike, the dispatcher builds the `state` action first and writes the entry
+last, so a token that cannot be sent leaves no entry behind. A State change
+whose public values the browser cannot read answers 500 `handler_error`,
+and the handler's own effects stay.
 The caller instance is a value the client sends, so this rule saves only
 honest traffic; it does not limit a client that names a made-up instance.
 
@@ -5121,8 +5226,8 @@ browser writes may not grow the stored State past `_max_bytes` (64 KiB by
 default). Citry never deletes an old entry when it makes a new one,
 because a call that times out in the browser can still commit on the
 server, and the browser would then hold a token whose entry is gone. A
-deployment therefore sizes its cache for the number of renders and State
-changes within that lifetime.
+deployment therefore sizes its cache for the number of renders, State
+changes, and renewals within that lifetime.
 
 The default `InMemoryCache` keeps State entries in a store of their own,
 under a byte budget (`state_max_bytes`, 64 MiB by default), and drops the
@@ -5164,8 +5269,22 @@ first key signs and every key verifies, and needs no shared runtime state or
 cache once every worker has the same ordered secret list. Its costs are
 equally deliberate: the user can decode every State field, the complete State
 rides on every call, and an old valid token remains replayable until it expires
-or its signing secret is removed. The token is bound to its component class
-and protocol version, not to a user, session, page, instance, or latest State
+or its signing secret is removed. Anyone who sends calls with a copy at
+least once per half lifetime keeps getting new tokens, as the page does.
+For a component with a handler that changes State, a `_model` field the
+browser may write, or a handler that renders the caller, a copy could
+always be kept alive that way, so renewal adds little there. For a
+component whose handlers only read State, renewal is what lets a copy
+outlive `_max_age`. The case that matters most is a handler that opts into
+GET (`@event(methods=("GET",))` or `Events._methods`) and declares `state`.
+A handler uses POST by default, so its token stays out of the URL. A GET
+call carries the token only when the handler declares `state` (section
+3.5). Citry's browser code sends it in the `X-Citry-State-Token` header
+(6.2), but the server still reads the `_citry_state_token` query
+parameter, and a URL that carries it can land in server and proxy logs.
+Whoever reads those logs can keep that token alive. Renewal does not change what a
+token permits, which is why every handler still checks permission. The token is bound to its component class and protocol
+version, not to a user, session, page, instance, or latest State
 revision. Handlers must therefore reload authoritative data and perform
 authorization regardless of whether the token verifies.
 
@@ -5313,6 +5432,18 @@ traversal of any object graph; extra arg keys are rejected, not absorbed.
   type, and flat `application/json` alike (so an external API client
   sends one static header); a form post without the header takes the
   compat path (6.2).
+  The `Origin` check compares the origin's host and port with the
+  request's `Host` header. Each adapter also reports the scheme the
+  request arrived over (`RouteRequest.scheme`: the ASGI scope's
+  `scheme`, WSGI's `wsgi.url_scheme`, Django's `request.scheme`); when
+  it is `https`, an `Origin` that is not `https:` is refused, so a page
+  served over plain http on the same host cannot call the app. An http
+  request does not require the schemes to match: behind a proxy that
+  ends TLS the app sees `http` while the browser sends an `https:`
+  origin. A `RouteRequest` with an empty `scheme` (a hand-built one,
+  or an adapter that does not know it) skips the scheme comparison.
+  An `Origin` that Python's `urlsplit` cannot read is refused like a
+  mismatched one.
 - **Host token by default.** Under Django the routes are plain views, so
   Django's CSRF middleware applies untouched; the client runtime
   auto-attaches the token (by default it reads Django's `csrftoken`
@@ -5325,12 +5456,23 @@ traversal of any object graph; extra arg keys are rejected, not absorbed.
   inject the CSRF token; this is that helper, absorbed.)
 - GET handlers are opt-in, csrf-exempt by nature, and read-only by
   contract; their args ride as query parameters, and the state token
-  rides as a `_citry_state_token` query parameter only when the handler
-  declares `state` in its signature (3.5), so read-only GET URLs stay
-  pasteable and token-free (the docs note URL length limits and the
-  id-plus-reload fix for large-State components).
+  rides only when the handler declares `state` in its signature (3.5),
+  so read-only GET URLs stay pasteable and token-free. The browser sends
+  the token in the `X-Citry-State-Token` request header, which access
+  logs do not record the way they record a URL; the server also reads a
+  `_citry_state_token` query parameter, and refuses a call whose header
+  and query parameter carry different tokens with 400
+  `protocol_mismatch`. A GET answer lists `X-Citry-State-Token` in
+  `Vary`.
   The per-handler descriptor carries `usesState: true` only when the handler
-  declares the State injectable, so the browser can enforce that URL rule.
+  declares the State injectable, so the browser sends the token only to such
+  a handler. When a header-only call answers `invalid_state` without
+  listing the header in `Vary` (a server from before 1.3.0 reads only the
+  query), the browser sends it once more with the token in the query.
+  When a call sends the header and a handler's own response sets a cache
+  policy, the server keeps only the directives a browser cache follows,
+  adds `private`, and drops CDN-only cache headers, because the URL does
+  not carry the token and some CDNs ignore `Vary`.
   The built-in browser transport selects GET for a single call to a
   GET-declared handler. It serializes scalar string, boolean, and finite
   number args, and non-empty arrays of those values as repeated query
@@ -5339,14 +5481,23 @@ traversal of any object graph; extra arg keys are rejected, not absorbed.
   `_citry_request_id`, and JSON `_citry_capabilities`, preserving version rejection,
   response correlation, and morph/action negotiation from the ordinary
   envelope. `_citry_caller_render_id` and `_citry_send_sequence` preserve call metadata;
-  `_citry_state_token` appears only for a state-declaring handler. The query codec
+  the `X-Citry-State-Token` header appears only for a state-declaring handler. The query codec
   removes those reserved fields before input validation. A GET call never flushes or consumes pending
   two-way writes: those remain queued for the next mutating call. A mixed or
   multi-call envelope still uses the POST-only batch endpoint, including when
   one item names a GET-declared handler.
-- **Guards inherit**: engine-wide default, per-component `_guard`,
-  per-handler `@event(guard=...)`, most specific wins. A guard is
-  `callable(events)` that raises `EventError(status=403)` to deny, reading
+- **Guards add up**: the component-level guard is the component's
+  `_guard`, or the engine-wide default when the component sets none.
+  It runs before every handler, and a per-handler
+  `@event(guard=...)` runs after it as an extra check; either one
+  refusing refuses the call. A handler skips the component-level guard
+  only with an explicit `@event(component_guard=False)`, so a guard
+  written for one handler can never drop the component's check by
+  accident. A guard is
+  `callable(events)` that raises `EventError(status=403)` or returns
+  any false value other than `None` or an exception to deny (`None` and
+  `True` allow; a returned callable answers 500; any other true value
+  allows and logs a warning), reading
   `self.context` (3.6) or `self.request.native`. Opt-out, not opt-in
   (livecomponents' per-method decorator is the anti-pattern: forgetting one
   method is an open endpoint). Honest limitation, documented: citry cannot
