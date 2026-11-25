@@ -50,16 +50,16 @@ More green = earlier feedback = better
 <picture>
   <source
     media="(prefers-color-scheme: dark)"
-    srcset="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmarks/errors-20261116T192936Z-62bc495bd6b3-dark.png"
+    srcset="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmarks/errors-20261125T123303Z-acc87e2f4494-dark.png"
   >
   <img
-    src="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmarks/errors-20261116T192936Z-26133b9c4d03-light.png"
-    alt="Bar chart of how the mistakes that apply to each framework ended. Mistakes reported before the app runs: Citry 56 of 61, Next.js (TypeScript) 45 of 57, Reflex 38 of 54, Nuxt (TypeScript) 39 of 58, ReactPy 24 of 56, FastHTML 20 of 48, django-unicorn 12 of 55, Tetra 9 of 57, Rusty + HTMX + Alpine 6 of 50, Django + HTMX + Alpine 6 of 52, django-components 6 of 54, Jinja + HTMX + Alpine 5 of 51."
+    src="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmarks/errors-20261125T123303Z-f0b466dd3cf0-light.png"
+    alt="Bar chart of how the mistakes that apply to each framework ended. Mistakes reported before the app runs: Citry 56 of 61, Next.js (TypeScript) 45 of 57, Reflex 38 of 54, Nuxt (TypeScript) 39 of 58, ReactPy 24 of 56, FastHTML 20 of 48, django-unicorn 12 of 55, Tetra 9 of 57, Django + HTMX + Alpine 6 of 52, Rusty + HTMX + Alpine 6 of 52, django-components 6 of 54, Jinja + HTMX + Alpine 5 of 51."
     width="720"
   >
 </picture>
 
-Citry 1.0.0. Each bar counts only the mistakes that apply to that
+Citry 1.3.0. Each bar counts only the mistakes that apply to that
 framework.
 [How we measured](https://citry.dev/about/benchmarks/#errors-how-we-measured)
 <!-- benchmark-chart:errors end -->

@@ -1,6 +1,6 @@
 {
   "generated_by": "docs_site/scripts/error_benchmark_data.py",
-  "run": "20261116T192936Z",
+  "run": "20261125T123303Z",
   "frameworks": [
     {
       "key": "citry",
@@ -1932,10 +1932,10 @@
     {
       "framework": "rusty",
       "mistake": "m05-slot-name",
-      "status": "not-applicable",
-      "bucket": null,
-      "cell": "n/a",
-      "reason": "The pinned Django Rusty Templates commit has no `{% extends %}` or `{% block %}` tag; both raise NotImplementedError when the template loads, and a `simple_block_tag` card also fails there with Django 6.1.1. So the card writes its own footer link. The page could hand the card a template name for `{% include %}` to render as its footer, but that needs a separate template file for each fill, so this app keeps the footer in the card. The page therefore fills no footer under any name.",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
       "evidence": []
     },
     {
@@ -2250,10 +2250,10 @@
     {
       "framework": "rusty",
       "mistake": "m35-required-slot-missing",
-      "status": "not-applicable",
-      "bucket": null,
-      "cell": "n/a",
-      "reason": "The pinned Django Rusty Templates commit has no `{% extends %}` or `{% block %}` tag; both raise NotImplementedError when the template loads, and a `simple_block_tag` card also fails there with Django 6.1.1. So the card writes its own footer link. The page could hand the card a template name for `{% include %}` to render as its footer, but that needs a separate template file for each fill, so this app keeps the footer in the card. The page therefore has no footer to leave out.",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
       "evidence": []
     },
     {
@@ -2262,7 +2262,7 @@
       "status": "not-applicable",
       "bucket": null,
       "cell": "n/a",
-      "reason": "The pinned Django Rusty Templates commit has no `{% extends %}` or `{% block %}` tag; both raise NotImplementedError when the template loads, and a `simple_block_tag` card also fails there with Django 6.1.1. So the card writes its own footer link. Even a footer the page handed over as a template name to `{% include %}` would read the card's own context, as a Django block does, so the card hands a fill no slot data of its own and there is no slot-data name to misspell. A misspelled variable in the card's link is m07.",
+      "reason": "As in the Django app, project_card.html extends card.html and fills its footer block, and Django Rusty Templates renders that block with the same context the page's include gave the card. The fill reads `title` and `count` from that context. A Django block takes no arguments, so the card hands the fill nothing of its own and there is no slot data whose name the fill could misspell. A misspelled variable there is m07.",
       "evidence": []
     },
     {
@@ -2271,7 +2271,7 @@
       "status": "not-applicable",
       "bucket": null,
       "cell": "n/a",
-      "reason": "The pinned Django Rusty Templates commit has no `{% extends %}` or `{% block %}` tag; both raise NotImplementedError when the template loads, and a `simple_block_tag` card also fails there with Django 6.1.1. So the card writes its own footer link. Even a footer the page handed over as a template name to `{% include %}` would read the card's own context, as a Django block does, so the card hands a fill no slot data of its own and there is no slot data whose type a fill could get wrong. A wrong-typed use of a variable in the card's link is m23.",
+      "reason": "As in the Django app, project_card.html extends card.html and fills its footer block, and Django Rusty Templates renders that block with the same context the page's include gave the card. The fill reads `title` and `count` from that context. A Django block takes no arguments, so the card hands the fill nothing of its own and there is no slot data whose type the fill could get wrong. A wrong-typed use of a variable there is m23.",
       "evidence": []
     },
     {

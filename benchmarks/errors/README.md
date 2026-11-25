@@ -187,22 +187,28 @@ framework's pinned versions change.
 
 ## Latest result
 
-[`results/2026-11-16/`](results/2026-11-16/) is the report published in
+[`results/2026-11-25/`](results/2026-11-25/) is the report published in
 the "Catching errors" section of the docs site's Benchmarks page. Open
 `report.html` there in a browser for the chart and the full table;
 `results.json` has the first few findings behind each cell, and the
 findings that pointed away from the change without an `indirect` note.
-Its Citry column comes from a run on 2026-11-16 that measured only
-Citry, installed as the 1.0.0 release from PyPI. That run took 1 minute
-19 seconds.
-Before the app runs, Citry reports 56 of the 61 mistakes that apply to
-it. The other eleven frameworks' columns are kept from the run in
+Its Citry and Rusty columns come from a run on 2026-11-25 that measured
+only those two frameworks: Citry installed as the 1.3.0 release from
+PyPI, and Django Rusty Templates at commit `6d10c20`. That run took 2
+minutes 36 seconds. Before the app runs, Citry reports 56 of the 61
+mistakes that apply to it; every Citry cell is the same as Citry
+1.0.0's in [`results/2026-11-16/`](results/2026-11-16/). The Rusty card
+uses the Django app's templates, which extend a base card and fill its
+`{% block footer %}`. So m05 and m35 apply to Rusty, and both are
+missed, as in the Django app. Rusty reports 6 of 52.
+
+The other ten frameworks' columns are kept from the run in
 [`results/2026-10-21/`](results/2026-10-21/), whose Citry column
 measured Citry built from this repository before the 0.7.0 release
-(54 of 61). The Rusty column was measured with Django Rusty Templates
-commit `0725f87`. Running it again at the current pin, commit `6d10c20`,
-gave the same result in all 63 cells, so the report was not rewritten;
-the next published report will name the new commit.
+(54 of 61). The 2026-10-21 run measured the Django, django-components,
+Tetra and django-unicorn apps with Django 6.1.1; their lockfiles name
+Django 6.1.3, a security release, and those four columns have not been
+run again.
 
 Each report starts by naming what the run scored: the commit it started
 from and the git tree of the benchmark's inputs, which are `cases/`,
@@ -461,7 +467,7 @@ writes a part of the page, not from its tools:
 the first 24 mistakes found in Citry; the later gaps m30, m42, m60 and
 m61 are not in it yet.
 
-Rusty's cells match Django's except four:
+Rusty's cells match Django's except two:
 
 - **m08:** Django Rusty Templates raises an error when the page reads a
   misspelled attribute of an existing object (`owner.nmae`), where Django
@@ -471,19 +477,15 @@ Rusty's cells match Django's except four:
   subtitle's gettext placeholder from a dictionary, so the misnamed
   argument raises a `KeyError`; Django's tag prints the name as empty
   text.
-- **m05 and m35:** n/a. The Rusty card writes its own footer link
-  instead of extending a base card with `{% extends %}` and
-  `{% block %}`. Both work at the pinned commit, but the app was written
-  without them and has not been changed to use them, so the page has no
-  footer to misspell or leave out. The page fills nothing in the card,
-  so m36 and m37 are n/a too. They are n/a in the Django app as well,
-  because a Django block takes no arguments.
 
-Two cases are written differently but end as Django's do. With no
+The Rusty card uses the Django app's two templates unchanged: the page
+includes `project_card.html`, which extends `card.html` and fills its
+`{% block footer %}`. So m05, m35 and m47 are the Django app's cases and
+end as Django's do. m36 and m37 are n/a, because a Django block takes no
+arguments. One case is written differently but ends as Django's does:
+with no
 `{% translate %}` tag, the view translates the heading with Django's
-`gettext`, so a misspelled message id (m15) is missed. Because the
-Rusty app's templates use no `{% extends %}`, the m47 case misspells the
-page template's path in the view, which fails at runtime.
+`gettext`, so a misspelled message id (m15) is missed.
 
 django-components' cells differ from Django's in these places
 ([`frameworks/django-components/`](frameworks/django-components/) holds
