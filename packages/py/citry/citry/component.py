@@ -960,9 +960,11 @@ class Component(metaclass=ComponentMeta):
             [`EventError`][citry.ext.events.EventError], or by returning
             ``False``, another false value other than ``None``, or an
             exception; ``None`` and ``True`` let the call go ahead. A
-            handler's own ``@event(guard=...)`` runs after it. Citry
-            refuses an ``async def`` one when the class is defined.
-            Default: no guard.
+            handler's own ``@event(guard=...)`` runs after it. Both run
+            before Citry checks the call's data against the handler's
+            ``data`` class, so ``self.event.args`` is not checked yet.
+            Citry refuses an ``async def`` guard when the class is
+            defined. Default: no guard.
             [Guide](/security/#authorize-every-event).
         _context (Callable | None): A plain ``def`` method (or function)
             that runs before the guard. Its return value becomes ``self.context`` in the guard
