@@ -937,6 +937,12 @@ def test_worker_reads_the_detached_flag_the_dispatcher_uses(tmp_path, monkeypatc
     monkeypatch.syspath_prepend(str(tmp_path))
     module = __import__("late_detached_app")
     [handler] = app_worker._component_events_info(module.Card).handlers.values()
+    # A citry before 1.3.0 has no `detached` on the handler record and reads the function's
+    # options when the call runs, so the late decorator does apply there and the fallback
+    # test above covers that case. The old-citry check of lsp_citry_pairs.py runs this file
+    # against citry 1.0.0.
+    if not hasattr(handler, "detached"):
+        pytest.skip("this citry keeps `detached` only on the function's options")
     assert handler.detached is False
     assert app_worker.event_options(module.peek).detached is True
     handlers = app_worker._event_sources(module.Card)["handlers"]

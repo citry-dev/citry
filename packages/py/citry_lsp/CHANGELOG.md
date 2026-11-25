@@ -2,6 +2,17 @@
 
 All notable changes to `citry-lsp` are documented here.
 
+## [1.0.1] - 2026-11-25
+
+### Fixed
+
+- With Citry 1.3.0 or later, the editor now reports `wait: false` for
+  a handler that got `@event(detached=True)` only after its component
+  class was created, because Citry does not run that call detached
+  either. With Citry 1.2.0 or earlier, the editor reads the setting
+  from the function when it checks the template, as those releases
+  do when they run the call.
+
 ## [1.0.0] - 2026-11-16
 
 ### Changed

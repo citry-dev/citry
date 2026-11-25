@@ -179,7 +179,7 @@ wheels = [
 
 [[package]]
 name = "citry"
-version = "1.2.0"
+version = "1.3.0"
 source = { editable = "packages/py/citry" }
 dependencies = [
     { name = "citry-core" },
@@ -286,7 +286,7 @@ dev = [
 
 [[package]]
 name = "citry-lsp"
-version = "1.0.0"
+version = "1.0.1"
 source = { editable = "packages/py/citry_lsp" }
 dependencies = [
     { name = "citry" },
