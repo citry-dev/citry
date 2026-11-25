@@ -2,18 +2,18 @@
 
 ## v1.3.0
 
-Citry 1.3.0 is a security release. In Events, it fixes these
-problems: an `async def` guard, `_context` function or `_csrf`
-function never ran; a handler's own guard turned off the component's
-guard; a guard that returned `False` let the call through; and deeply
-nested event data or State writes could end the server process on
-PyPy. It also renews State tokens that are in use, so a page in use no
-longer gets `stale_state`, and adds helpers that check redirect URLs.
-Some changes refuse code or calls that 1.2.0 accepted, so read the
-Changed section and the entries that start with "Security:" before
-you upgrade. The PyPy fixes change nothing on CPython. Citry applies
-them on every other Python implementation, such as GraalPy. Citry
-1.3.0 still requires citry-core 2.1.2.
+Citry 1.3.0 is a security release. In Events, it fixes these problems:
+an `async def` guard, `_context` function or `_csrf` function never ran;
+a handler's own guard turned off the component's guard; a guard that
+returned `False` let the call through; and deeply nested event data or
+State writes could end the server process on PyPy. It also renews State
+tokens that are in use, so a page in use no longer gets the "page is out
+of date" error (`stale_state`), and adds helpers that check redirect
+URLs. Some changes refuse code or calls that 1.2.0 accepted, so read the
+Changed section and the entries that start with "Security:" before you
+upgrade. The PyPy fixes change nothing on CPython. Citry applies them on
+every Python implementation except CPython, such as GraalPy. Citry 1.3.0
+still requires citry-core 2.1.2.
 
 ### Added
 
@@ -61,8 +61,8 @@ them on every other Python implementation, such as GraalPy. Citry
   `X-Citry-State-Token` header instead of the URL, so server and proxy
   access logs do not record it by default. The server still reads the
   `_citry_state_token` query parameter, so clients that send it there
-  keep working. A call that sends different tokens in the header and the
-  query parameter gets a `400` error, so a URL cannot choose a token
+  keep working. A GET call that sends different tokens in the header and
+  the query parameter gets a `400` error, so a URL cannot choose a token
   other than the one the browser sent. If a server from an earlier
   release answers `invalid_state`, as during a deploy or after a
   rollback, the browser sends the call once more with the token in the
@@ -142,18 +142,18 @@ them on every other Python implementation, such as GraalPy. Citry
   a function used as a `ViewEvents` verb handler in one class no longer
   changes the HTTP methods it accepts in another class. See
   [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
-- Security: an event guard that returns `False`, `0`, an empty list or
-  QuerySet (any false value except `None`), or an exception other than
-  `EventError`, now refuses the call with a 403, and one that returns an
-  `EventError` refuses it with that error's status and message, as if it
-  had raised it. Before, a guard written as `return user.is_staff` or
-  `return Document.objects.filter(owner=user)` let every caller through.
-  `None` and `True` let the call go ahead. A guard that returns a
-  function, as `return self.can_edit` does without the `()`, fails the
-  call with a 500 and logs the guard's name. Any other true value lets
-  the call go ahead and logs a warning that names the guard and the
-  component. A returned value whose true-or-false test raises an error
-  fails the call with a 500. See
+- Security: an event guard that returns any false value except `None`
+  (such as `False`, `0`, or an empty list or QuerySet), or an exception
+  other than `EventError`, now refuses the call with a 403, and one that
+  returns an `EventError` refuses it with that error's status and
+  message, as if it had raised it. Before, a guard written as
+  `return user.is_staff` or `return Document.objects.filter(owner=user)`
+  let every caller through. `None` and `True` let the call go ahead. A
+  guard that returns a function, as `return self.can_edit` does without
+  the `()`, fails the call with a 500 and logs the guard's name. Any
+  other true value lets the call go ahead and logs a warning that names
+  the guard and the component. A returned value whose true-or-false test
+  raises an error fails the call with a 500. See
   [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
 - Security: on PyPy, the nesting limit for event data and browser writes
   to State is now 32 levels, down from 64, so that PyPy's stack can hold
@@ -163,10 +163,12 @@ them on every other Python implementation, such as GraalPy. Citry
   one level, and so does each level of a recursive type with a
   `WrapSerializer` or other serializer function, so on PyPy some data
   that earlier releases accepted gets a 422 that says it is nested too
-  deeply. The limit does not cover every shape. The process can still
-  end if your schema has many validators at each level (especially with
-  a free-form field deep inside it), if a handler stores event data in a
-  State field whose type has a serializer, or if your own code validates
+  deeply. The limit does not stop every case. The process can still end
+  if your schema has many validators at each level (especially with a
+  free-form field deep inside it), if a handler stores event data in a
+  State field of a different type that has a serializer, if a handler
+  stores a Pydantic class built from a plain dataclass `data` class in a
+  free-form State field such as `Any`, or if your own code validates
   nested data again. See
   [Event data on PyPy](https://citry.dev/security/#event-data-on-pypy)
   and
@@ -187,17 +189,18 @@ them on every other Python implementation, such as GraalPy. Citry
   recursive list alias; earlier releases refused only a recursive
   class there. Make the State lax, leave the field out of `_model`, or
   give the recursive type a wrap validator of its own.
-- Security: on PyPy, defining a component now raises `ValueError` in
-  two cases. In the first, its event `data` class or a State field has
-  a serializer whose return type leads into a recursive type with a
+- Security: on PyPy, defining a component now raises `ValueError` in two
+  cases. In the first, its event `data` class or a State field has a
+  serializer whose return type leads into a recursive type with a
   serializer of its own, such as
-  `Annotated[Any, PlainSerializer(f, return_type=Tree)]`. In the
-  second, a level of a recursive type has a `PlainValidator`, as in
+  `Annotated[Any, PlainSerializer(f, return_type=Tree)]`. In the second,
+  a recursive type in that `data` class or State field has a
+  `PlainValidator` on one of its levels, as in
   `Tree = Annotated[list[Tree], PlainValidator(f)]`. In both, Pydantic
   calls Python at every level of the value when Citry writes the State
   out. Remove `return_type`, annotate a `field_serializer` or
   `model_serializer` as returning `Any`, or use an `AfterValidator` or
-  `WrapValidator` in place of the `PlainValidator`. The rule also
+  `WrapValidator` in place of the `PlainValidator`. The first case also
   refuses two shapes that would not end PyPy: a recursive return type
   whose only serializer is on a value that does not nest, such as a
   `field_serializer` for a date field, and a recursive Pydantic
