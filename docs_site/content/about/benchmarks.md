@@ -87,7 +87,8 @@ other ten frameworks on 2026-10-19, on the same Mac.
       templates unchanged; a test checks that both apps produce the same
       HTML. The 2026-10-19 run used commit `0725f87`, which rendered
       `{% empty %}` wrongly for an empty list, so its app rewrote each
-      `{% empty %}` branch. The charts no longer use that run for Rusty.
+      `{% empty %}` branch. The charts take Rusty's numbers from the
+      2026-11-25 run.
     - **Where**: every run used the same Apple M4 Mac with Chromium 151,
       an empty browser cache, and a local connection.
     - **Same Mac, same times**: the 2026-11-16 run also measured
