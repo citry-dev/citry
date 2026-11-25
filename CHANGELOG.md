@@ -2,13 +2,17 @@
 
 ## v1.3.0
 
-Citry 1.3.0 is a security release. It fixes three problems in
-Events: an `async def` guard never ran, a handler's own guard turned
-off the component's guard, and deeply nested event data could end the
-server process on PyPy. The PyPy fix changes nothing on CPython; Citry
-applies it on every Python implementation other than CPython, such as
-GraalPy, since only CPython has been measured to be safe without it.
-Citry 1.3.0 still requires citry-core 2.1.2.
+Citry 1.3.0 is a security release, and it also renews State tokens
+that are in use and adds helpers that check redirect URLs. In Events,
+it fixes these problems: an `async def` guard, `_context` or `_csrf`
+function never ran; a handler's own guard turned off the component's
+guard, and a guard that returned `False` let the call through; and
+deeply nested event data or State writes could end the server process
+on PyPy. Some fixes refuse code or calls that 1.2.0 accepted, so read
+the Security entries before you upgrade. The PyPy fix changes nothing
+on CPython; Citry applies it on every Python implementation other than
+CPython, such as GraalPy, since only CPython has been measured to be
+safe without it. Citry 1.3.0 still requires citry-core 2.1.2.
 
 ### Added
 
@@ -125,35 +129,33 @@ Citry 1.3.0 still requires citry-core 2.1.2.
   a function used as a `ViewEvents` verb handler in one class no longer
   changes the HTTP methods it accepts in another class. See
   [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
-- Security: an event guard that returns a false value other than
-  `None` (`False`, `0`, an empty list or QuerySet) or an exception other
-  than `EventError`
-  now refuses the call with a 403, and one that returns an `EventError`
-  refuses it with that error's status and message, as if it had raised
-  it. Before, a guard written as `return user.is_staff` or
-  `return Document.objects.filter(owner=user)` let every caller
-  through. `None` and `True` let the call go ahead. A guard that
-  returns a function, as `return self.can_edit` does without the `()`,
-  fails the call with a 500 and logs the guard's name. Any other true
-  value lets the call go ahead and logs a warning that names the guard
-  and the component. A returned value whose true-or-false test raises
-  an error fails the call with a 500. See
+- Security: an event guard that returns a false value other than `None`
+  (`False`, `0`, an empty list or QuerySet) or an exception other than
+  `EventError` now refuses the call with a 403, and one that returns an
+  `EventError` refuses it with that error's status and message, as if it
+  had raised it. Before, a guard written as `return user.is_staff` or
+  `return Document.objects.filter(owner=user)` let every caller through.
+  `None` and `True` let the call go ahead. A guard that returns a
+  function, as `return self.can_edit` does without the `()`, fails the
+  call with a 500 and logs the guard's name. Any other true value lets
+  the call go ahead and logs a warning that names the guard and the
+  component. A returned value whose true-or-false test raises an error
+  fails the call with a 500. See
   [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
-- Security: on PyPy, Citry now limits how deeply event data and
-  browser writes to State may nest so that PyPy's stack can hold the
-  check, and data nested deeply enough to end the server process in
-  earlier releases gets a 422 instead. The limit there is now 32 levels
-  (it was 64). Wrap validators, unions, `Sequence[...]` fields and
-  `OnErrorOmit` items each count as more than one level, and so does
-  each level of a recursive type with a `WrapSerializer` or other
-  serializer function, so on PyPy
-  some data that earlier releases accepted gets a 422 that says it is
-  nested too deeply. A schema with many validators at each level,
-  especially with a free-form field deep inside it, a handler that
-  stores event data in a State field of another type that has a
-  serializer (or a Pydantic class from a plain dataclass `data` class
-  in a free-form field), or your own code that validates nested data
-  again, can still end the process. See
+- Security: on PyPy, Citry now limits how deeply event data and browser
+  writes to State may nest so that PyPy's stack can hold the check, and
+  data nested deeply enough to end the server process in earlier
+  releases gets a 422 instead. The limit there is now 32 levels (it was
+  64). Wrap validators, unions, `Sequence[...]` fields and `OnErrorOmit`
+  items each count as more than one level, and so does each level of a
+  recursive type with a `WrapSerializer` or other serializer function,
+  so on PyPy some data that earlier releases accepted gets a 422 that
+  says it is nested too deeply. A schema with many validators at each
+  level, especially with a free-form field deep inside it, a handler
+  that stores event data in a State field of another type that has a
+  serializer (or a Pydantic class from a plain dataclass `data` class in
+  a free-form field), or your own code that validates nested data again,
+  can still end the process. See
   [Event data on PyPy](https://citry.dev/security/#event-data-on-pypy)
   and
   [GHSA-29wx-2wvw-8962](https://github.com/citry-dev/citry/security/advisories/GHSA-29wx-2wvw-8962).
@@ -190,8 +192,8 @@ Citry 1.3.0 still requires citry-core 2.1.2.
   own type. Annotate those serializers as returning `Any`.
 - When an event guard, `_context`, an `on_event` hook or a State
   validator raises an unexpected error, the server log, and in debug
-  mode the error message, now name it instead of saying the event
-  handler raised, since the handler never ran.
+  mode the error message, now name the function that failed instead of
+  the event handler, which never ran.
 - A component with Events that comes from the render cache now writes
   the same HTML as when it renders without the cache. Earlier releases
   gave its root element an extra `data-cid` attribute, so the browser

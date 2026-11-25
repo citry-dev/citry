@@ -1059,13 +1059,14 @@ end it:
   that calls `model_validate` on a nested value.
 
 A larger thread stack does not help on PyPy, but the recursion limit
-does matter: the depth at which data ends the process moves with
-`sys.setrecursionlimit()`. Citry's limit of 32 levels was measured with
-PyPy's default recursion limit of 1,000, so do not lower it. A higher
-limit leaves more room for the cases above, but it applies to the whole
-process and only moves the depth at which data ends it; PyPy still ends
-the process instead of raising an error. If your app takes deeply
-nested data from the browser, run it on CPython.
+does: the depth at which data ends the process moves with
+`sys.setrecursionlimit()`. Citry's limit of 32 levels was measured at
+PyPy's default recursion limit of 1,000, so do not set the recursion
+limit lower than that. A higher recursion limit lets the cases above
+nest deeper before PyPy ends the process, but it applies to the whole
+process, and data nested deeper still ends the process instead of
+raising an error. If your app takes deeply nested data from the
+browser, run it on CPython.
 
 Citry applies the same rules on every Python implementation other than
 CPython, such as GraalPy.
