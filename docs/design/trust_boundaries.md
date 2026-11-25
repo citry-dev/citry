@@ -3,8 +3,10 @@
 **Status (2026-11-25): references checked against `main` after the
 citry 1.3.0 release.** Every row cites the function that does the work
 by its name, not its line, and a validator fails the gate when a cited
-file, function, class, or docs heading no longer exists. When that
-function changes, the row changes in the same pull request (see
+file, Python function or class, or docs heading is missing. For
+JavaScript, TypeScript, Rust, and Pest it checks only that each name is
+defined somewhere in the file. When that function changes, the row
+changes in the same pull request (see
 [Keeping this doc accurate](#keeping-this-doc-accurate)).
 
 Citry turns Python values, template source, and HTTP requests into HTML,
@@ -53,7 +55,7 @@ Each row answers four questions.
    reach it.
 4. **What the docs say**: the public page or docstring that states the
    rule, with a page section cited as `path#anchor` (such as
-   `docs/security.md#authorize-every-event`). "Missing" means the code
+   `docs_site/content/security.md` ("Authorize every event")). "Missing" means the code
    makes the input author only or app code but no public page says so yet.
 
 Paths are repo-relative, with these short forms:
@@ -150,7 +152,7 @@ The shared escaping functions live in `citry/util/html.py`:
 | `{{ expr }}` result: `str`, number, or other ordinary object | Request data OK | Text | Escaped for HTML text on every path: capture keeps it as a text value (`citry/_vue/capture.py:PreparedExprNode.render`); static HTML writes it with `escape_to_str` (`citry/serialize.py:_append_frame_parts`); Vue sends it as JSON and sets a text node (`citry/_vue/direct_capture.py:assemble_typed_render.transform_component.transform_parts`, `citry/_vue/direct_capture.py:_append_text_binding`), and the server renderer writes it with `escape_text` (`vc/server_render.rs:escape_text`); node path and leaf programs use `_render_value` (`citry/citry_render.py:_render_value`). Inside an HTML comment `{{ }}` is not evaluated (`html_comment_content`, `tp/grammar.pest:html_comment_content`); it stays author text. | `docs/syntax/expressions.md#how-values-render` |
 | `{{ expr }}` result: `Markup` or any object with `__html__()` | App code (Citry inserts it unchanged) | Markup | Passed through: capture makes it trusted HTML (`citry/_vue/capture.py:PreparedExprNode.resolve_evaluated_value`); static HTML writes it raw (`citry/serialize.py:_append_frame_parts`); Vue sends it as an opaque HTML record the browser inserts with `createStaticVNode` (`citry/_vue/direct_capture.py:assemble_typed_render.transform_component.transform_parts`, `citry/_vue/client.js:opaqueHtmlComponent.setup`) after `reject_cross_boundary_html` (`citry/_vue/opaque_html.py:reject_cross_boundary_html`) checks its shape. The shape check is not a sanitizer. The browser runtime builds that block inside a `<template>`, where Chromium and WebKit read `<noscript>` content as markup while the page's own parse keeps it as text, so `reject_noscript_in_opaque_html` (`citry/_vue/opaque_html.py:reject_noscript_in_opaque_html`) refuses a `Markup` value that holds a `<noscript>` element on the Vue paths and in an Events `Render`, and `preflightDefinitions` refuses it again in the browser (`citry/_vue/client.js:preflightDefinitions`, parsed by `opaqueHtmlHoldsNoscript` at `citry/_vue/client.js:opaqueHtmlHoldsNoscript`). The same server check runs on each `Markup` value inside the contents of a `#c-ignore` or `v-pre` element; that block is one record written in the template, so the browser does not check it again. | `docs/syntax/expressions.md#insert-html-you-trust` ("trusts the whole value") |
 | `{{ expr }}` result: a component, `CitryElement`, `CitryRender`, or `Slot` | App code | Markup | A component renders with its own rules; a `CitryRender` is inlined as already-trusted HTML (`citry/citry_render.py:_render_value`); a `Slot` follows section 4. | `docs/syntax/expressions.md#how-values-render` |
-| `{{ expr }}` inside a `<script>` or `<style>` the template writes | App code (the author chooses the place). Never request data; app data only after the app escapes it for JavaScript or CSS itself | Runs / CSS | The grammar evaluates `{{ }}` there (`tp/grammar.pest:html_script_content`, `tp/grammar.pest:html_style_content`) but the value gets only the HTML escape, which is not a JavaScript or CSS escape. Data cannot write `</script>`, but it can leave a JavaScript string or add CSS rules. Under a data-chosen `svg` the browser decodes the escaped value inside `<script>`, so a `<c-element>` refuses a `<script>` the template wrote in such a body (section 3). | `docs/advanced/js-and-css-dependencies.md#send-values-to-css` ("send data with `js_data()`") |
+| `{{ expr }}` inside a `<script>` or `<style>` the template writes | App code (the author chooses the place). Never request data; app data only after the app escapes it for JavaScript or CSS itself | Runs / CSS | The grammar evaluates `{{ }}` there (`tp/grammar.pest:html_script_content`, `tp/grammar.pest:html_style_content`) but the value gets only the HTML escape, which is not a JavaScript or CSS escape. Data cannot write `</script>`, but it can leave a JavaScript string or add CSS rules. Under a data-chosen `svg` the browser decodes the escaped value inside `<script>`, so a `<c-element>` refuses a `<script>` the template wrote in such a body (section 3). | `docs/advanced/js-and-css-dependencies.md` ("Send values to CSS") ("send data with `js_data()`") |
 | Literal template text, static tags, HTML comments | Author only | Markup | Copied as written (`tp/compiler.rs:compile_template_body_with_mode`). | Author source |
 | `<c-raw>` body | Author only | Markup | Copied as written, no template processing (`tp/compiler.rs:compile_template_body_with_mode`); on a Vue page it must be a complete fragment. There it is inserted as an opaque block, so a `<noscript>` inside it is built as markup in Chromium and WebKit; it is not refused, because only the author writes it. In the contents of a `#c-ignore` or `v-pre` element only the author's own HTML is left alone: each `Markup` value inside is checked (`<c-element>` body and `Markup` rows). | `docs/syntax/raw.md#literal-text` |
 | HTML from a template with foreign spans (plain `str` parts), inside a Vue app or an Events `Render` | Template author and app code; the other engine escapes the request values it writes (Django does) | Markup | The Vue writer joins each plain string and the parts after it that need no Vue (more strings, `Markup`, static components with their root markers) into one block (`write_static_html_run` and `_static_part_html`, `citry/_vue/direct_capture.py`). The block is sent as an opaque HTML record that the browser inserts with `createStaticVNode`, never as template source; only a run of HTML whitespace is written into the template, where it cannot carry Vue syntax. `reject_cross_boundary_html` refuses a block that is not a complete fragment (a part that needs Vue ends a block, so such a component cannot sit inside one of its elements), `reject_noscript_in_opaque_html` and `reject_script_in_opaque_html` (`citry/_vue/opaque_html.py`) refuse `<noscript>` and `<script>`, and the block is refused under `svg`, `math` and text-only elements. A Vue attribute that the template author wrote in such a template is refused (`_refuse_vue_in_static_template`), while Vue syntax in the other engine's output stays plain text. The record's site has origin `markup`, so the browser runtime checks it for `<noscript>` again, and the settled-output `security_javascript` and `security_csp` checks read it (`citry/_vue/events.py`). Tests: `packages/py/citry/tests/test_vue_static_foreign_html.py`, `packages/py/citry/tests/e2e/test_vue_static_foreign_html_e2e.py`. | `docs_site/content/advanced/extensions.md` ("Put foreign output inside interactive components") |
@@ -243,7 +245,7 @@ template from request data".
 |---|---|---|---|---|
 | `js_data()` values | Request data OK | JSON data | `_json_plain` (`citry/_vue/json_data.py:_json_plain`: exact JSON types, `Secret` refused), then `script_json` (`citry/util/html.py:script_json`). Same on Vue pages, Events `Render`, and cached renders. What the component's own Vue template then does with the value (`v-html`) is section 7. | `docs/vue/component-options.md#seed-browser-data-from-python` |
 | `js_data()` top-level keys | Request data OK, within limits | Instance property names | `_check_js_data_keys` (`citry/component_render.py:_check_js_data_keys`) refuses `$` and `_` prefixes (so `__proto__`) and `citryId`. | `docs/vue/component-options.md#seed-browser-data-from-python` |
-| `css_data()` keys | Request data OK | Custom property names | `validate_css_var_name` (`citry/util/css.py:validate_css_var_name`). | `docs/advanced/js-and-css-dependencies.md#send-values-to-css` |
+| `css_data()` keys | Request data OK | Custom property names | `validate_css_var_name` (`citry/util/css.py:validate_css_var_name`). | `docs/advanced/js-and-css-dependencies.md` ("Send values to CSS") |
 | `css_data()` values | Request data OK for staying in one declaration. App code for a `url(...)` value | CSS; `url()` loads a resource | `serialize_css_var_value` (`citry/util/css.py:serialize_css_var_value`) refuses anything that could leave the declaration and writes every character outside printable ASCII as a CSS escape. Called for inline `<style>`, the served stylesheet, and again when a stored stylesheet is read from the cache (`citry/ext/dependencies/scripts.py`, `_rebuild_css_data_stylesheet` and `_css_vars_capture`). A raw `url(...)` passes, so data can choose an address the browser fetches. Citry names the stylesheet's URL with a keyed hash of the values, the key made from `secret` (`_css_data_keys`), or with a random key made once per process when there is no secret and no configured cache, so the answer to a request cannot confirm a guessed value (section 10 covers the time the answer takes). With a configured cache and no secret the name is a plain sha256, a guessed value can be confirmed, and Citry logs a warning once per engine (`_new_css_data_key`). | `docs/advanced/js-and-css-dependencies.md` ("Send values to CSS") |
 | `Component.js`, `Component.css`, `js_file`, `css_file` | Author only | Runs / CSS | `Dependency._check_validity` (`citry/ext/dependencies/types.py:Dependency._check_validity`) refuses inline content that contains `</script` or `</style`. Paths are not confined, which is fine for author paths. | `docs/advanced/js-and-css-dependencies.md#js-and-css-attributes` |
 | `Dependencies.js` / `.css` URL entries | Author only | Loads and runs | No scheme check on the server. On a Vue page and in fragments the browser runtime refuses a script URL that is not `http:`, `https:`, or `blob:`, or `file:` on a `file:` page (`requireWebAssetUrl`, `citry/_vue/client.js:requireWebAssetUrl`); a static page writes `<script src>` without checking its scheme. | `docs/advanced/dependency-files.md` ("Add a library URL") |
@@ -323,7 +325,7 @@ page by Citry itself; it is listed because it decides what a handler sees.
 | CSRF cookie and header names (`_csrf_cookie`, `_csrf_header` in `extensions_defaults["events"]`) | App code only | Choose which cookie the browser runtime reads and which header it sends the value in, to Citry's own routes on the page's origin | `_validate_engine_config_value` (`citry/ext/events/extension.py:_validate_engine_config_value`) with `csrf_name_problem` (`citry/ext/events/csrf.py:csrf_name_problem`): HTTP tokens only, no header Citry or the browser sets. Written into the configuration block as `csrfNames`; the runtime checks them again in `adoptServerCsrf` (`citry/_vue/client.js:adoptServerCsrf`), reads them with own-key lookups, takes them only from a block it trusts (a document block, a fragment with the page's nonce, or one page code loads), and keeps the first block's names. An explicit `Citry.configure({csrf})` wins for each name it sets. | `docs/security.md`, "CSRF cookie and header" |
 | State token | Request data (opaque, signed) | `verify_state_token` (`citry/ext/events/tokens.py:verify_state_token`): HMAC-SHA256 with a derived key, constant-time comparison, class binding, expiry. After every restore, `oversized_state_decimals` (`citry/ext/events/tokens.py:oversized_state_decimals`) checks each State field for a `Decimal` outside the event-data range, so a token signed by an earlier release that holds one is refused with 422 `invalid_args` before the handler runs (`citry/ext/events/dispatcher.py:EventsDispatcher._prepare_call`) and is never signed again. A cached render verifies and re-signs it (`citry/ext/events/cache.py:stage_events_cache`), and builds the render afresh when the restored State holds such a value (`citry/ext/events/cache.py:stage_events_cache`). A verified token past half its lifetime (`state_renewal_due`, `citry/ext/events/tokens.py:state_renewal_due`) gets a new token with a full lifetime in a `state` action even when State did not change (`_renewal_wanted` and `_renew_state`, `citry/ext/events/dispatcher.py:EventsDispatcher._renewal_wanted`, `citry/ext/events/dispatcher.py:EventsDispatcher._renew_state`). So whoever holds a valid token, a copy included, can keep it alive by calling at least once per half lifetime, even on a component whose handlers only read State. When a handler opts into GET (a handler uses POST unless it lists `methods=("GET",)` or `_methods`) and declares `state`, Citry's browser code sends its token in the `X-Citry-State-Token` header, not in the URL that access logs record; if a server from before 1.3.0 answers `invalid_state` (an answer whose `Vary` does not list the header, or any such answer the browser cannot read `Vary` on), the browser sends the call once more with the token in the query. The server still reads the `_citry_state_token` query parameter, and refuses a call whose header and query carry different tokens with 400 `protocol_mismatch` (`_merge_header_state_token`, `citry/ext/events/codecs.py:_merge_header_state_token`), so the URL cannot choose a token other than the header's. A token that a client of the app's own, or a page from before 1.3.0, sends in the query can still be read from logs and kept alive the same way. A GET answer lists `X-Citry-State-Token` in `Vary`, and a handler's own cache policy on a call that sent the header keeps only the directives a browser cache follows, behind `private`, with CDN-only cache headers dropped (`_with_cache_marks`, `citry/ext/events/routes.py:_with_cache_marks`). | `docs/security.md#treat-state-as-client-input`, `docs/security.md#check-event-data` |
 | `stateUpdates` (writes from `$state` and `:c-*`) | Request data OK | `apply_state_updates` (`citry/ext/events/tokens.py:apply_state_updates`): only `_model` fields, typed. After a write to a Pydantic State, every field gets the same size check as event data in `_check_state_decimals` (`citry/ext/events/tokens.py:_check_state_decimals`) before the State changes, so a `Decimal` that Pydantic builds from a write, or that a validator or `__post_init__` derives from it, is refused, at the write or at the next call's restore, even when it compares equal to the old value. | `docs/events/state.md#model`, `docs/security.md#check-event-data` |
-| What a guard (`Events._guard`, `@event(guard=...)`, or the app-wide `_guard`) and `Events._context` read: `self.event.args`, `self.state`, `self.request` | The guard functions and `_context`: app code only. The values they read: request data, including State fields the browser may write | `_prepare_call` (`citry/ext/events/dispatcher.py:EventsDispatcher._prepare_call`) runs the `on_event` hook, then `_context`, then the component-level guard and the handler's guard (`citry/ext/events/dispatcher.py:EventsDispatcher._prepare_call`), after it verifies the State token and applies the `stateUpdates` writes and before it checks the args against the handler's `data` class. So `self.event.args` holds the args unchecked (only the host CSRF field names removed): a key may be missing or hold a value of another type. The guards get a shallow copy of the args, so a guard that adds or removes a top-level key does not change what the `data` class checks; a change inside a nested list or dict does. `self.state` already holds the browser's writes to the `_model` fields, every public field by default, so a guard that decides on such a field checks a value the caller chose. Citry does not keep a copy of State from before the writes; the app keeps the fields its guards rely on out of `_model`. A refused call answers with the refusing guard's error before the args are checked, so the answer does not describe the caller's args. A State write the server refuses still answers 422 before the guard runs. | `docs/security.md#authorize-every-event`; `docs/events/state.md#model` |
+| What a guard (`Events._guard`, `@event(guard=...)`, or the app-wide `_guard`) and `Events._context` read: `self.event.args`, `self.state`, `self.request` | The guard functions and `_context`: app code only. The values they read: request data, including State fields the browser may write | `_prepare_call` (`citry/ext/events/dispatcher.py:EventsDispatcher._prepare_call`) runs the `on_event` hook, then `_context`, then the component-level guard and the handler's guard (`citry/ext/events/dispatcher.py:EventsDispatcher._prepare_call`), after it verifies the State token and applies the `stateUpdates` writes and before it checks the args against the handler's `data` class. So `self.event.args` holds the args unchecked (only the host CSRF field names removed): a key may be missing or hold a value of another type. The guards get a shallow copy of the args, so a guard that adds or removes a top-level key does not change what the `data` class checks; a change inside a nested list or dict does. `self.state` already holds the browser's writes to the `_model` fields, every public field by default, so a guard that decides on such a field checks a value the caller chose. Citry does not keep a copy of State from before the writes; the app keeps the fields its guards rely on out of `_model`. A refused call answers with the refusing guard's error before the args are checked, so the answer does not describe the caller's args. A State write the server refuses still answers 422 before the guard runs. | `docs_site/content/security.md` ("Authorize every event"); `docs/events/state.md#model` |
 | Sub-path (ASGI `root_path`, WSGI `SCRIPT_NAME`) | App deployment only; it becomes request data when a proxy passes on a client's `X-Forwarded-Prefix` | `normalize_sub_path` (`citry/_sub_path.py:normalize_sub_path`) uses the site root for a value that is not a path starting with one `/`, and percent-encodes the rest, so it stays a path on the same site either way. | `docs/advanced/web-frameworks.md#serve-below-a-sub-path` |
 | `get_event_url(..., query=, fragment=)` | Query and fragment: request data OK | `format_url` (`citry/util/misc.py:format_url`) encodes them. | `get_event_url` docstring (`citry/ext/events/routes.py:get_event_url`), shown in the API reference |
 
@@ -443,20 +445,16 @@ as far as the review found.
     attribute is `Class.name`, and a definition inside another one is
     named from the outermost definition down, joined with dots
     (`citry/components/dynamic.py:make_dynamic_element.DynamicElement.on_render`).
-    JavaScript and TypeScript follow the same rule for functions, classes,
-    methods, `const` and `let` values (the first name of each `const`, and
-    the next ones of `const a = 1, b = 2`), object properties, and class
-    fields (`citry/_vue/client.js:startPreparedOwned.host.preflightResult`).
+    JavaScript and TypeScript follow the same dotted rule for functions,
+    classes, methods, `const` and `let` values, object properties, and
+    class fields (`citry/_vue/client.js:startPreparedOwned.host.preflightResult`).
     The outermost name is one defined outside every named function,
-    class, or object, such as a function inside the anonymous function
-    that wraps all of `client.js`. Before the first name and between two
-    names, the check looks through `if` and loop blocks, anonymous
-    callbacks, and objects not assigned to a name. A property set with
+    class, or object; in `client.js` that includes the functions inside
+    the anonymous function that wraps the whole file. A property set with
     `Object.defineProperty` at the top is cited by its name alone,
     whatever object it is set on (`citry/_vue/client.js:pageNonce`). In
-    Rust a free `fn`, `struct`, `enum` or `trait` at the top of the file
-    is cited by its name, and a method in an `impl` or `trait` block at the
-    top of the file as `Type::method`
+    Rust a free `fn`, `struct`, `enum` or `trait` is cited by its name,
+    and a method as `Type::method`
     (`vc/server_render.rs:StaticWriter::element`); a method from
     `impl Display for Writer` is `Writer::fmt`. A Pest rule is cited by
     its name (`tp/grammar.pest:html_attribute`).
@@ -488,18 +486,31 @@ as far as the review found.
   in it, or a file at the repository root), alone or followed by
   `:Symbol` or `#anchor`. It fails when the file does not exist, when
   the symbol is not defined in it, or when no heading in the Markdown
-  file has the anchor. It also fails on a line number, whether it is
-  written in a reference (a colon and digits after the path) or right
-  after one (a colon, or the word "line", and a number after the code
-  span). Python is read with `ast`; JavaScript, TypeScript, Rust, and
-  Pest are read with patterns after their comments and strings are
-  blanked out, so a name in a comment does not count. Each failure names the line in this
-  doc, the reference, and what to change. The check runs in the
-  `validators` phase of `scripts/check.py`, in both the fast and the full
-  profile, and takes about half a second, because it reads the files
-  without importing or building anything. It proves that each name still
-  exists, not that the row still describes it; the security pass checks
-  that.
+  file has the anchor. What counts as defined depends on the language:
+  - Python files are read with `ast`, so each name must sit where the
+    reference puts it: the first name at the top of the file, and each
+    later name in the body of the one before it.
+  - JavaScript, TypeScript, Rust, and Pest files are read with a few
+    patterns that match a definition at the start of a line (such as
+    `function name`, `const name`, `name(` or `name:` for a method or
+    property, `fn name`, `struct Name`, an `impl` line, `rule =`). Each
+    part of the name (`a.b.c`, or `Type::method`) only has to be defined
+    somewhere in the file, so a name in a comment or a string does not
+    count. The check does not notice a rename when a definition with the
+    same name is still in the file, or when the old name still starts a
+    line inside a block comment or a multi-line string.
+  - A Markdown anchor is the heading's own `{ #id }` when it sets one,
+    otherwise GitHub's slug of its text.
+
+  The validator also fails on a line number, whether it is written in a
+  reference (a colon and digits after the path) or right after one (a
+  colon, or the word "line", and a number after the code span). Each failure names the
+  line in this doc, the reference, and what to change. The check runs in
+  the `validators` phase of `scripts/check.py`, in both the fast and the
+  full profile, and takes about a quarter of a second, because it reads
+  the files without importing or building anything. It proves that each
+  name still exists, not that the row still describes it; the security
+  pass checks that.
 - **How a missing row is caught.** The validator
   [`scripts/validators/trust_boundary_rows.py`](../../scripts/validators/trust_boundary_rows.py)
   reads every public method of `Extension`, every hook an extension fires

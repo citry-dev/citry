@@ -43,103 +43,52 @@ else:
     def fallback(): ...
 """
 
-# A brace inside a regex, a string, or a template would close `startApp`
-# early if it were read as code, and then `host` would not be found in it.
+# One definition of each form the check reads. The names in a comment, in a
+# string, and in a call statement are not definitions.
 _JAVASCRIPT = """\
-/* function commentOnly() {} */
-(function (global) {
-  "use strict";
-  const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
-  function startApp(root) {
-    const localOnly = 1;
-    const pattern = /[}]/g;
-    const label = "function stringOnly() }";
-    const text = `}${"}"}`;
-    function matches(value) {
-      return /}/.test(value);
-    }
-    if (root) {
-      const fallback = () => null;
-    }
-    const host = {
-      preflight(result) {
-        const nested = { deepKey: 1 };
-        return result;
-      },
-    };
-    return host;
-  }
-  const settings = Object.freeze({
-    setup(props) { return props; },
-  });
-  class Store { load() { return 1; } }
-  Object.defineProperty(global, "pageNonce", { value: () => null });
-  const helper = (value) => {
-    const inner = value;
+// function commentOnly() {}
+/*
+ * function blockCommentOnly() {}
+ */
+export async function startApp(root) {
+  const label = "function stringOnly() {";
+  const host = {
+    preflight(result) {
+      return result;
+    },
+    mode: 1,
   };
-  const load = async ({ id }) => {
-    const step = id;
-  };
-  const LIMIT_JS = 3;
-  function later() {
-    const deep = 1;
-  }
-  function collect(items) {
-    items.forEach((item) => {
-      const seen = item;
-    });
-  }
-})(window);
-"""
-
-# TypeScript: a return type with braces, an object type in a parameter or
-# a type alias, a class field holding an arrow function, `let` with no
-# value, the second name of one `const`, an object whose properties sit
-# side by side, and a block under a `switch` label.
-_TYPESCRIPT = """\
-export function makeTarget(input: string): { ok: boolean } {
-  const target = { ok: input.length > 0 };
-  return target;
+  registerCallOnly(host);
+  return host;
 }
-export function configure(opts: { nonce: string }, second: number): void {
-  const applied = opts.nonce;
+function* ids() {}
+export class Store {
+  static async load() {}
+  get size() { return 1; }
+  limit = 3;
+  hooks: Hooks = {};
 }
-type Options = { secret: string };
-export class Widget {
-  handler: Handler = (event) => {
-    const local = event;
-  };
-}
+const settings = 1;
 let pending;
-const FIRST = 1, SECOND = 2;
-const settings = {
-  mode: 1,
-  load() { const sibling = 1; },
-};
-switch (FIRST) {
-  default: {
-    const fromDefault = 1;
-  }
-}
+var legacy = 2;
+Object.defineProperty(global, "pageNonce", { value: () => null });
 """
 
-# The same for the `impl Writer` block: a brace in a char, a string, or a
-# raw string would end it before `element`.
+_TYPESCRIPT = """\
+export function makeTarget<T>(input: string): { ok: boolean } {
+  return { ok: input.length > 0 };
+}
+export type Options = { secret: string };
+interface Shape {}
+"""
+
 _RUST = """\
 // fn comment_only() {}
-/* outer /* nested */ fn nested_comment_only() {} */
 pub struct Writer<'a> {
     text: &'a str,
 }
-pub struct Other;
-pub struct Id(u8);
-pub struct Wrap<F>(F);
 
 impl<'a> Writer<'a> {
-    const OPEN: char = '}';
-    const CLOSE: &'static str = "}";
-    const RAW: &'static str = r#"say "}" fn raw_only() {"#;
-
     pub fn element(&mut self) -> &'a str {
         fn helper() {}
         self.text
@@ -152,32 +101,14 @@ impl std::fmt::Display for Writer<'_> {
     }
 }
 
-impl<'s, 'a> IntoIterator for &'s Writer<'a> {
-    type Item = char;
-    type IntoIter = std::vec::IntoIter<char>;
-    fn into_iter(self) -> Self::IntoIter {
-        Vec::new().into_iter()
-    }
-}
-
+// `Id` is defined in another file of the crate.
 impl From<[u8; 1]> for Id {
     fn from(bytes: [u8; 1]) -> Self {
         Id(bytes[0])
     }
 }
 
-impl<F: Fn() -> u8> Wrap<F> {
-    fn call(&self) -> u8 {
-        (self.0)()
-    }
-}
-
-impl Other {
-    pub fn other_method(&self) {}
-}
-
-pub fn escape_text(text: &str) -> String {
-    fn local_helper() {}
+pub(crate) fn escape_text(text: &str) -> String {
     text.to_owned()
 }
 
@@ -185,15 +116,13 @@ pub trait Render {
     fn render(&self);
 }
 
-mod tests {
-    struct Other;
-
-    impl Other {
-        fn only_in_tests(&self) {}
-    }
-
-    fn test_helper() {}
+pub enum Mode {
+    Strict,
 }
+
+const LIMIT: usize = 3;
+pub type Alias = u8;
+mod tests {}
 """
 
 _PEST = """\
@@ -249,12 +178,12 @@ _RS = "crates/demo/src/lib.rs"
 _GOOD_REFERENCES = f"""\
 `pkg/mod.py:LIMIT`, `pkg/mod.py:third`, `pkg/mod.py:Checker.check`, `pkg/mod.py:Checker.mode`,
 `pkg/mod.py:make_component.Inner.on_render`, `pkg/mod.py:fallback`, `pkg/mod.py`,
-`{_JS}:own`, `{_JS}:startApp.host.preflight`, `{_JS}:startApp.fallback`, `{_JS}:startApp.matches`,
-`{_JS}:settings.setup`, `{_JS}:Store.load`, `{_JS}:pageNonce`, `{_JS}:helper.inner`, `{_JS}:load.step`,
-`{_JS}:later.deep`, `{_JS}:collect.seen`, `{_TS}:makeTarget.target`, `{_TS}:configure.applied`, `{_TS}:Options`,
-`{_TS}:Widget.handler.local`, `{_TS}:pending`, `{_TS}:SECOND`, `{_TS}:settings.load.sibling`, `{_TS}:fromDefault`,
-`{_RS}:Writer`, `{_RS}:Writer::element`, `{_RS}:Writer::fmt`, `{_RS}:Writer::into_iter`, `{_RS}:Id::from`,
-`{_RS}:Wrap::call`, `{_RS}:Other::other_method`, `{_RS}:escape_text`, `{_RS}:Render::render`,
+`{_JS}:startApp`, `{_JS}:ids`, `{_JS}:Store`, `{_JS}:settings`, `{_JS}:pending`, `{_JS}:legacy`,
+`{_JS}:startApp.host`, `{_JS}:startApp.host.preflight`, `{_JS}:startApp.host.mode`, `{_JS}:Store.load`,
+`{_JS}:Store.size`, `{_JS}:Store.limit`, `{_JS}:Store.hooks`, `{_JS}:pageNonce`,
+`{_TS}:makeTarget`, `{_TS}:Options`, `{_TS}:Shape`,
+`{_RS}:Writer`, `{_RS}:Writer::element`, `{_RS}:Writer::fmt`, `{_RS}:Id::from`, `{_RS}:Render::render`,
+`{_RS}:escape_text`, `{_RS}:Mode`, `{_RS}:LIMIT`, `{_RS}:Alias`, `{_RS}:tests`, `{_RS}:helper`,
 `crates/demo/src/grammar.pest:html_attribute`,
 `docs/guide.md#guide`, `docs/guide.md#check-c-bind-keys`, `docs/guide.md#stable-anchor`,
 `docs/guide.md#see-the-api-now`, `docs/guide.md#limits-1`, `docs/guide.md#notes--see-x-`,
@@ -290,40 +219,26 @@ def test_a_doc_whose_references_all_resolve_passes(tmp_path: Path) -> None:
         ("`pkg/mod.py:Checker.check.local`", "`local` is not defined in `Checker.check`"),
         ("`pkg/mod.py:LIMIT.real`", "`LIMIT` in pkg/mod.py is a value"),
         ("`pkg/mod.py:check()`", "`check()` is not a symbol name"),
-        # A JavaScript name in a comment or a string is not a definition; a
-        # local does not stand for a top-level name; a later name must sit in
-        # the body of the one before it, not deeper.
+        # JavaScript and TypeScript: each part of the name must be defined
+        # somewhere in the file; a name in a comment, in a string, or in a
+        # call statement is not a definition.
+        (f"`{_JS}:startApp.hots`", "`hots` is not defined in packages/js/app/src/runtime.js; find where it moved"),
+        (f"`{_JS}:startApps.host`", "`startApps` is not defined in packages/js/app/src/runtime.js"),
         (f"`{_JS}:commentOnly`", "`commentOnly` is not defined"),
+        (f"`{_JS}:blockCommentOnly`", "`blockCommentOnly` is not defined"),
         (f"`{_JS}:stringOnly`", "`stringOnly` is not defined"),
-        (f"`{_JS}:localOnly`", "`localOnly` is not defined"),
-        (f"`{_JS}:Store.preflight`", "`preflight` is not defined in `Store`"),
-        (f"`{_JS}:startApp.preflight`", "`preflight` is not defined in `startApp`"),
-        (f"`{_JS}:startApp.host.preflight.deepKey`", "`deepKey` is not defined in `startApp.host.preflight`"),
-        (f"`{_JS}:inner`", "`inner` is not defined in packages/js/app/src/runtime.js"),
-        (f"`{_JS}:LIMIT_JS.deep`", "`LIMIT_JS` in packages/js/app/src/runtime.js has no body"),
-        # TypeScript: a return type, an object type, and a parameter do not
-        # move a name to another level, and a keyword is not a definition.
-        (f"`{_TS}:target`", "`target` is not defined in packages/js/app/src/types.ts"),
-        (f"`{_TS}:nonce`", "`nonce` is not defined in packages/js/app/src/types.ts"),
-        (f"`{_TS}:secret`", "`secret` is not defined in packages/js/app/src/types.ts"),
-        (f"`{_TS}:second`", "`second` is not defined in packages/js/app/src/types.ts"),
-        (f"`{_TS}:Widget.local`", "`local` is not defined in `Widget`"),
-        (f"`{_TS}:settings.mode.sibling`", "`settings.mode` in packages/js/app/src/types.ts has no body"),
-        (f"`{_TS}:if`", "`if` is not defined"),
-        # Rust methods need their type, only the type's own blocks count, and
-        # an item inside a function is not a free item.
-        (f"`{_RS}:element`", "cite it as `Type::element`"),
-        (f"`{_RS}:Missing::element`", "has no `impl` or `trait` block for `Missing`"),
-        (f"`{_RS}:Writer::other_method`", "`other_method` is not defined in an `impl` or `trait` block for `Writer`"),
-        (f"`{_RS}:Writer::helper`", "`helper` is not defined in an `impl` or `trait` block for `Writer`"),
-        (f"`{_RS}:local_helper`", "is defined inside another item"),
-        (f"`{_RS}:test_helper`", "is defined inside another item"),
-        (f"`{_RS}:Other::only_in_tests`", "`only_in_tests` is not defined in an `impl` or `trait` block for `Other`"),
-        (f"`{_RS}:Render::paint`", "`paint` is not defined in an `impl` or `trait` block for `Render`"),
-        (f"`{_RS}:raw_only`", "`raw_only` is not defined"),
+        (f"`{_JS}:registerCallOnly`", "`registerCallOnly` is not defined"),
+        (f"`{_JS}:Store.load()`", "`Store.load()` is not a symbol name"),
+        (f"`{_TS}:makeTargets`", "`makeTargets` is not defined in packages/js/app/src/types.ts"),
+        # Rust: a method needs its type and its own name; a name in a comment
+        # is not a definition.
+        (f"`{_RS}:Writer::elemnt`", "`elemnt` is not defined in crates/demo/src/lib.rs"),
+        (f"`{_RS}:Missing::element`", "`Missing` is not defined in crates/demo/src/lib.rs"),
+        (f"`{_RS}:missing_fn`", "`missing_fn` is not defined in crates/demo/src/lib.rs"),
         (f"`{_RS}:comment_only`", "`comment_only` is not defined"),
-        (f"`{_RS}:nested_comment_only`", "`nested_comment_only` is not defined"),
         (f"`{_RS}:Writer.element`", "`Writer.element` is not a symbol name"),
+        # Pest: the rule must start a line, and a rule in a comment does not count.
+        ("`crates/demo/src/grammar.pest:html_atribute`", "rule `html_atribute` is not defined"),
         ("`crates/demo/src/grammar.pest:comment_rule`", "rule `comment_rule` is not defined"),
         # Markdown anchors: front matter, an HTML comment, and a fenced block
         # hold no headings, and a heading with its own id is cited by that id.
@@ -369,6 +284,15 @@ def test_a_reference_that_points_at_nothing_is_reported(tmp_path: Path, referenc
     doc = _doc(_GOOD_REFERENCES + reference)
     line = doc.count("\n", 0, doc.index(reference)) + 1
     assert problems[0].startswith(f"{trust_boundary_refs.DOC}:{line}: ")
+
+
+def test_a_dotted_name_only_needs_each_part_defined_somewhere_in_the_file(tmp_path: Path) -> None:
+    # The accepted limit of the pattern check: `host` is defined inside
+    # `startApp`, not in `Store`, and `escape_text` is not a method of
+    # `Writer`, yet both pass because each part exists in its file.
+    root = _repository(tmp_path, f"`{_JS}:Store.host`, `{_RS}:Writer::escape_text`\n")
+
+    assert trust_boundary_refs.check(root) == []
 
 
 def test_a_doc_without_the_short_form_list_is_reported_once(tmp_path: Path) -> None:

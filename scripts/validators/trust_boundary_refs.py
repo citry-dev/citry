@@ -12,11 +12,12 @@ repository root), alone or followed by `:Symbol` or `#anchor`, it checks
 that:
 
 - the file exists;
-- the symbol is defined in that file: its first name at the top of the
-  file, and each later name in the body of the one before it. Python is
-  read with `ast`. JavaScript, TypeScript, Rust, and Pest are read with
-  patterns, after `_mask` blanks out their comments and strings, so a
-  name in a comment or a brace in a string does not count;
+- the symbol is defined in that file. Python is read with `ast`, so a
+  name must sit where the symbol says: its first name at the top of the
+  file, and each later name in the body of the one before it. JavaScript,
+  TypeScript, Rust, and Pest are read with a few patterns that match a
+  definition at the start of a line, and each part of the symbol
+  (`a.b.c`, or `Type::method`) only has to be defined somewhere in the file;
 - the anchor names a heading in the Markdown file: the heading's own
   `{ #id }` when it sets one, otherwise GitHub's slug of its text.
 
@@ -416,471 +417,91 @@ def _nested_blocks(statement: ast.stmt) -> Iterator[list[ast.stmt]]:
 
 
 # ---------------------------------------------------------------------------
-# Brackets in masked source
+# JavaScript, TypeScript, Rust, and Pest
 # ---------------------------------------------------------------------------
 
+# These files are read with a few patterns, and a name counts when any one of
+# them finds it defined anywhere in the file. Each pattern starts at the
+# beginning of a line (after indentation and keywords such as `export` or
+# `pub`), so a name inside a comment or a string does not count, and no
+# reader of comments and strings is needed. The check cannot see that a
+# name was renamed when another definition with the same name is left in
+# the file. Python files do not have that gap: `ast` reads them in full.
 
-class _Brackets:
-    """
-    Where each `{`, `(` and `[` in masked source opens and closes.
+_JS_MODIFIERS = (
+    r"(?:(?:export|default|declare|abstract|static|async|get|set|public|private|protected|readonly|override)[ \t]+)*"
+)
+_JS_DEFINITIONS = tuple(
+    re.compile(pattern, re.MULTILINE)
+    for pattern in (
+        # function name  /  class Name  /  const name  /  type Name
+        rf"^[ \t]*{_JS_MODIFIERS}"
+        rf"(?:function[ \t]*\*?|class|interface|enum|namespace|type|const|let|var)[ \t]+({_NAME})",
+        # A method, an object property, or a class field: name(  name<T>(  name:  name =
+        # After the `(`, a line that ends with `;` is a call statement, not a method.
+        rf"^[ \t]*{_JS_MODIFIERS}\*?[ \t]*({_NAME})[ \t]*[?!]?[ \t]*"
+        r"(?:(?:<[^>\n]*>)?\((?![^\n]*;[ \t]*$)|:|=(?![=>]))",
+        # A property added to an object: Object.defineProperty(target, "name", ...)
+        rf"^[ \t]*Object\.defineProperty\(\s*[\w$.]+\s*,\s*[\"']({_NAME})[\"']",
+    )
+)
 
-    Built once per file, so the checks below can ask which block holds a
-    position without counting braces from the start of the file each time.
-    """
+_IDENTIFIER = r"[A-Za-z_]\w*"
+# fn name  /  pub(crate) struct Name  /  pub const fn name  /  const NAME: T
+_RUST_ITEM = re.compile(
+    r"^[ \t]*(?:pub(?:\([^)\n]*\))?[ \t]+)?(?:(?:async|const|unsafe)[ \t]+)*"
+    rf"(?:fn|struct|enum|trait|type|union|mod|const|static)[ \t]+({_IDENTIFIER})\b",
+    re.MULTILINE,
+)
+# An `impl` line and the lines of its header up to the `{`, which name the
+# type the block is for (`impl<'a> Writer<'a> {`, `impl Display for Writer {`).
+_RUST_IMPL = re.compile(r"^[ \t]*(?:unsafe[ \t]+)?impl\b([^{]*)", re.MULTILINE)
 
-    def __init__(self, masked: str) -> None:
-        self.text = masked
-        self.positions = [match.start() for match in re.finditer(r"[{}()\[\]]", masked)]
-        self.close: dict[int, int] = {}
-        self.open_of: dict[int, int] = {}
-        # For each bracket, the index of the open bracket around it (-1 at
-        # the top), so walking outward from a position is a chain of lookups.
-        self.parent: list[int] = []
-        stack: list[int] = []
-        for index, position in enumerate(self.positions):
-            if masked[position] in "{([":
-                self.parent.append(stack[-1] if stack else -1)
-                stack.append(index)
-            else:
-                if stack:
-                    opening = self.positions[stack.pop()]
-                    self.close[opening] = position
-                    self.open_of[position] = opening
-                self.parent.append(stack[-1] if stack else -1)
-
-    def enclosing(self, position: int) -> Iterator[int]:
-        """Yield the open brackets around `position`, innermost first."""
-        index = bisect.bisect_left(self.positions, position) - 1
-        if index >= 0 and self.text[self.positions[index]] not in "{([":
-            index = self.parent[index]
-        while index >= 0:
-            yield self.positions[index]
-            index = self.parent[index]
-
-    def innermost(self, position: int) -> int:
-        return next(self.enclosing(position), -1)
-
-    def closing(self, opening: int) -> int:
-        return self.close.get(opening, len(self.text))
+# A Pest rule starts its line: name = { ... }
+_PEST_RULE = re.compile(rf"^[ \t]*({_IDENTIFIER})[ \t]*=", re.MULTILINE)
 
 
 @cache
-def _brackets(masked: str) -> _Brackets:
-    return _Brackets(masked)
+def _javascript_names(source: str) -> frozenset[str]:
+    return frozenset(match.group(1) for pattern in _JS_DEFINITIONS for match in pattern.finditer(source))
 
 
-# ---------------------------------------------------------------------------
-# JavaScript and TypeScript
-# ---------------------------------------------------------------------------
+@cache
+def _rust_names(source: str) -> tuple[frozenset[str], frozenset[str]]:
+    """Return the names of the items a Rust file defines, and the names in the headers of its `impl` blocks."""
+    items = frozenset(match.group(1) for match in _RUST_ITEM.finditer(source))
+    impl_names = frozenset(
+        name for match in _RUST_IMPL.finditer(source) for name in re.findall(_IDENTIFIER, match.group(1))
+    )
+    return items, impl_names
 
 
 def _check_javascript(path: str, source: str, symbol: str) -> str | None:
     if not _DOTTED_SYMBOL.match(symbol):
         return _not_a_symbol(symbol, f"dotted names, such as `{path}:object.method`")
-    masked = _mask(source, "js")
-    brackets = _brackets(masked)
-    names = symbol.split(".")
-    parent_bodies: list[int] = []
-    for index, name in enumerate(names):
-        candidates = _javascript_definitions(masked, name)
-        # The first name must sit outside every named definition: at the top
-        # of the file, or in the anonymous function that wraps client.js, so
-        # a local of the same name inside some function does not count. Each
-        # later name must sit in the body of the one before it, with only
-        # control blocks and anonymous callbacks in between.
-        owners = parent_bodies if index else [-1]
-        found = [(start, end) for start, end in candidates if _javascript_owner_body(brackets, start) in owners]
-        if not found:
-            return _not_defined(name, ".".join(names[:index]), path)
-        parent_bodies = [body for _, end in found if (body := _block_after(brackets, end)) is not None]
-        if not parent_bodies and index + 1 < len(names):
-            owner = ".".join(names[: index + 1])
-            return f"`{owner}` in {path} has no body to hold `{names[index + 1]}`; cite `{path}:{owner}` itself"
-    return None
-
-
-# The ways a JavaScript or TypeScript name is defined, as a test of the text
-# just before the name and a test of the text from the name's end. The name
-# itself is found first with a plain word search, which keeps this fast.
-_JS_MODIFIERS = r"(?:(?:async|static|get|set|public|private|protected|readonly|override|declare|abstract)\s+)*"
-_JS_DEFINITION_FORMS = (
-    # function name(  /  function* name<T>(
-    (re.compile(r"\bfunction\b\s*\*?\s*\Z"), re.compile(r"\s*[<(]")),
-    (re.compile(r"\b(?:class|interface|enum|namespace)\s+\Z"), re.compile(r"")),
-    (re.compile(r"\btype\s+\Z"), re.compile(r"\s*(?:<[^<>]*>)?\s*=")),
-    # const name =  /  let name: Type =  /  let name;
-    (re.compile(r"\b(?:const|let|var)\s+\Z"), re.compile(r"\s*[=:;,]|[ \t]*(?:\n|\Z)")),
-    # The second name of `const first = 1, second = 2`.
-    (re.compile(r"\b(?:const|let|var)\s+[^;{}()\[\]]*,\s*\Z"), re.compile(r"\s*=(?!=)")),
-    # A method in a class or object: name(params) {  /  async name<T>(params): Type {
-    (
-        re.compile(rf"(?:^|[\s,{{;]){_JS_MODIFIERS}\*?\s*\Z", re.MULTILINE),
-        re.compile(r"\s*(?:<[^<>]*>)?\s*\([^()]*(?:\([^()]*\)[^()]*)*\)\s*(?::[^{;=]*)?\{"),
-    ),
-    # A class field: name = value  /  readonly name: Type = value
-    (
-        re.compile(rf"(?:^|[;{{])\s*{_JS_MODIFIERS}\Z", re.MULTILINE),
-        re.compile(r"\s*[?!]?\s*(?::[^=;{}()]*)?=(?![=>])"),
-    ),
-    # An object property: name: value
-    (re.compile(r"(?:^|[{,])\s*\Z", re.MULTILINE), re.compile(r"\s*:(?!:)")),
-    # "name": value  /  Object.defineProperty(target, "name", ...)
-    (re.compile(r"(?:^|[{,])\s*[\"']\Z", re.MULTILINE), re.compile(r"[\"']\s*:(?!:)")),
-)
-# Object.defineProperty(target, "name", ...): the one form whose name sits
-# inside the parentheses of a call.
-_JS_DEFINE_PROPERTY = (re.compile(r"\bObject\.defineProperty\(\s*[\w$.]+\s*,\s*[\"']\Z"), re.compile(r"[\"']"))
-# Far enough back to hold a definition's keywords, and a defineProperty
-# call split over lines.
-_JS_LOOKBACK = 200
-# A block that one of these opens belongs to the code around it, not to a
-# definition of its own.
-_JS_CONTROL_KEYWORDS = frozenset({"if", "for", "while", "switch", "catch", "with", "else", "try", "finally", "do"})
-# A new statement on the next line ends a value written without a `;`.
-_JS_NEXT_STATEMENT = re.compile(r"\n\s*(?:function|class|const|let|var|if|for|while|return|export|import)\b")
-
-
-@cache
-def _javascript_definitions(masked: str, name: str) -> list[tuple[int, int]]:
-    """
-    Find where `name` is defined.
-
-    Each result is the name's start and the position right after the name
-    (after its closing quote, for a quoted name), where its parameters or
-    value begin.
-    """
-    if name in _JS_CONTROL_KEYWORDS:
-        return []  # `if (x) {` has the shape of a method, but defines nothing
-    brackets = _brackets(masked)
-    found: list[tuple[int, int]] = []
-    for word in re.finditer(rf"(?<![\w$]){re.escape(name)}(?![\w$])", masked):
-        # A definition sits in a block or at the top, never inside the
-        # parentheses of a call or a parameter list.
-        opening = brackets.innermost(word.start())
-        forms = _JS_DEFINITION_FORMS if opening == -1 or masked[opening] == "{" else (_JS_DEFINE_PROPERTY,)
-        before = masked[max(0, word.start() - _JS_LOOKBACK) : word.start()]
-        for prefix, suffix in forms:
-            after = suffix.match(masked, word.end())
-            if after and prefix.search(before):
-                quoted = after.group(0)[:1] in ("'", '"')
-                found.append((word.start(), word.end() + 1 if quoted else word.end()))
-                break
-    return found
-
-
-def _javascript_named_block(brackets: _Brackets, opening: int) -> bool:
-    """
-    Say whether a `{` opens the body of a named definition.
-
-    A control block (`if (x) {`, `else {`, `default: {`) and an anonymous
-    function or object (`function (x) {`, a callback such as
-    `items.map((x) => {`) return False: a definition inside one belongs to
-    the named definition around it.
-    """
-    masked = brackets.text
-    head = _javascript_text_before(masked, opening)
-    if not head or _last_name(head) in _JS_CONTROL_KEYWORDS or re.search(r"\b(?:default|case\b[^:]*):$", head):
-        return False  # a block after `else`, `try`, `finally`, `do`, or a `switch` label
-    if head.endswith("=>"):
-        # An arrow function: named only when assigned, as in `const name = (x) => {`.
-        # It goes first, because the walk back for a signature below would
-        # cross the `=>` of `(x): { ok: boolean } => {`.
-        arrow = _previous_index(masked, opening) - 1  # where `=>` starts
-        list_close = _parameters_close_before(brackets, arrow)
-        if list_close is not None:
-            params = _javascript_text_before(masked, brackets.open_of.get(list_close, -1))
-        else:
-            params = re.sub(rf"{_NAME}$", "", head[:-2].rstrip())
-        params = re.sub(r"\basync$", "", _without_type_parameters(params)).rstrip()
-        # `const name = (() => {...})()` wraps the function in parentheses.
-        return _javascript_assigned(params.removesuffix("(").rstrip())
-    # A parameter or condition list, possibly followed by a TypeScript
-    # return type: `if (x) {`, `name(x): Type {`, `function (x) {`.
-    list_close = _parameters_close_before(brackets, opening)
-    if list_close is not None:
-        before_list = _without_type_parameters(_javascript_text_before(masked, brackets.open_of.get(list_close, -1)))
-        called = _last_name(before_list)
-        if called in _JS_CONTROL_KEYWORDS:
-            return False
-        if called == "function":
-            # `const name = function (x) {` is named by what it is assigned to.
-            assigned_to = re.sub(r"(?:\basync\s+)?function$", "", before_list).rstrip()
-            return _javascript_assigned(assigned_to.removesuffix("(").rstrip())
-        return called is not None
-    if head[-1] in ";{}":
-        return False  # a bare block
-    if re.search(rf"\b(?:class|interface|enum|namespace)\s+{_NAME}[^{{}};]*$", head):
-        return True
-    if head[-1] in "(,":
-        # An object passed to a call, as in `const name = Object.freeze({`.
-        call_open = brackets.innermost(opening)
-        callee = re.sub(r"(?:\bnew\s+)?[\w$.]+$", "", _javascript_text_before(masked, call_open)).rstrip()
-        return _javascript_assigned(callee)
-    return _javascript_assigned(head)
-
-
-def _parameters_close_before(brackets: _Brackets, end: int) -> int | None:
-    """
-    Return the `)` of a parameter list that ends right before `end`, looking past a TypeScript return type.
-
-    `name(x) {`, `name(x): Promise<void> {` and `(x): { ok: boolean } =>`
-    all lead back to the `)` after `x`. Anything else returns None.
-    """
-    masked = brackets.text
-    index = end - 1
-    while index >= 0 and masked[index].isspace():
-        index -= 1
-    if index >= 0 and masked[index] == ")":
-        return index
-    # Walk back over a return type to its `:`. Only what a type can hold
-    # is crossed, and a `{ ... }` only when it follows a type operator, so
-    # the walk stops at the code before a class or a bare block.
-    limit = max(0, end - _JS_LOOKBACK)
-    while index >= limit:
-        char = masked[index]
-        if char in ")]}":
-            opener = brackets.open_of.get(index, -1)
-            if opener == -1 or (char == "}" and _previous_char(masked, opener) not in ":|&<,(=>"):
-                return None
-            index = opener - 1
-        elif char == ":":
-            before = _previous_index(masked, index)
-            return before if before >= 0 and masked[before] == ")" else None
-        elif char.isalnum() or char.isspace() or char in "_$.<>|&,?[]=":
-            index -= 1
-        else:
-            return None
-    return None
-
-
-def _previous_index(text: str, index: int) -> int:
-    index -= 1
-    while index >= 0 and text[index].isspace():
-        index -= 1
-    return index
-
-
-def _previous_char(text: str, index: int) -> str:
-    before = _previous_index(text, index)
-    return text[before] if before >= 0 else ""
-
-
-def _without_type_parameters(text: str) -> str:
-    """Drop TypeScript type parameters at the end, as in `function name<T>` or `const name = <T>`."""
-    return re.sub(r"<[^<>]*>$", "", text.rstrip()).rstrip()
-
-
-def _javascript_text_before(masked: str, position: int) -> str:
-    return masked[max(0, position - _JS_LOOKBACK) : max(position, 0)].rstrip()
-
-
-def _last_name(text: str) -> str | None:
-    word = re.search(rf"(?<![\w$.])({_NAME})$", text)
-    return word.group(1) if word else None
-
-
-# Where a value is given a name: `const name =`, `let name: Type =`, a
-# property or parameter `name:`, a class field `name: Type =`, and
-# `type Name =`.
-_JS_ASSIGNED = re.compile(
-    rf"(?:\b(?:const|let|var)\s+{_NAME}\s*(?::[^=;{{}}]*)?="
-    rf"|(?:^|[{{,;(])\s*[\"']?{_NAME}[\"']?\s*[?!]?\s*:"
-    rf"|(?:^|[{{,;])\s*{_JS_MODIFIERS}[\"']?{_NAME}[\"']?\s*[?!]?\s*(?::[^=;{{}}]*)?="
-    rf"|\btype\s+{_NAME}\s*(?:<[^<>]*>)?\s*=)$",
-    re.MULTILINE,
-)
-
-
-def _javascript_assigned(text: str) -> bool:
-    return _JS_ASSIGNED.search(text) is not None
-
-
-def _javascript_owner_body(brackets: _Brackets, position: int) -> int:
-    """Return the `{` of the nearest named definition's body around `position`, or -1 at the top level."""
-    for opening in brackets.enclosing(position):
-        if brackets.text[opening] == "{" and _javascript_named_block(brackets, opening):
-            return opening
-    return -1
-
-
-def _block_after(brackets: _Brackets, position: int) -> int | None:
-    """
-    Return the `{` that opens the body of the definition whose name ends at `position`.
-
-    Skips what can come between a name and its body: TypeScript type
-    parameters, `=` or `:`, `async`, one parameter list (so the destructured
-    parameter in `({a}) => {` is not read as the body), and a return type
-    (so the `{` of `(): { ok: boolean } {` is not either). A body that a
-    call wraps, as in `Object.freeze({`, is the first brace. The search
-    stops at the end of the definition: a `;`, the `,` or `}` after a
-    property's value, or a new statement on the next line.
-    """
-    masked = brackets.text
-    index = _skip_space(masked, position)
-    if masked.startswith("<", index):
-        index = _skip_space(masked, _matching_angle(masked, index) + 1)
-    if masked.startswith(("=", ":"), index) and not masked.startswith("=>", index):
-        index = _skip_space(masked, index + 1)
-        if re.match(r"async\b", masked[index : index + 6]):
-            index = _skip_space(masked, index + len("async"))
-    if masked.startswith("(", index):
-        index = _skip_space(masked, brackets.closing(index) + 1)
-        if masked.startswith(":", index):
-            index = _after_return_type(brackets, index + 1)
-    depth = 0
-    while index < len(masked):
-        char = masked[index]
-        if char == "{":
-            return index
-        if char in "([":
-            depth += 1
-        elif char in ")]":
-            depth -= 1
-            if depth < 0:
-                return None
-        elif depth == 0 and (char in ";,}" or (char == "\n" and _JS_NEXT_STATEMENT.match(masked, index))):
-            return None
-        index += 1
-    return None
-
-
-def _after_return_type(brackets: _Brackets, index: int) -> int:
-    """Return where a TypeScript return type that starts at `index` ends: at the body's `{`, or `=>`."""
-    masked = brackets.text
-    last = ":"
-    while index < len(masked):
-        char = masked[index]
-        if char == "{" and last not in ":|&<,(":
-            return index
-        if char in "{([":
-            # A group inside the type, such as an object type or a tuple.
-            index = brackets.closing(index) + 1
-            last = ")"
-            continue
-        if char == ";":
-            return index
-        if not char.isspace():
-            last = char
-        index += 1
-    return index
-
-
-# ---------------------------------------------------------------------------
-# Rust and Pest
-# ---------------------------------------------------------------------------
-
-# An `impl` or `trait` item starts its line (after `pub` or `unsafe`); this
-# leaves out `impl Trait` written in a function's argument or return type.
-_RUST_BLOCK_START = re.compile(
-    r"^[ \t]*(?:pub(?:\([^)\n]*\))?[ \t]+)?(?:unsafe[ \t]+)?(?:auto[ \t]+)?(?P<kind>impl|trait)\b", re.MULTILINE
-)
+    defined = _javascript_names(source)
+    # Each part of a dotted name must be defined somewhere in the file; where
+    # one sits inside another is not checked.
+    missing = next((name for name in symbol.split(".") if name not in defined), None)
+    return None if missing is None else _not_defined(missing, "", path)
 
 
 def _check_rust(path: str, source: str, symbol: str) -> str | None:
     if not _RUST_SYMBOL.match(symbol):
         return _not_a_symbol(symbol, f"`name` or `Type::method`, such as `{path}:Writer::element`")
-    masked = _mask(source, "rust")
-    brackets = _brackets(masked)
-    blocks = _rust_blocks(masked)
-    if "::" not in symbol:
-        item = re.compile(
-            rf"\b(?:fn|struct|enum|trait|type|union|mod|const|static)\s+{re.escape(symbol)}\b"
-            rf"|\bmacro_rules!\s*{re.escape(symbol)}\b"
-        )
-        positions = [match.start() for match in item.finditer(masked)]
-        # A free item sits at the top of the file. One in an `impl` or
-        # `trait` block needs its type, and one inside a function or a
-        # nested `mod` (such as `mod tests`) is not what the doc cites.
-        if any(brackets.innermost(at) == -1 for at in positions):
-            return None
-        impl_openings = {opening for _, (opening, _) in blocks}
-        if any(opening in impl_openings for at in positions for opening in brackets.enclosing(at)):
-            return f"`{symbol}` in {path} is defined in an `impl` or `trait` block; cite it as `Type::{symbol}`"
-        if positions:
-            return f"`{symbol}` in {path} is defined inside another item; cite the item that holds it"
-        return _not_defined(symbol, "", path)
-    type_name, member = symbol.split("::")
-    owned = [opening for owner, (opening, _) in blocks if owner == type_name]
-    if not owned:
-        return f"{path} has no `impl` or `trait` block for `{type_name}`; {_FIX}"
-    member_item = re.compile(rf"\b(?:fn|const|type)\s+{re.escape(member)}\b")
-    for opening in owned:
-        for match in member_item.finditer(masked, opening, brackets.closing(opening)):
-            # Directly in the block, not in a function nested in a method.
-            if brackets.innermost(match.start()) == opening:
-                return None
-    return f"`{member}` is not defined in an `impl` or `trait` block for `{type_name}` in {path}; {_FIX}"
-
-
-@cache
-def _rust_blocks(masked: str) -> list[tuple[str, tuple[int, int]]]:
-    """Return the type each `impl` or `trait` block belongs to, with the block's extent."""
-    brackets = _brackets(masked)
-    blocks: list[tuple[str, tuple[int, int]]] = []
-    for match in _RUST_BLOCK_START.finditer(masked):
-        # Only blocks at the top of the file: an `impl Writer` inside a
-        # nested `mod` may be for another type of the same name.
-        if brackets.innermost(match.start()) != -1:
-            continue
-        opening = _rust_block_opening(masked, match.end())
-        if opening is None:
-            continue
-        header = masked[match.end() : opening]
-        owner = _rust_trait_name(header) if match.group("kind") == "trait" else _rust_self_type(header)
-        if owner:
-            blocks.append((owner, (opening, brackets.closing(opening))))
-    return blocks
-
-
-def _rust_block_opening(masked: str, start: int) -> int | None:
-    """Return the `{` that opens an item's block, or None for an item that ends with `;` first."""
-    # Outside `(` and `[`, so the `;` in `impl From<[u8; 16]> for Id` does not end the header.
-    depth = 0
-    for index in range(start, len(masked)):
-        char = masked[index]
-        if char in "([":
-            depth += 1
-        elif char in ")]":
-            depth -= 1
-        elif depth == 0 and char == "{":
-            return index
-        elif depth == 0 and char == ";":
-            return None
-    return None
-
-
-def _rust_trait_name(header: str) -> str | None:
-    name = re.match(r"\s*([A-Za-z_]\w*)", header)
-    return name.group(1) if name else None
-
-
-def _rust_self_type(header: str) -> str | None:
-    """Return the type an `impl` block is for: `Writer` in `impl<'a> Writer<'a>` and in `impl Display for Writer`."""
-    # The `>` of `->` in a bound such as `F: Fn() -> u8` is not a bracket.
-    text = header.replace("->", "  ").strip()
-    if text.startswith("<"):
-        text = text[_matching_angle(text, 0) + 1 :]
-    text = re.split(r"\bwhere\b", text, maxsplit=1)[0]
-    # `for` outside angle brackets separates the trait from the type.
-    depth = 0
-    for match in re.finditer(r"[<>]|\bfor\b", text):
-        piece = match.group(0)
-        if piece == "<":
-            depth += 1
-        elif piece == ">":
-            depth -= 1
-        elif depth == 0:
-            text = text[match.end() :]
-            break
-    path = re.match(r"\s*(?:&\s*(?:'\w+\s+)?(?:mut\s+)?)?(?:dyn\s+)?([\w:]+)", text)
-    return path.group(1).rsplit("::", 1)[-1] if path else None
+    items, impl_names = _rust_names(source)
+    type_name, separator, member = symbol.rpartition("::")
+    # A type counts when the file defines it or has an `impl` for it, since
+    # the type may be defined in another file of the crate.
+    if separator and type_name not in items | impl_names:
+        return _not_defined(type_name, "", path)
+    return None if member in items else _not_defined(member, "", path)
 
 
 def _check_pest(path: str, source: str, symbol: str) -> str | None:
     if not _PEST_SYMBOL.match(symbol):
         return _not_a_symbol(symbol, f"one grammar rule, such as `{path}:html_attribute`")
-    rule = re.compile(rf"^[ \t]*{re.escape(symbol)}\s*=\s*[_@$!]?\s*\{{", re.MULTILINE)
-    if rule.search(_mask(source, "pest")):
+    if symbol in {match.group(1) for match in _PEST_RULE.finditer(source)}:
         return None
     return f"rule `{symbol}` is not defined in {path}; {_FIX}"
 
@@ -893,204 +514,3 @@ _SYMBOL_CHECKERS: dict[str, Callable[[str, str, str], str | None]] = {
     "rs": _check_rust,
     "pest": _check_pest,
 }
-
-
-# ---------------------------------------------------------------------------
-# Masking: blank out comments, strings, and regular expressions
-# ---------------------------------------------------------------------------
-
-# Where the next comment, string, or regular expression can start.
-_MASK_START = {
-    "js": re.compile(r"""[/'"`]"""),
-    # Rust raw strings: r"...", r#"..."#, br"...", cr"..."
-    "rust": re.compile(r"""[/'"]|(?<!\w)[bc]?r#*\""""),
-    "pest": re.compile(r"""[/'"]"""),
-}
-_RUST_CHAR = re.compile(r"'(?:\\(?:u\{[0-9a-fA-F]{1,6}\}|x[0-9a-fA-F]{2}|.)|[^\\'\n])'")
-# Before one of these, a `/` in JavaScript starts a regular expression
-# rather than a division.
-_REGEX_AFTER_CHAR = frozenset("(,=:[!&|?{};+-*%<>~^")
-_REGEX_AFTER_WORD = frozenset(
-    {"return", "typeof", "instanceof", "in", "of", "new", "delete", "void", "throw", "case", "do", "else"}
-    | {"yield", "await"}
-)
-
-
-@cache
-def _mask(source: str, language: str) -> str:
-    """
-    Return `source` with the inside of every comment, string, and regex replaced by spaces.
-
-    Offsets and line breaks stay where they were, so a brace count or a
-    pattern match on the result reads only code. A JavaScript string that
-    holds a single name (`"pageNonce"`) is kept, because a property name can
-    be written that way, and such a string holds no brace.
-    """
-    chars = list(source)
-    length = len(source)
-    start_pattern = _MASK_START[language]
-
-    def blank(start: int, end: int) -> None:
-        for index in range(start, end):
-            if chars[index] != "\n":
-                chars[index] = " "
-
-    index = 0
-    while (found := start_pattern.search(source, index)) is not None:
-        index = found.start()
-        char = source[index]
-        if source.startswith("//", index):
-            end = source.find("\n", index)
-            end = length if end == -1 else end
-        elif source.startswith("/*", index):
-            end = _block_comment_end(source, index, nested=language == "rust")
-        elif char in "bcr":
-            # Only the Rust pattern starts with a letter: a raw string.
-            hashes = found.group(0).count("#")
-            close = source.find('"' + "#" * hashes, found.end())
-            end = length if close == -1 else close + 1 + hashes
-        elif char == "'" and language == "rust":
-            literal = _RUST_CHAR.match(source, index)
-            if literal is None:
-                # A lifetime such as 'a: keep it, since an `impl` header
-                # needs it to tell `&'a Type` from a type named `a`.
-                index += 1
-                continue
-            end = literal.end()
-        elif char in "'\"":
-            end = _string_end(source, index, multiline=language == "rust")
-            if language == "js" and re.fullmatch(_NAME, source[index + 1 : end - 1]):
-                index = end
-                continue
-        elif char == "`":
-            end = _template_end(source, index)
-        elif char == "/" and language == "js" and _starts_regex(source, index):
-            end = _regex_end(source, index)
-        else:
-            index += 1
-            continue
-        blank(index, end)
-        index = end
-    return "".join(chars)
-
-
-def _block_comment_end(source: str, start: int, *, nested: bool) -> int:
-    depth = 0
-    index = start
-    while index < len(source):
-        if source.startswith("/*", index):
-            depth += 1
-            index += 2
-        elif source.startswith("*/", index):
-            depth -= 1
-            index += 2
-            if depth == 0 or not nested:
-                return index
-        else:
-            index += 1
-    return len(source)
-
-
-def _string_end(source: str, start: int, *, multiline: bool) -> int:
-    """Return the index just past the closing quote; a JS or Pest string that does not close ends at the line end."""
-    quote = source[start]
-    index = start + 1
-    while index < len(source):
-        char = source[index]
-        if char == "\\":
-            index += 2
-            continue
-        if char == quote:
-            return index + 1
-        if char == "\n" and not multiline:
-            return index
-        index += 1
-    return len(source)
-
-
-def _template_end(source: str, start: int) -> int:
-    """Return the index just past a JavaScript template literal, reading through its `${ }` parts."""
-    index = start + 1
-    while index < len(source):
-        char = source[index]
-        if char == "\\":
-            index += 2
-        elif char == "`":
-            return index + 1
-        elif source.startswith("${", index):
-            index = _substitution_end(source, index + 2)
-        else:
-            index += 1
-    return len(source)
-
-
-def _substitution_end(source: str, index: int) -> int:
-    """Return the index just past the `}` that closes a template's `${`."""
-    depth = 1
-    while index < len(source):
-        char = source[index]
-        if char in "'\"":
-            index = _string_end(source, index, multiline=False)
-        elif char == "`":
-            index = _template_end(source, index)
-        else:
-            depth += {"{": 1, "}": -1}.get(char, 0)
-            index += 1
-            if depth == 0:
-                return index
-    return len(source)
-
-
-def _starts_regex(source: str, index: int) -> bool:
-    before = index - 1
-    while before >= 0 and source[before].isspace():
-        before -= 1
-    if before < 0 or source[before] in _REGEX_AFTER_CHAR:
-        return True
-    word_end = before + 1
-    while before >= 0 and (source[before].isalnum() or source[before] in "_$"):
-        before -= 1
-    return source[before + 1 : word_end] in _REGEX_AFTER_WORD
-
-
-def _regex_end(source: str, start: int) -> int:
-    """Return the index just past a regular expression, or just past the `/` when it was a division after all."""
-    index = start + 1
-    in_class = False
-    while index < len(source):
-        char = source[index]
-        if char == "\\":
-            index += 2
-            continue
-        if char == "\n":
-            # A regex never spans lines, so this `/` was not one; blank only
-            # the `/` rather than the code after it.
-            return start + 1
-        if char == "[":
-            in_class = True
-        elif char == "]":
-            in_class = False
-        elif char == "/" and not in_class:
-            return index + 1
-        index += 1
-    return start + 1
-
-
-def _skip_space(text: str, index: int) -> int:
-    while index < len(text) and text[index].isspace():
-        index += 1
-    return index
-
-
-def _matching_angle(text: str, opening: int) -> int:
-    """Return the index of the `>` that closes the `<` at `opening`, or the text's end."""
-    depth = 0
-    for index in range(opening, len(text)):
-        char = text[index]
-        if char == "<":
-            depth += 1
-        elif char == ">" and text[index - 1] != "=":
-            depth -= 1
-            if depth == 0:
-                return index
-    return len(text)
