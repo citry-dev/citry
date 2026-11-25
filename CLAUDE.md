@@ -493,9 +493,9 @@ Then follow these steps:
      maintainer opens a private advisory as [`SECURITY.md`](SECURITY.md)
      describes, and the fix is built in that advisory's private fork. Sweep
      for siblings there (Mechanism 3). The fix's regression tests, docs note,
-     and changelog entry stay in the private fix and become public only when
-     the advisory is published, which overrides the usual rule to publish
-     those with the change.
+     and changelog entry stay in the private fix until the fix lands on
+     `main` for its release, right before the advisory is published. This
+     overrides the usual rule to publish those with the change.
 
    When you can't tell whether a release has it, treat it as released.
 6. **Say in the docs when an input is author-only.** When a value is trusted
