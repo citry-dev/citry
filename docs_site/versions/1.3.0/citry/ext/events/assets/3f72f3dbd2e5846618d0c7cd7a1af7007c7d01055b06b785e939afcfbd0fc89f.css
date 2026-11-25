@@ -1,0 +1,18 @@
+
+:where(.flow-direction) {
+  display: grid;
+  gap: 1.25rem;
+  max-inline-size: 38rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.flow-direction [data-citry-ui-part="row"]) {
+  padding: 0.7rem;
+  background: light-dark(#eee0c9, #372d24);
+}
+
+:where(.flow-direction__long span) {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}

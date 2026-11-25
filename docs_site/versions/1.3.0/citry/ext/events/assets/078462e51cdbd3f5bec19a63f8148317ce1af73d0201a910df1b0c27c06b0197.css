@@ -1,0 +1,6 @@
+
+:where(.ocean-options) {
+  max-width: 34rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}

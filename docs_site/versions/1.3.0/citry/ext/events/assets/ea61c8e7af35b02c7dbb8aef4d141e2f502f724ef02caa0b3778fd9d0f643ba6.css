@@ -1,0 +1,11 @@
+
+:where(.image-lifecycle) {
+  display: grid;
+  gap: 1rem;
+  max-inline-size: 44rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+:where(.image-lifecycle__controls) { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+:where(.image-lifecycle p) { margin: 0; }
+:where(.image-lifecycle [data-citry-ui-part="image-root"]) { inline-size: 100%; }

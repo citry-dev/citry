@@ -1,0 +1,24 @@
+
+:where(.combo-config) {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 38rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#bae6fd, #075985);
+  border-radius: 0.875rem;
+  background: Canvas;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.combo-config h2, .combo-config p) {
+  margin: 0;
+}
+
+:where(.combo-config > p) {
+  color: light-dark(#0369a1, #7dd3fc);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
