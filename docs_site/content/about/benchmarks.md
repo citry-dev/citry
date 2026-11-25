@@ -37,7 +37,7 @@ faster, by about 28 ms. Shorter bars are faster.
   [How we measured](#how-the-numbers-were-taken)).
   Django + HTMX + Alpine and Next.js are 42 and 56 ms slower.
 - **Second load, 257 ms**: Nuxt is about 28 ms faster.
-  Rusty + HTMX + Alpine and Jinja + HTMX + Alpine are 37 to 43 ms
+  Rusty + HTMX + Alpine and Jinja + HTMX + Alpine are 39 to 43 ms
   slower. Next.js, Tetra, and Django + HTMX + Alpine are 67 to 85 ms
   slower.
 - **Slower on both loads**: Reflex, django-components, django-unicorn,
@@ -67,21 +67,27 @@ faster, by about 28 ms. Shorter bars are faster.
 ### How we measured { #how-the-numbers-were-taken }
 
 Each bar is a single measurement. Jinja + HTMX + Alpine's first load
-took 295, 304 and 317 ms in three runs of the same setup, so treat a
+took 295, 304, 317 and 319 ms in four runs of the same setup, so treat a
 gap of about 20 ms or less as noise. Each framework reports its own
 server time, so the work it covers can differ a little. Citry was
-measured on 2026-11-16 and the other eleven frameworks on 2026-10-19,
-on the same Mac.
+measured on 2026-11-16, Rusty + HTMX + Alpine on 2026-11-25 and the
+other ten frameworks on 2026-10-19, on the same Mac.
 
 ??? "Dates, versions and repeat runs"
 
-    - **When**: Citry on 2026-11-16, the other eleven frameworks on
-      2026-10-19.
+    - **When**: Citry on 2026-11-16, Rusty + HTMX + Alpine on
+      2026-11-25, the other ten frameworks on 2026-10-19.
     - **Which Citry**: Citry 1.0.0 and citry-core 2.1.0, both installed
       from PyPI. The Citry app uses Citry's Vue runtime and
       [`simple="vue"`](/performance/simple-components/). The 2026-10-19
       run measured all twelve frameworks with Citry 0.6.0 and citry-core
-      1.8.0 from PyPI; the charts use that run only for the other eleven.
+      1.8.0 from PyPI; the charts use that run only for the other ten.
+    - **Which Rusty**: Django Rusty Templates at commit `6d10c20`,
+      committed on 2026-11-24, rendering the Django + HTMX + Alpine app's
+      templates unchanged; a test checks that both apps produce the same
+      HTML. The 2026-10-19 run used commit `0725f87`, which rendered
+      `{% empty %}` wrongly for an empty list, so its app rewrote each
+      `{% empty %}` branch. The charts no longer use that run for Rusty.
     - **Where**: every run used the same Apple M4 Mac with Chromium 151,
       an empty browser cache, and a local connection.
     - **Same Mac, same times**: the 2026-11-16 run also measured
@@ -89,6 +95,12 @@ on the same Mac.
       on both days. Its totals changed by 9 ms on the first load and
       11 ms on the second, which is within the noise, so the charts keep
       its 2026-10-19 numbers.
+    - **Same Mac again**: the 2026-11-25 run also measured Citry and
+      Jinja + HTMX + Alpine again. Citry's totals were 318.7 ms on the
+      first load (314.6 ms kept) and 254.4 ms on the second (257.3 ms
+      kept); Jinja's were 318.7 ms (304.2 ms kept) and 299.2 ms
+      (299.8 ms kept). All are within the noise, so the charts keep the
+      earlier numbers for both.
     - **Repeat run**: a second run on 2026-11-16 gave Citry 313 ms on the
       first load and 249 ms on the second. The charts show the earlier
       run.

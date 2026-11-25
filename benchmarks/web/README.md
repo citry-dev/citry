@@ -251,7 +251,7 @@ charts from
 the time until the 1,400-output page is ready for input, first and second
 load, for Citry and eleven other frameworks.
 
-The numbers there come from two composed reports, measured on the
+The numbers there come from three composed reports, measured on the
 same Mac:
 
 - **Citry**: `composed-955d152d8132`, built on 2026-11-16 from the
@@ -266,23 +266,37 @@ same Mac:
   the data file uses. Jinja + HTMX + Alpine's first load took 295.3 ms in
   the first run and 316.6 ms in the second, so a single measurement
   varies by about 20 ms.
-- **The other eleven frameworks**: `composed-70d4a8802900`, built on
+- **Rusty + HTMX + Alpine**: `composed-65acf8d7d363`, built on
+  2026-11-25 from the `release-rusty-templates` qualify run
+  `20261125T001722Z-cfd3572d` and the measurement run
+  `20261125T002351Z-99908112`. The app ran Django Rusty Templates commit
+  `6d10c20` with the Django app's templates unchanged. The runner recorded
+  commit `4e7b56e83` with no uncommitted changes; that local commit has
+  the same benchmark sources as the change that published these numbers.
+  The run also measured Citry and Jinja + HTMX + Alpine again, as
+  controls. Citry's totals were 318.7 ms on the first load and 254.4 ms on
+  the second, against 314.6 and 257.3 ms in the data file; Jinja's were
+  318.7 and 299.2 ms, against 304.2 and 299.8 ms. These are within the
+  noise of a single measurement, so the data file keeps the controls'
+  earlier numbers.
+- **The other ten frameworks**: `composed-70d4a8802900`, built on
   2026-10-19 from the `release-0.6.0` qualify run
   `20261019T210740Z-2b5cd077` and the measurement run
   `20261019T213948Z-c6248185`. All fourteen apps of the profile ran in
   that one run, with Citry 0.6.0 and citry-core 1.8.0 installed from PyPI.
   The runner recorded commit `55740fd66` with no uncommitted changes; that
   local commit has the same benchmark sources as the change that published
-  these numbers. In that run the Rusty + HTMX + Alpine app used Django
-  Rusty Templates commit `0725f87`, which rendered `{% empty %}` wrongly
-  for an empty list, so the app rewrote each `{% for %}...{% empty %}` as
-  `{% if %}{% for %}...{% else %}...{% endif %}`.
+  these numbers. That run's Rusty + HTMX + Alpine app used Django Rusty
+  Templates commit `0725f87`, which rendered `{% empty %}` wrongly for an
+  empty list, so the app rewrote each `{% for %}...{% empty %}` as
+  `{% if %}{% for %}...{% else %}...{% endif %}`. The data file takes
+  Rusty's numbers from the newer run instead.
 
 The `release-1.0.0-citry` run also measured Jinja + HTMX + Alpine again,
 to check that the Mac gave the same times on both days. Its totals moved
 from 304.2 to 295.3 ms on the first load and from 299.8 to 310.9 ms on the
 second, within the noise of a single measurement, so the data file keeps
-that framework's 2026-10-19 numbers with the other ten.
+that framework's 2026-10-19 numbers with the other nine.
 
 To measure every framework again, from `benchmarks/web/runner/` (for a
 later release, copy the profile under a new name first):
@@ -356,6 +370,13 @@ With `--only`, the docs script works like this:
   `tests/test_runner.py` checks that every other release profile has
   the same settings as `release-0.6.0`, apart from its name, apps and
   wheels.
+
+To measure only one other framework again, as for Rusty + HTMX + Alpine
+on 2026-11-25, copy `release-1.0.0-citry.toml` under a new name and list
+that framework's app in `apps` with `citry` (the test requires it in
+every release profile) and a control app. Run the same commands, give
+`compose` a new `--output` folder, and pass the app's key to the docs
+script: `--only django_rusty_templates`.
 
 ## What the runner measures
 

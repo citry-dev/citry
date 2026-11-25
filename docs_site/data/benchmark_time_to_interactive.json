@@ -1,9 +1,9 @@
 {
   "generated_by": "docs_site/scripts/benchmark_data.py",
   "source": {
-    "report_id": "composed-955d152d8132",
+    "report_id": "composed-65acf8d7d363",
     "report_status": "composed",
-    "composed_at": "2026-11-16T01:18:23.856616+00:00",
+    "composed_at": "2026-11-25T00:28:40.499930+00:00",
     "recomposed_at": null,
     "citry_report_id": "composed-955d152d8132",
     "citry_configuration": "The Citry app benchmarks/web/apps/citry with default settings, running citry 1.0.0 and citry-core 2.1.0 installed from the lockfile.",
@@ -27,11 +27,17 @@
     "compression": "identity",
     "kept_from": [
       {
+        "report_id": "composed-955d152d8132",
+        "composed_at": "2026-11-16T01:18:23.856616+00:00",
+        "frameworks": [
+          "citry"
+        ]
+      },
+      {
         "report_id": "composed-70d4a8802900",
         "composed_at": "2026-10-19T22:03:00.409331+00:00",
         "frameworks": [
           "django_htmx_alpine",
-          "django_rusty_templates",
           "jinja_htmx_alpine",
           "tetra",
           "unicorn",
@@ -64,7 +70,7 @@
             "layout_wait": 16.1
           },
           "measured_in_run": "20261116T011517Z-1cbd8678",
-          "retained": false
+          "retained": true
         },
         {
           "key": "django_htmx_alpine",
@@ -86,17 +92,17 @@
           "key": "django_rusty_templates",
           "name": "Rusty + HTMX + Alpine",
           "group": "Django libraries",
-          "total_ms": 303.5,
+          "total_ms": 301.8,
           "phases_ms": {
-            "browser_before": 0.7,
-            "server": 26.5,
-            "exchange_residual": 1.0,
-            "response_receive": 1.1,
-            "browser_after": 268.8,
-            "layout_wait": 5.4
+            "browser_before": 0.6,
+            "server": 23.6,
+            "exchange_residual": 0.9,
+            "response_receive": 1.3,
+            "browser_after": 266.8,
+            "layout_wait": 8.6
           },
-          "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": true
+          "measured_in_run": "20261125T002351Z-99908112",
+          "retained": false
         },
         {
           "key": "jinja_htmx_alpine",
@@ -262,7 +268,7 @@
             "layout_wait": 17.3
           },
           "measured_in_run": "20261116T011517Z-1cbd8678",
-          "retained": false
+          "retained": true
         },
         {
           "key": "django_htmx_alpine",
@@ -284,17 +290,17 @@
           "key": "django_rusty_templates",
           "name": "Rusty + HTMX + Alpine",
           "group": "Django libraries",
-          "total_ms": 293.9,
+          "total_ms": 296.1,
           "phases_ms": {
             "browser_before": 0.7,
-            "server": 16.9,
-            "exchange_residual": 0.9,
-            "response_receive": 1.1,
-            "browser_after": 265.7,
+            "server": 17.0,
+            "exchange_residual": 0.7,
+            "response_receive": 1.2,
+            "browser_after": 267.9,
             "layout_wait": 8.6
           },
-          "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": true
+          "measured_in_run": "20261125T002351Z-99908112",
+          "retained": false
         },
         {
           "key": "jinja_htmx_alpine",
