@@ -967,8 +967,8 @@ class Component(metaclass=ComponentMeta):
             defined. Default: no guard.
             [Guide](/security/#authorize-every-event).
         _context (Callable | None): A plain ``def`` method (or function)
-            that runs before the guard. Its return value becomes ``self.context`` in the guard
-            and the handlers. Default: none.
+            that runs before the guards. Its return value becomes
+            ``self.context`` in the guards and the handlers. Default: none.
             [Guide](/security/#authorize-every-event).
         _csrf (Literal["auto", False] | Callable): An extra CSRF token check for this
             component: a plain ``def`` function that receives the request

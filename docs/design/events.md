@@ -1471,8 +1471,9 @@ citry = Citry(
   payload for a call it then refuses. Guards therefore read the args
   before they are checked, through `self.event.args`, and must expect a
   missing key or a value of any type: one guard covers handlers with
-  different `data` classes. The guards get a copy of the args, so
-  a guard cannot change what the `data` class checks. `_context` never
+  different `data` classes. The guards get a shallow copy of the args,
+  so a guard that adds or removes a top-level key does not change what
+  the `data` class checks; a change inside a nested list or dict does. `_context` never
   receives the checked data either. A State write the server refuses
   (7.2) still answers 422 before the guards run, because State is
   rebuilt and written before them.
@@ -4842,7 +4843,7 @@ transports would both need belongs in the dispatcher, never duplicated):
 | Version and capabilities | Reject unknown protocol majors; resolve an absent `capabilities` field to the baseline; hand the resolved set to action encoding so `morph` downgrades to `replace` and no action kind outside the set is ever emitted. | The baseline constant is the protocol package's `CAPABILITIES_BASELINE_V1`; rejections mirror per call so `results[i]` always answers `calls[i]`. |
 | Component and event resolution | The per-event URL is authoritative; explicit `componentClassId` and `handlerName` fields must match it. A failed lookup produces the wire error codes `unknown_component` / `unknown_event` (protocol constants from the 3.7 table, status 404), never a lookup of any user-defined name: there is no magic fallback component or handler to define. Custom not-found behavior hangs off the `on_event_error` hook or host middleware on the real URLs. | `Citry.get_component_by_class_id` resolves the class; wire names come from the handler metadata captured at class creation (plan WP7). |
 | Token verification and updates | Verify the signed `stateToken` (malformed 403, expired, rotated-out, or unknown-version 409; the split is payload well-formedness, per the error-codes rule in 4.3), rebuild State, apply `_model`-gated `stateUpdates` with per-field 422s. | `verify_state_token` / `apply_state_updates` (plan WP8). |
-| Per-call context and guards | `on_event` emit (veto), then the `_context` hook, then the component-level guard (the component's `_guard`, else the engine default; skipped only under `@event(component_guard=False)`), then the handler's `@event(guard=...)`. Both guards run, and either one can refuse the call. | Pipeline order is normative (3.6, 3.7): a guard must see `_context`'s result, and guards run before args validation so a refused caller gets the guard's error. |
+| Per-call context and guards | `on_event` emit (veto or answer), then the `_context` hook, then the component-level guard (the component's `_guard`, else the engine default; skipped only under `@event(component_guard=False)`), then the handler's `@event(guard=...)`. Both guards run, and either one can refuse the call. | Pipeline order is normative (3.6, 3.7): a guard must see `_context`'s result, and guards run before args validation so a refused caller gets the guard's error. |
 | Args validation | Validate the wire args payload against the handler's `data` schema with the 3.3 coercions; failures are per-field 422s, never host 500s. | The data-schema machinery (plan WP9) returns structured results that the error mapping consumes. |
 | Handler invocation | By-name injection of `data` / `state` / `context` / `request` / `event`; the same values populate the ambient attributes on the per-call events instance. | Async dispatch awaits `async def` handlers; sync handlers offload to a worker thread via the routing helper `call_maybe_sync` (plan WP2). |
 | Action encoding | Return-value coercion, result resolvers, faithful ordering, and the render-to-fragment serialize. | The actions module (plan WP11); a `Render` re-enters the normal fragment serialize, so its HTML carries a fresh manifest. |

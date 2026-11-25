@@ -216,6 +216,10 @@ can also refuse the call by returning a value that means "no":
 - Any false value other than `None`, such as `False`, `0`, an empty
   list or an empty QuerySet, refuses it with a 403.
 
+Raising another exception, such as `raise PermissionDenied`, is not the
+same as returning it: it fails the call with a 500. Return it, or raise
+`EventError`.
+
 A guard that returns a function or other callable, as
 `return self.can_edit` does when the `()` is missing, fails the call
 with a 500, and the server log names the guard, since the check it
@@ -240,9 +244,10 @@ Citry first builds `self.context` with `_context`, so both guards can
 read it. It then runs `_guard`, then the handler's guard. The first one
 that refuses the call stops it, and nothing after it runs.
 
-A guard runs before Citry checks the call's args against the handler's
-`data` class (`SaveIn` above). A caller the guard refuses gets the
-guard's error, not a 422 error that lists what is wrong with its args.
+Both guards run before Citry checks the call's args against the
+handler's `data` class (`SaveIn` above). A caller that either guard
+refuses gets that guard's error, not a 422 error that lists what is
+wrong with its args.
 Two things to know about what a guard reads:
 
 - `self.state` holds the browser's writes to the fields in
@@ -255,8 +260,8 @@ Two things to know about what a guard reads:
   before Citry has checked them. A key can be missing, have another
   type, such as text where the handler expects a number, or be longer
   than the `data` class allows. Read it with `.get()` and check the type
-  before you use it. A guard that raises anything other than
-  `EventError` answers with a 500 error.
+  before you use it. A guard that fails while it reads one, with a
+  `KeyError` say, fails the call with a 500.
 
 To check every component the same way, set an app-wide guard once:
 
