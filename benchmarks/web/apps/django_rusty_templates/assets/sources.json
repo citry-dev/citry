@@ -26,9 +26,9 @@
     "bytes": 1092
   },
   "django_rusty_templates.LICENSE": {
-    "url": "https://github.com/LilyFirefly/django-rusty-templates/blob/0725f875535b2fca93953a403a57df1d9b34e073/LICENSE",
+    "url": "https://github.com/LilyFirefly/django-rusty-templates/blob/6d10c20f09dd88fbbf4c75a93847f47655a864f4/LICENSE",
     "sha256": "fd19474a3fffad88407fe464d27d8b268e060e2a401ae7572b6a349edd944b82",
     "bytes": 1531,
-    "commit": "0725f875535b2fca93953a403a57df1d9b34e073"
+    "commit": "6d10c20f09dd88fbbf4c75a93847f47655a864f4"
   }
 }

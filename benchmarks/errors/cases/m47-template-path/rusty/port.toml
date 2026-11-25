@@ -1,5 +1,5 @@
 # m01 already misspells the card's path in the page's {% include %}, and
-# the pinned parser has no {% extends %} (the Django case misspells that
+# this app's templates use no {% extends %} (the Django case misspells that
 # path), so this case misspells the next template path the app names: the
 # page template in the page view.
 status = "ported"

@@ -77,11 +77,11 @@ server builds it.
 <picture>
   <source
     media="(prefers-color-scheme: dark)"
-    srcset="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmarks/speed-composed-955d152d8132-d1861236e3ac-dark.png"
+    srcset="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmarks/speed-composed-65acf8d7d363-12f9deef1b30-dark.png"
   >
   <img
-    src="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmarks/speed-composed-955d152d8132-ee118e9abca1-light.png"
-    alt="Bar chart of the time until the page is usable, fastest first: Nuxt 230 ms, Citry 257 ms, Rusty + HTMX + Alpine 294 ms, Jinja + HTMX + Alpine 300 ms, Next.js 324 ms, Tetra 326 ms, Django + HTMX + Alpine 342 ms, Reflex 409 ms, django-components 475 ms, django-unicorn 508 ms, FastHTML 667 ms, ReactPy 910 ms."
+    src="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmarks/speed-composed-65acf8d7d363-415ee79cd1b2-light.png"
+    alt="Bar chart of the time until the page is usable, fastest first: Nuxt 230 ms, Citry 257 ms, Rusty + HTMX + Alpine 296 ms, Jinja + HTMX + Alpine 300 ms, Next.js 324 ms, Tetra 326 ms, Django + HTMX + Alpine 342 ms, Reflex 409 ms, django-components 475 ms, django-unicorn 508 ms, FastHTML 667 ms, ReactPy 910 ms."
     width="720"
   >
 </picture>

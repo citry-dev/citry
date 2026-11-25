@@ -7,7 +7,7 @@ from citry_bench import config
 
 WEB = config.WEB
 APP = WEB / "apps" / "django_rusty_templates"
-RUSTY_COMMIT = "0725f875535b2fca93953a403a57df1d9b34e073"
+RUSTY_COMMIT = "6d10c20f09dd88fbbf4c75a93847f47655a864f4"
 
 
 def test_rusty_adapter_uses_official_backend_and_builds_only_its_git_dependency() -> None:
@@ -35,18 +35,19 @@ def test_rusty_dependency_lock_and_provenance_are_exact() -> None:
         "version": "0.1.0",
         "source": "https://github.com/LilyFirefly/django-rusty-templates",
         "commit": RUSTY_COMMIT,
-        "commit_date": "2026-09-22",
+        "commit_date": "2026-11-24",
         "license": "BSD-3-Clause",
         "status": "unreleased experimental",
         "prepare_requirements": ["Rust", "Maturin"],
     }
 
 
-def test_rusty_variant_rewrites_every_empty_branch() -> None:
-    template = (APP / "board.html").read_text(encoding="utf-8")
-    assert "{% empty %}" not in template
-    assert template.count("{% if ") >= 5
-    assert template.count("{% else %}") >= 8
+def test_rusty_app_renders_the_django_apps_templates_unchanged() -> None:
+    # The comparison with Django means something only while both engines are
+    # given the same template text, so any edit to one copy must reach the other.
+    django_app = WEB / "apps" / "django_htmx_alpine"
+    for name in ("board.html", "page.html"):
+        assert (APP / name).read_bytes() == (django_app / name).read_bytes(), name
 
 
 def test_maintained_cohort_profiles_include_fourteen_adapters() -> None:

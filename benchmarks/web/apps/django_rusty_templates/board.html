@@ -82,19 +82,19 @@
 </table>
 <section id="project-tags" data-project-tags>
 <h3>Tags</h3>
-{% if project_tags %}{% for tag in project_tags %}
+{% for tag in project_tags %}
 <span class="project-tag">{{ tag }}</span>
-{% endfor %}{% else %}
+{% empty %}
 <p>No project tags</p>
-{% endif %}
+{% endfor %}
 </section>
 <section id="project-status-updates" data-project-status-updates>
 <h3>Status updates</h3>
-{% if status_updates %}{% for update in status_updates %}
+{% for update in status_updates %}
 <p>{{ update }}</p>
-{% endfor %}{% else %}
+{% empty %}
 <p>No status updates</p>
-{% endif %}
+{% endfor %}
 </section>
 <section id="project-team">
 <h3>Team</h3>
@@ -106,11 +106,11 @@
 </section>
 <section id="project-contacts" data-project-contacts>
 <h3>Contacts</h3>
-{% if contacts %}{% for contact in contacts %}
+{% for contact in contacts %}
 <p>{{ contact.name }}</p>
-{% endfor %}{% else %}
+{% empty %}
 <p>No contacts</p>
-{% endif %}
+{% endfor %}
 </section>
 </section>
 {% for note_tab in note_tabs %}
@@ -141,7 +141,7 @@
 <h3 class="phase-title">{{ phase.title }}</h3>
 </button>
 <div x-show="open">
-{% if phase.outputs %}{% for row in phase.outputs %}
+{% for row in phase.outputs %}
 <article id="{{ row.element_id }}" data-row-id="{{ row.id }}" {% if row.source_id %}data-source-id="{{ row.source_id }}"{% endif %} data-selected="{% if row.id == selected %}true{% else %}false{% endif %}" data-output-expanded="true" x-data="{ open: true }">
 <header>
 <span class="row-title">{{ row.title }}</span> <span class="row-status">{{ row.status }}</span> <span data-output-badge="{{ row.status }}">
@@ -164,20 +164,20 @@
 <div class="output-panel" x-show="open">
 <section class="dependencies">
 <h4>Dependencies</h4>
-{% if row.dependencies %}{% for dep in row.dependencies %}
+{% for dep in row.dependencies %}
 <article data-dependency-id="{{ dep.id }}" data-dependency-title="{{ dep.title }}" data-dependency-completed="{% if dep.completed %}true{% else %}false{% endif %}">
 <span class="dependency-title">{{ dep.title }}</span>
 {% if not dep.completed %}
 <strong>Missing</strong>
 {% endif %}
 </article>
-{% endfor %}{% else %}
+{% empty %}
 <p>No dependencies</p>
-{% endif %}
+{% endfor %}
 </section>
 <section class="attachments">
 <h4>Attachments</h4>
-{% if row.attachments %}{% for attachment in row.attachments %}
+{% for attachment in row.attachments %}
 <article data-attachment-id="{{ attachment.id }}" data-attachment-name="{{ attachment.name }}">
 <a class="attachment-name" href="{{ attachment.url }}">{{ attachment.name }}</a>
 <div>
@@ -186,15 +186,15 @@
 {% endfor %}
 </div>
 </article>
-{% endfor %}{% else %}
+{% empty %}
 <p>No attachments</p>
-{% endif %}
+{% endfor %}
 </section>
 </div>
 </article>
-{% endfor %}{% else %}
+{% empty %}
 <p>No outputs</p>
-{% endif %}
+{% endfor %}
 </div>
 </section>
 {% endfor %}
