@@ -948,15 +948,21 @@ class Component(metaclass=ComponentMeta):
     value it does not accept, or for a misspelled setting. When a component
     leaves a setting out, Citry uses the value in
     ``extensions_defaults["events"]``, then the default listed here. The
-    matching [`@event(...)`][citry.ext.events.event] option (``guard``,
-    ``csrf``, ``methods``, ``debounce``, ``throttle``) replaces the setting
+    matching [`@event(...)`][citry.ext.events.event] option (``csrf``,
+    ``methods``, ``debounce``, ``throttle``) replaces the setting for one
+    handler. ``@event(guard=...)`` runs after ``_guard`` instead of
+    replacing it, and ``@event(component_guard=False)`` skips ``_guard``
     for one handler.
 
     Attributes:
         _guard (Callable | None): A plain ``def`` method (or function)
-            that runs before each handler and rejects the call by raising
-            [`EventError`][citry.ext.events.EventError]. Citry refuses an
-            ``async def`` one when the class is defined. Default: no guard.
+            that runs before each handler. It refuses the call by raising
+            [`EventError`][citry.ext.events.EventError], or by returning
+            ``False``, another false value other than ``None``, or an
+            exception; ``None`` and ``True`` let the call go ahead. A
+            handler's own ``@event(guard=...)`` runs after it. Citry
+            refuses an ``async def`` one when the class is defined.
+            Default: no guard.
             [Guide](/security/#authorize-every-event).
         _context (Callable | None): A plain ``def`` method (or function)
             that runs before the guard. Its return value becomes ``self.context`` in the guard
