@@ -444,15 +444,19 @@ as far as the review found.
     named from the outermost definition down, joined with dots
     (`citry/components/dynamic.py:make_dynamic_element.DynamicElement.on_render`).
     JavaScript and TypeScript follow the same rule for functions, classes,
-    methods, `const` and `let` values, object properties, and properties
-    set with `Object.defineProperty`
-    (`citry/_vue/client.js:startPreparedOwned.host.preflightResult`,
-    `citry/_vue/client.js:pageNonce`). The outermost name is one defined
-    outside every named function, class, or object, such as a function
-    inside the anonymous function that wraps all of `client.js`; an
-    anonymous callback between two names is skipped. In Rust a free `fn`,
-    `struct`, `enum` or `trait` is cited by its name, and a method in an
-    `impl` or `trait` block as `Type::method`
+    methods, `const` and `let` values (the first name of each `const`, and
+    the next ones of `const a = 1, b = 2`), object properties, and class
+    fields (`citry/_vue/client.js:startPreparedOwned.host.preflightResult`).
+    The outermost name is one defined outside every named function,
+    class, or object, such as a function inside the anonymous function
+    that wraps all of `client.js`. Before the first name and between two
+    names, the check looks through `if` and loop blocks, anonymous
+    callbacks, and objects not assigned to a name. A property set with
+    `Object.defineProperty` at the top is cited by its name alone,
+    whatever object it is set on (`citry/_vue/client.js:pageNonce`). In
+    Rust a free `fn`, `struct`, `enum` or `trait` at the top of the file
+    is cited by its name, and a method in an `impl` or `trait` block at the
+    top of the file as `Type::method`
     (`vc/server_render.rs:StaticWriter::element`); a method from
     `impl Display for Writer` is `Writer::fmt`. A Pest rule is cited by
     its name (`tp/grammar.pest:html_attribute`).
@@ -484,10 +488,12 @@ as far as the review found.
   in it, or a file at the repository root), alone or followed by
   `:Symbol` or `#anchor`. It fails when the file does not exist, when
   the symbol is not defined in it, or when no heading in the Markdown
-  file has the anchor, and on any reference that cites a line number.
-  Python is read with `ast`; JavaScript, TypeScript, Rust, and Pest are
-  read with patterns after their comments and strings are blanked out, so
-  a name in a comment does not count. Each failure names the line in this
+  file has the anchor. It also fails on a line number, whether it is
+  written in a reference (a colon and digits after the path) or right
+  after one (a colon, or the word "line", and a number after the code
+  span). Python is read with `ast`; JavaScript, TypeScript, Rust, and
+  Pest are read with patterns after their comments and strings are
+  blanked out, so a name in a comment does not count. Each failure names the line in this
   doc, the reference, and what to change. The check runs in the
   `validators` phase of `scripts/check.py`, in both the fast and the full
   profile, and takes about half a second, because it reads the files
