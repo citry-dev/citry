@@ -1,0 +1,18 @@
+
+:where(.table-environment) {
+  max-width: 34rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.table-environment h2) {
+  margin: 0 0 0.75rem;
+  color: light-dark(#6d28d9, #c4b5fd);
+  font-size: 1rem;
+}
+
+:where(.table-environment [data-column-key="notes"]) {
+  min-width: 18rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

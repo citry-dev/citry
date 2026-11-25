@@ -1,0 +1,16 @@
+
+:where(.divider-basic) {
+  display: grid;
+  gap: 1rem;
+  max-inline-size: 34rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.divider-basic h2, .divider-basic p) {
+  margin: 0;
+}
+
+:where(.divider-basic h2) {
+  font-size: 1rem;
+}
