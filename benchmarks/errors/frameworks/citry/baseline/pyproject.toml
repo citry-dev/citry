@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "The error-prevention benchmark's reference page, written in Citry"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-  "citry==1.0.0",
+  "citry==1.3.0",
   "fastapi==0.141.1",
   "uvicorn==0.52.4",
 ]
@@ -14,14 +14,14 @@ dependencies = [
 # which `citry check --types` runs. ruff is the Python linter most
 # projects add; the starter does not install it.
 dev = [
-  "citry-lsp==1.0.0",
+  "citry-lsp==1.0.1",
   "ruff==0.15.5",
 ]
 
 [tool.uv]
 package = false
-# The benchmark measures the released Citry 1.0.0 from PyPI. citry pins the
-# citry-core it was released with (2.1.0), so citry-core needs no pin here.
+# The benchmark measures the released Citry 1.3.0 from PyPI. citry pins the
+# citry-core it was released with (2.1.2), so citry-core needs no pin here.
 
 # Type checking on, as in most typed Python projects: Pylance's "standard"
 # mode, which is also the pyright command line's default.

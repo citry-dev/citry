@@ -1,11 +1,7 @@
-# m01 already misspells the card's path in the page's {% include %}, and
-# this app's templates use no {% extends %} (the Django case misspells that
-# path), so this case misspells the next template path the app names: the
-# page template in the page view.
 status = "ported"
-mistake = { file = "board/views.py", contains = "'board/pgae.html'" }
+mistake = { file = "board/templates/board/project_card.html", contains = 'board/crad.html' }
 
 [[edits]]
-file = "board/views.py"
-old = "return render(request, 'board/page.html', {"
-new = "return render(request, 'board/pgae.html', {"
+file = "board/templates/board/project_card.html"
+old = '{% extends "board/card.html" %}'
+new = '{% extends "board/crad.html" %}'

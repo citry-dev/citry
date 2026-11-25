@@ -114,7 +114,7 @@ the same 63 mistakes in each (a misspelled component name, a
 wrong-typed input, an unclosed tag, and so on), and recorded **where
 each mistake was first reported**.
 
-Citry 1.0.0 reports **56** of the 61 mistakes that apply to it before
+Citry 1.3.0 reports **56** of the 61 mistakes that apply to it before
 the app runs, in the editor or a command-line check. Next.js comes
 next with 45 of 57, then Nuxt with 39 of 58 and Reflex with 38 of 54.
 The Django, Rusty, django-components and Jinja apps with HTMX and
@@ -142,7 +142,7 @@ warnings. The dashed line is Citry's number.
 ### Where Citry stands { #errors-where-citry-stands }
 
 - **Before the app runs: 56 of 61** (47 errors, 9 warnings),
-  measured on the Citry 1.0.0 release (see
+  measured on the Citry 1.3.0 release (see
   [How we measured](#errors-how-we-measured)). Two of the 63 mistakes
   don't apply to Citry.
 - **Warning only: 9** of those 56, reported before the app runs, but
@@ -173,7 +173,7 @@ under [Error benchmark apps](#frameworks).
     | django-unicorn | 12 of 55 |
     | Tetra | 9 of 57 |
     | Django + HTMX + Alpine | 6 of 52 |
-    | Rusty + HTMX + Alpine | 6 of 50 |
+    | Rusty + HTMX + Alpine | 6 of 52 |
     | django-components + HTMX + Alpine | 6 of 54 |
     | Jinja + HTMX + Alpine | 5 of 51 |
 
@@ -239,24 +239,34 @@ under [Error benchmark apps](#frameworks).
 
 ### How we measured { #errors-how-we-measured }
 
-Citry was measured on 2026-11-16 and the other eleven frameworks on
-2026-10-21. Every framework's versions are pinned in its app's
-lockfile. Each app was checked with editor and command-line tools,
-then run in Chromium through the same clicks.
+Citry and Rusty + HTMX + Alpine were measured on 2026-11-25 and the
+other ten frameworks on 2026-10-21. Every framework's versions are
+pinned in its app's lockfile. Each app was checked with editor and
+command-line tools, then run in Chromium through the same clicks.
 
 ??? "Dates and versions"
 
-    - **When**: Citry on 2026-11-16, the other eleven frameworks on
-      2026-10-21.
-    - **Which Citry**: Citry 1.0.0, citry-lsp 1.0.0 (the editor
-      extension's language server) and citry-core 2.1.0, all installed
-      from PyPI. The 2026-10-21 run measured all twelve frameworks,
+    - **When**: Citry and Rusty + HTMX + Alpine on 2026-11-25, the
+      other ten frameworks on 2026-10-21.
+    - **Which Citry**: Citry 1.3.0, citry-lsp 1.0.1 (the editor
+      extension's language server) and citry-core 2.1.2, all installed
+      from PyPI. Every Citry result is the same as Citry 1.0.0's on
+      2026-11-16. The 2026-10-21 run measured all twelve frameworks,
       with Citry built from the repository before the 0.7.0 release;
-      the chart uses that run only for the other eleven.
-    - **The other eleven**: their cases and tools have not changed
-      since the 2026-10-21 run, apart from a newer certificate bundle
-      (certifi) in the ReactPy and Reflex apps, so the chart keeps
-      their results.
+      the chart uses that run only for the other ten.
+    - **Which Rusty**: Django Rusty Templates at commit `6d10c20`,
+      with the Django app's card templates: a base card has an empty
+      `{% block footer %}`, and the template the page includes fills
+      it through `{% extends %}`. A misspelled block name or a card
+      that leaves the block out therefore applies to Rusty, and both
+      are missed, as in the Django app.
+    - **The other ten**: the chart keeps their results from the
+      2026-10-21 run. Their cases and tools have not changed since,
+      apart from two updates in their lockfiles. The ReactPy and Reflex
+      apps have a newer certificate bundle (certifi). The Django, Tetra,
+      django-unicorn and django-components apps have Django 6.1.3, a
+      security release; the 2026-10-21 run measured them with
+      Django 6.1.1.
 
 ??? "The tools run for each framework"
 
