@@ -1404,7 +1404,7 @@ for resolving the URL's class id), `citry/util/misc.py`
   validation -> per call: component/event resolution (URL-authoritative
   on the per-event route; body fields must match when present) -> token
   verify (WP8) -> updates -> args validation (WP9) -> `on_event` emit
-  (`result="first"` veto) -> `_context` -> guards (most-specific-wins) ->
+  (`result="first"` veto) -> `_context` -> the component-level guard, then the handler's own guard ->
   handler with by-name injection -> return coercion and encoding (WP11)
   -> `on_event_result` emit (map) -> re-sign state (render action's
   manifest, else a `state` action placed before the handler's actions,

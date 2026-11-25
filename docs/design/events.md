@@ -1325,9 +1325,9 @@ The component-level config surface, exhaustively:
 
 | Attribute | Type / signature | Default | What it does |
 |---|---|---|---|
-| `_guard` | `def _guard(self): ...` inline, or `_guard = my_check` assigning any `callable(events)`; both bind identically. Receives the Events instance with the ambient per-call attributes populated (`self.state`, `self.context`, `self.request`, `self.event`; the unvalidated payload is `self.event.args`, with the host CSRF field names of 3.5 removed). Raise `EventError` (e.g. `status=403`) to deny, return to allow. It takes no `data` because one guard covers handlers with different schemas; payload-dependent authorization belongs in the handler body, where `data` is typed. | engine default from `extensions_defaults["events"]`, else none | Authorization for every handler of the component. Resolution is most-specific-wins: `@event(guard=...)` beats `_guard` beats the engine default (7.4). |
-| `_context` | `def _context(self) -> Any`; receives the Events instance (request populated, guards not yet run) | engine default from `extensions_defaults["events"]`, else none | Builds the per-call `context` injectable (3.6). Usually configured once, engine-wide. |
-| `_csrf` | `"auto"` \| `False` \| `callable(request) -> None` (raise to reject) | `"auto"` | HTTP CSRF policy for the component's handlers (7.4). Beneath any setting sits the always-on baseline: the `X-Citry-Events` header requirement (HTML forms cannot attach custom headers, and cross-origin JS attempting it hits a CORS preflight the browser blocks) plus `Origin` / `Sec-Fetch-Site` same-origin checks (browser-set, unforgeable by page JS). `"auto"` adds the host token where the host has one (Django); `False` drops only citry's own token layer (the baseline never turns off, and a host framework's token check, like Django's `CsrfViewMiddleware`, is governed by the host and stays on, 7.4); a callable replaces citry's token check and runs on top of the baseline and any host check. |
+| `_guard` | `def _guard(self): ...` inline, or `_guard = my_check` assigning any plain `callable(events)`; both bind identically. It must not be `async def` (nor a generator, nor an object whose `__call__` is either): the dispatcher calls it without awaiting, so its body would never run, and `validate_callable_value` refuses one at class definition (at decoration for `@event(guard=...)`). A call whose guard still returns a coroutine, another awaitable, a generator, or an async generator answers `handler_error`; a `_context` that returns a coroutine does too. Receives the Events instance with the ambient per-call attributes populated (`self.state`, `self.context`, `self.request`, `self.event`; the unvalidated payload is `self.event.args`, with the host CSRF field names of 3.5 removed). Raise `EventError` (e.g. `status=403`), or return a value that means "no", to deny: a returned `EventError` answers exactly as raising it would (its own status, message and field errors); any other returned exception instance or exception class, and any false value other than `None` (`False`, `0`, an empty list, an empty QuerySet, `numpy.False_`), answers 403 `forbidden` with the message "You are not allowed to make this call.", so the exception's own text never reaches the browser. Return `None` or `True` to allow. A returned function or other callable (`return self.can_edit` without the `()`) answers 500 `handler_error` and logs a `TypeError` naming the guard and the callable: the check it names never ran, so allowing the call would let every caller through. Any other true value also allows the call and logs a warning naming the guard and the component (the value's type, never the value), so a stray value shows up in the server log. The dispatcher tests the value for true or false once; that runs app code (`__bool__` or `__len__`, a lazy QuerySet's query), and when it raises, the call answers 500 `handler_error` (or, for an `EventError`, that error), as a guard that raises does: the guard gave no answer, and a 403 would show a broken check as a caller who is not allowed. It takes no `data` because one guard covers handlers with different schemas; payload-dependent authorization belongs in the handler body, where `data` is typed. | engine default from `extensions_defaults["events"]`, else none | Authorization for every handler of the component. The component's `_guard` replaces the engine default; a handler's `@event(guard=...)` does not replace either one but runs after it, and either refusing refuses the call. Only `@event(component_guard=False)` skips this guard for one handler (7.4). |
+| `_context` | `def _context(self) -> Any`, plain (not `async def`, refused at class definition like `_guard`); receives the Events instance (request populated, guards not yet run) | engine default from `extensions_defaults["events"]`, else none | Builds the per-call `context` injectable (3.6). Usually configured once, engine-wide. |
+| `_csrf` | `"auto"` \| `False` \| plain `callable(request) -> None` (raise to reject; `async def` refused at class definition, and a returned coroutine answers `csrf_failed`) | `"auto"` | HTTP CSRF policy for the component's handlers (7.4). Beneath any setting sits the always-on baseline: the `X-Citry-Events` header requirement (HTML forms cannot attach custom headers, and cross-origin JS attempting it hits a CORS preflight the browser blocks) plus `Origin` / `Sec-Fetch-Site` same-origin checks (browser-set, unforgeable by page JS). `"auto"` adds the host token where the host has one (Django); `False` drops only citry's own token layer (the baseline never turns off, and a host framework's token check, like Django's `CsrfViewMiddleware`, is governed by the host and stays on, 7.4); a callable replaces citry's token check and runs on top of the baseline and any host check. |
 | `_methods` | tuple of HTTP method names | `("POST",)` | The allowed methods for handlers that do not set `@event(methods=...)`. GET opts a handler into read-only, cacheable-in-principle (served `no-store` until GET caching lands, section 16), pasteable-URL calls (7.4). |
 | `_debounce` / `_throttle` | `int`, milliseconds | none | Component-wide client-timing defaults; see the `@event` row below for the mechanics. |
 
@@ -1335,13 +1335,29 @@ State's own meta lives on State (`_public` / `_model`, sections 3.2 and
 7.2), not here: Events holds handlers, State holds state.
 
 The per-handler decorator, exhaustively (kwargs need no underscore, they
-live in no shared namespace):
+live in no shared namespace). Each call stores one `EventOptions` on the
+function, so one `@event(...)` carries every setting of a handler: a
+second `@event(...)` on a function that already has settings (directly,
+copied by `functools.wraps`, or further down its `__wrapped__` chain)
+raises `ValueError` at decoration (`refuse_stacked_event`), since it
+would replace the first one's settings and drop its `guard=`. Applying
+`@event` once and assigning the result to several `Events` classes is
+fine. Apart from `@event`, which stores its settings on the function it
+decorates, Citry writes nothing onto a handler function: the
+`ViewEvents` verb shim gives a verb handler its HTTP method from the
+class when the component class is created (`verb_handler_methods`), so
+one function used in several classes accepts, in each, the methods that
+class gives it. When the component class is defined, a handler that
+does not carry the `@event` settings of a function down its
+`__wrapped__` chain (a decorator that kept `__wrapped__` but not the
+attributes) is refused too (`refuse_hidden_event_settings`).
 
 | `@event(...)` key | Type | Default | What it does |
 |---|---|---|---|
 | `name` | `str` | the method name | Wire name override: rename the Python method without touching templates. |
 | `methods` | tuple of HTTP method names | the component's `_methods` | Per-handler method allowlist. |
-| `guard` | same signature as `_guard` | the component's `_guard` | Per-handler authorization; most specific wins, it replaces rather than stacks. |
+| `guard` | same signature as `_guard` | none | Per-handler authorization that adds to the component's guard: the dispatcher runs `_context`, then the component-level guard (the component's `_guard`, else the engine default), then this one, and either refusing (raising, or returning an exception or a false value other than `None`) refuses the call. The same function given at both levels runs once. |
+| `component_guard` | `bool` (`True` or `False` only; any other value fails at decoration) | `True` | `False` skips the component-level guard (the component's `_guard`, or the engine default when the component sets none) for this handler only, for a handler that must be more open than its component, such as a public sign-up call. `guard` and `_context` still run. The user docs lead with the other way to open a handler, a component `_guard` that returns early for named handlers (`if self.event.name == "ping": return`), because it keeps every access rule in one place; its cost is that renaming a handler silently moves it to the guard's other branch (fail closed when that branch is the stricter rule). `component_guard=False` is the only per-handler setting that drops the component-level guard; a component's `_guard = None` removes the engine default for every handler of that component, and an `on_event` hook that answers a call skips every guard (3.7). |
 | `csrf` | same values as `_csrf` | the component's `_csrf` | Per-handler CSRF override (e.g. `csrf=False` on a token-authenticated endpoint). |
 | `debounce` / `throttle` | `int`, milliseconds | the component's `_debounce` / `_throttle` | Client-side timing instructions, not server machinery: they travel in the class descriptor (4.4) and the runtime holds calls back before sending, so the server never sees the suppressed ones (server-side rate limiting is the `on_event` hook or a guard). An explicit modifier on a binding overrides both levels. |
 | `latest_wins` | `bool` | `False` | Newest-wins for this handler on one instance, opt-in (5.6): when a newer call to this handler enqueues from the same anchor, queued-not-sent predecessors are dropped before sending, and an in-flight predecessor is abandoned (its response's actions are dropped on arrival); either way the predecessor's promise rejects with the `superseded` reason and the drop event fires (the settle table, 5.2). Opting in is the author's statement that overlapping runs of this handler are safe (idempotent), because the server still executes every call it received. The default preserves every call: a killed save is data loss, so newest-wins is never a default (14.3.4). Like the timing hints, it travels in the class descriptor (4.4), which is how the runtime knows it at queue time. |
@@ -1353,6 +1369,13 @@ per call site: two call sites that need different overlap or bundling
 semantics are two handlers, which keeps a binding's behavior readable
 from the handler it names. `detached` only allows a call outside the
 queue; the call site still asks for it with `wait: false`.
+
+The extension copies every `@event` setting onto the class's
+`EventHandler` when the class is created. The dispatcher and
+`build_events_manifest`, which writes the handler list for the browser,
+read them from there, never from the function. So changing a shared
+function's `@event` settings later cannot change how a class that
+already exists handles its calls.
 
 Two per-handler knobs from earlier drafts are **derived, not
 configured**. Token requirement follows the signature. A handler
@@ -1448,8 +1471,9 @@ citry = Citry(
   payload for a call it then refuses. Guards therefore read the args
   before they are checked, through `self.event.args`, and must expect a
   missing key or a value of any type: one guard covers handlers with
-  different `data` classes. The guards get a copy of the args, so
-  a guard cannot change what the `data` class checks. `_context` never
+  different `data` classes. The guards get a shallow copy of the args,
+  so a guard that adds or removes a top-level key does not change what
+  the `data` class checks; a change inside a nested list or dict does. `_context` never
   receives the checked data either. A State write the server refuses
   (7.2) still answers 422 before the guards run, because State is
   rebuilt and written before them.
@@ -2063,7 +2087,8 @@ Error modes:
       `Iterable` read count a level there. Registration therefore
       refuses a writable field that reaches a class able to hold itself
       without an author's wrap validator on the way
-      (`_RECURSIVE_CLASS_REASON`).
+      (`_RECURSIVE_CLASS_REASON`), and under the PyPy rules any other
+      type able to hold itself (`_JSON_LOOP_REASON`, below).
     - Where checks run: every validation runs on a check thread, one of
       a small set of threads with a 16 MiB stack (`CHECK_STACK_BYTES`)
       that Citry starts as needed (`run_on_check_thread`). The entry
@@ -2183,6 +2208,91 @@ Error modes:
       with one nested model per level and a discriminated tree about
       60 levels, the model-and-field wrap shape about 21, and a union
       without a discriminator about 15, where the work budget stops it.
+    - On PyPy (`STACK_SET_BY_RECURSION_LIMIT`, set on every interpreter
+      but CPython), a thread may use only as much stack as the recursion
+      limit sets (about 760 KB at 1000), whatever its real size, and when
+      pydantic-core uses it up, PyPy ends the process instead of raising
+      `RecursionError`. So there the limit is `SMALL_STACK_CHECK_DEPTH`
+      on check threads too, and every Python function the copy calls on
+      the way down counts a level (`_enter_level`): Pydantic's own wrap
+      functions (wrapped in `_counted`), `_discarded`,
+      `_discarded_spending`, the wrappers from `_spending` and
+      `_text_spending`. Left out of the count, these calls let data
+      nested within the limit end the process. A node with an app's
+      serializer function (`WrapSerializer`, `PlainSerializer`), on a
+      definition or on a reference to one, that leads into recursion
+      also counts a level (`_Rewriter._counts_serializer`), though the
+      read calls no Python there: writing a State out
+      (`state_wire_values`, `model_dump`) calls the function at each
+      level. Pydantic's own serializers, for `Sequence[...]` and
+      `defaultdict`, sit on a node whose own wrap function is counted
+      already. Event data counts too, because a handler may store the
+      checked value in State as it is. Without this, a recursive list
+      alias with a `WrapSerializer` on its uncounted list levels passed
+      the check at 150 levels, as a State write and as event data that
+      the handler stored in State, and then ended PyPy 7.3.23 when the
+      State was written out, as on 1.2.0. A handler that stores data in
+      a State field of another type, whose serializer function or
+      `Sequence[...]` the check never saw, is not counted. Writing out
+      also follows a serializer's return type (`return_schema`, which
+      Pydantic sets for `return_type=`, a serializer's return
+      annotation and a `PlainValidator`), which neither the check nor
+      the copy reads. So under the PyPy rules, registration looks at
+      every function serializer in the event data class (a Pydantic
+      model or dataclass) and in every State field, writable or not.
+      It refuses one whose return type leads into a recursive
+      definition that itself holds a function serializer, the app's or
+      Pydantic's (`serializer_return_loop`,
+      `_refuse_serializer_return_loop`; the loop and the serializers
+      are found through both the children and the serializers'
+      schemas). Any serializer function in that definition counts, also
+      one on a value that does not nest, so a few safe shapes are
+      refused too. A plain-dataclass or TypedDict data class is not
+      read, so a handler that stores a Pydantic class from one in an
+      `Any` State field is not covered. Without it,
+      `Annotated[Any, PlainSerializer(f, return_type=Tree)]`, with a
+      `WrapSerializer` on `Tree`'s levels, and a `PlainValidator` on a
+      recursive alias each passed at 190 levels and ended PyPy 7.3.23
+      when the State was written out, as on 1.2.0. Parts that
+      pydantic-core checks without calling Python still take stack
+      uncounted, so a schema with dozens of them at each level can
+      still end PyPy below the limit, as Pydantic alone does: 25
+      `AfterValidator`s on one recursive list alias end it at 98
+      levels. Inside `Json[...]` no wrapper
+      counts, and each JSON string starts a fresh parse, so on PyPy
+      registration and the first-call check also refuse, in event data
+      and in writable State fields, a definition reached through
+      `Json[...]` that lies on a loop with no author's wrap validator
+      (`class_loops`, `_Schema.uncounted_loop_reason`) when the loop
+      passes through a class (model, dataclass, TypedDict, NamedTuple:
+      `_RECURSIVE_CLASS_REASON`), and any other such loop too
+      (`_JSON_LOOP_REASON`), both below a `json` node and in a State
+      read only as JSON: in such a State nothing counts the JSON read,
+      so a `Sequence[Sequence[Sequence[SS]]]` alias 150 levels deep
+      (640 bytes) passed the read and then ended PyPy 7.3.23 in
+      `state_wire_values`, where `model_dump` calls a Python function
+      for each `Sequence` level. The loop graph
+      follows only the `json_schema` of a `json-or-python` node there
+      (`json_only`), since a JSON read never takes the Python part, so
+      `pydantic.JsonValue` reads as `Any` and is accepted. One JSON
+      string nests up to 200 uncounted levels (pydantic-core's JSON
+      parser stops there), and those come on top of what was checked
+      outside the string: on PyPy 7.3.23 a list alias 198 levels deep in
+      one string ended the process below 31 counted models with
+      several lists per level, and below 97 levels of an uncounted
+      tuple alias outside `Json[...]`. Strings nested in each other add
+      up too, even with a counted wrap validator above each string,
+      which counts only its own level; so the error names the recursive
+      type that needs a wrap validator of its own. `Json[Any]` is
+      accepted: pydantic-core only parses it, and 198 levels of it
+      passed in the same places. It still takes about a tenth of PyPy's
+      stack at 199 levels, so under the heaviest accepted schema (48
+      validators per object, 31 levels) 100 levels of it ended the
+      process, as on 1.2.0; the docs list that as a remaining limit. On CPython the class rule keeps its
+      three kinds and applies only to a State read only as JSON. On
+      PyPy 7.3.23 about 40 shapes were refused at the limit without
+      ending the process; the heaviest ordinary ones used 30% to 70% of
+      the stack there.
     - What cannot absorb the refusal: a part of the schema that drops an
       item on any error, such as `OnErrorOmit`. The tally records the
       first stop for work, time, or nesting, and the check raises it
@@ -2303,8 +2413,11 @@ field); for a chain, one validator that checks the tree; for a
 lax-or-strict pair, one check for both modes; for typed extra keys or
 items, a type that fails with one short message, or the wrap validator
 moved inside the `Json[...]`, which then does not run when the text is
-not valid JSON. The message also offers declaring the field as the type
-itself instead of `Json[...]` for a `data` class only: Citry's own check
+not valid JSON. The message also offers replacing `Json[...]` with the
+type inside its brackets, for a `data` class only, and names the field
+where the outermost `Json[...]` above the refused part is written
+(`_plain_type_fix`), which may be a field of a class or a type inside
+the refused field: Citry's own check
 of a write to a dataclass State refuses a JSON object for a field
 typed as a class, so with the plain type the browser could not write the
 field at all. For State it offers setting `_model` to the fields the
@@ -4730,7 +4843,7 @@ transports would both need belongs in the dispatcher, never duplicated):
 | Version and capabilities | Reject unknown protocol majors; resolve an absent `capabilities` field to the baseline; hand the resolved set to action encoding so `morph` downgrades to `replace` and no action kind outside the set is ever emitted. | The baseline constant is the protocol package's `CAPABILITIES_BASELINE_V1`; rejections mirror per call so `results[i]` always answers `calls[i]`. |
 | Component and event resolution | The per-event URL is authoritative; explicit `componentClassId` and `handlerName` fields must match it. A failed lookup produces the wire error codes `unknown_component` / `unknown_event` (protocol constants from the 3.7 table, status 404), never a lookup of any user-defined name: there is no magic fallback component or handler to define. Custom not-found behavior hangs off the `on_event_error` hook or host middleware on the real URLs. | `Citry.get_component_by_class_id` resolves the class; wire names come from the handler metadata captured at class creation (plan WP7). |
 | Token verification and updates | Verify the signed `stateToken` (malformed 403, expired, rotated-out, or unknown-version 409; the split is payload well-formedness, per the error-codes rule in 4.3), rebuild State, apply `_model`-gated `stateUpdates` with per-field 422s. | `verify_state_token` / `apply_state_updates` (plan WP8). |
-| Per-call context and guards | `on_event` emit (veto), then the `_context` hook, then guards most-specific-wins (engine default, component `_guard`, `@event(guard=...)`). | Pipeline order is normative (3.6, 3.7): a guard must see `_context`'s result, and guards run before args validation so a refused caller gets the guard's error. |
+| Per-call context and guards | `on_event` emit (veto or answer), then the `_context` hook, then the component-level guard (the component's `_guard`, else the engine default; skipped only under `@event(component_guard=False)`), then the handler's `@event(guard=...)`. Both guards run, and either one can refuse the call. | Pipeline order is normative (3.6, 3.7): a guard must see `_context`'s result, and guards run before args validation so a refused caller gets the guard's error. |
 | Args validation | Validate the wire args payload against the handler's `data` schema with the 3.3 coercions; failures are per-field 422s, never host 500s. | The data-schema machinery (plan WP9) returns structured results that the error mapping consumes. |
 | Handler invocation | By-name injection of `data` / `state` / `context` / `request` / `event`; the same values populate the ambient attributes on the per-call events instance. | Async dispatch awaits `async def` handlers; sync handlers offload to a worker thread via the routing helper `call_maybe_sync` (plan WP2). |
 | Action encoding | Return-value coercion, result resolvers, faithful ordering, and the render-to-fragment serialize. | The actions module (plan WP11); a `Render` re-enters the normal fragment serialize, so its HTML carries a fresh manifest. |
@@ -5391,9 +5504,18 @@ traversal of any object graph; extra arg keys are rejected, not absorbed.
   two-way writes: those remain queued for the next mutating call. A mixed or
   multi-call envelope still uses the POST-only batch endpoint, including when
   one item names a GET-declared handler.
-- **Guards inherit**: engine-wide default, per-component `_guard`,
-  per-handler `@event(guard=...)`, most specific wins. A guard is
-  `callable(events)` that raises `EventError(status=403)` to deny, reading
+- **Guards add up**: the component-level guard is the component's
+  `_guard`, or the engine-wide default when the component sets none.
+  It runs before every handler, and a per-handler
+  `@event(guard=...)` runs after it as an extra check; either one
+  refusing refuses the call. A handler skips the component-level guard
+  only with an explicit `@event(component_guard=False)`, so a guard
+  written for one handler can never drop the component's check by
+  accident. A guard is
+  `callable(events)` that raises `EventError(status=403)` or returns
+  any false value other than `None` or an exception to deny (`None` and
+  `True` allow; a returned callable answers 500; any other true value
+  allows and logs a warning), reading
   `self.context` (3.6) or `self.request.native`. Opt-out, not opt-in
   (livecomponents' per-method decorator is the anti-pattern: forgetting one
   method is an open endpoint). Honest limitation, documented: citry cannot

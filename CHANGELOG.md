@@ -2,6 +2,18 @@
 
 ## v1.3.0
 
+Citry 1.3.0 is a security release, and it also renews State tokens
+that are in use and adds helpers that check redirect URLs. In Events,
+it fixes these problems: an `async def` guard, `_context` or `_csrf`
+function never ran; a handler's own guard turned off the component's
+guard, and a guard that returned `False` let the call through; and
+deeply nested event data or State writes could end the server process
+on PyPy. Some fixes refuse code or calls that 1.2.0 accepted, so read
+the Security entries before you upgrade. The PyPy fix changes nothing
+on CPython; Citry applies it on every Python implementation other than
+CPython, such as GraalPy, since only CPython has been measured to be
+safe without it. Citry 1.3.0 still requires citry-core 2.1.2.
+
 ### Added
 
 - A page that is in use no longer gets `stale_state` (the "page is out
@@ -97,6 +109,104 @@
 
 ### Fixes
 
+- Security: an `async def` event guard, `_context` or `_csrf` function
+  is now refused with an error when the component class is defined.
+  Citry calls these without awaiting them, so the code inside an async
+  one never ran: an async guard let every call through, and an async
+  `_csrf` function skipped your own token check. An app that has one
+  now fails at startup: rewrite the function as a plain `def`. A plain
+  `def` guard or `_csrf` function that returns a coroutine, another
+  awaitable, a generator or an async generator now fails the call, and
+  so does a `_context` that returns a coroutine. See
+  [GHSA-gj9m-wwqx-m37j](https://github.com/citry-dev/citry/security/advisories/GHSA-gj9m-wwqx-m37j).
+- Security: a handler's own `@event(guard=...)` now runs after the
+  component's `_guard` (or the app-wide `_guard` in
+  `extensions_defaults["events"]`) instead of replacing it, and either
+  one can refuse the call. A call the component's guard refuses now
+  fails on every handler of the component, including handlers with
+  their own guard. To let a public handler through, return early from
+  `_guard` when `self.event.name` names it, or set
+  `@event(component_guard=False)` on the handler, which skips the
+  component's or app-wide `_guard` for that handler only. See
+  [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
+- Security: applying `@event(...)` to a function that already has
+  `@event` settings (two stacked decorators, or one function decorated
+  again for another class) now raises an error, and so does a decorator
+  above `@event(...)` that keeps `__wrapped__` but drops the settings.
+  Code that did this loaded in 1.2.0, but only one set of settings took
+  effect, so a `guard=` could be dropped without an error. Put every
+  setting in one `@event(...)`, and write decorators with
+  `functools.wraps`. A handler now also keeps the `@event` settings it
+  had when its class was created, so changing the function's `@event`
+  settings later does not change how that class's handler behaves, and
+  a function used as a `ViewEvents` verb handler in one class no longer
+  changes the HTTP methods it accepts in another class. See
+  [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
+- Security: an event guard that returns a false value other than `None`
+  (`False`, `0`, an empty list or QuerySet) or an exception other than
+  `EventError` now refuses the call with a 403, and one that returns an
+  `EventError` refuses it with that error's status and message, as if it
+  had raised it. Before, a guard written as `return user.is_staff` or
+  `return Document.objects.filter(owner=user)` let every caller through.
+  `None` and `True` let the call go ahead. A guard that returns a
+  function, as `return self.can_edit` does without the `()`, fails the
+  call with a 500 and logs the guard's name. Any other true value lets
+  the call go ahead and logs a warning that names the guard and the
+  component. A returned value whose true-or-false test raises an error
+  fails the call with a 500. See
+  [GHSA-2jch-pr4c-gf9m](https://github.com/citry-dev/citry/security/advisories/GHSA-2jch-pr4c-gf9m).
+- Security: on PyPy, Citry now limits how deeply event data and browser
+  writes to State may nest so that PyPy's stack can hold the check, and
+  data nested deeply enough to end the server process in earlier
+  releases gets a 422 instead. The limit there is now 32 levels (it was
+  64). Wrap validators, unions, `Sequence[...]` fields and `OnErrorOmit`
+  items each count as more than one level, and so does each level of a
+  recursive type with a `WrapSerializer` or other serializer function,
+  so on PyPy some data that earlier releases accepted gets a 422 that
+  says it is nested too deeply. A schema with many validators at each
+  level, especially with a free-form field deep inside it, a handler
+  that stores event data in a State field of another type that has a
+  serializer (or a Pydantic class from a plain dataclass `data` class in
+  a free-form field), or your own code that validates nested data again,
+  can still end the process. See
+  [Event data on PyPy](https://citry.dev/security/#event-data-on-pypy)
+  and
+  [GHSA-29wx-2wvw-8962](https://github.com/citry-dev/citry/security/advisories/GHSA-29wx-2wvw-8962).
+- Security: on PyPy, a component whose event `data` class or
+  browser-writable State field holds a recursive type inside
+  `Json[...]`, such as a model that can hold itself or a recursive list
+  alias, now raises `ValueError` when it is defined, so the app fails
+  at import. A class that Citry first meets at a call, such as a
+  Pydantic model inside a plain dataclass, gets a 422 for that call
+  instead. Give the recursive type that the error names a wrap
+  validator of its own, or use `Json[Any]` or `Json[JsonValue]` for
+  free-form JSON. In a `data` class you can instead change `Json[Tree]`
+  to `Tree`; the field then takes the value itself, not JSON text.
+- Security: on PyPy, a State that Citry checks only as JSON text, such
+  as one with `strict=True`, now raises `ValueError` when a field the
+  browser may write holds a recursive type of any kind, such as a
+  recursive list alias; earlier releases refused only a recursive
+  class there. Make the State lax, leave the field out of `_model`, or
+  give the recursive type a wrap validator of its own.
+- Security: on PyPy, a component now raises `ValueError` when it is
+  defined if its event `data` class or any State field has a serializer
+  whose return type leads into a recursive type with a serializer of
+  its own, such as `Annotated[Any, PlainSerializer(f, return_type=Tree)]`,
+  or a `PlainValidator` on a level of a recursive type, as in
+  `Tree = Annotated[list[Tree], PlainValidator(f)]`. Pydantic calls
+  Python at every level of such a value when Citry writes the State
+  out. Remove `return_type`, annotate a `field_serializer` or
+  `model_serializer` as returning `Any`, or use an `AfterValidator` or
+  `WrapValidator` in place of the `PlainValidator`. The rule also
+  refuses two shapes that would not end PyPy: a recursive return type
+  whose only serializer is on a value that does not nest, such as a
+  `field_serializer` for a date field, and a recursive Pydantic
+  dataclass whose wrap `field_serializer` is annotated as returning its
+  own type. Annotate those serializers as returning `Any`.
+- When an event guard, `_context`, an `on_event` hook or a State
+  validator raises an unexpected error, the server log, and in debug
+  mode the error message, now name the function that failed instead of
+  the event handler, which never ran.
 - A component with Events that comes from the render cache now writes
   the same HTML as when it renders without the cache. Earlier releases
   gave its root element an extra `data-cid` attribute, so the browser

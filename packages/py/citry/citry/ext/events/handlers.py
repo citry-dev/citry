@@ -14,11 +14,12 @@ from __future__ import annotations
 import __future__
 
 import ast
+import functools
 import inspect
 import re
 import sys
 import textwrap
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable, Coroutine, Generator
 from dataclasses import dataclass, is_dataclass
 from types import FunctionType
 from typing import Any, TypeVar, get_type_hints, overload
@@ -119,12 +120,15 @@ class EventOptions:
     below it, the engine and factory defaults) applies. The queue knobs
     ``latest_wins``, ``bundle`` and ``detached`` have no component level (they
     are per-handler on purpose, design 3.5), so they hold plain booleans whose
-    defaults match an undecorated handler.
+    defaults match an undecorated handler. ``component_guard`` is a plain
+    boolean too: ``True`` (the default) runs the component-level guard before
+    ``guard``, and only an explicit ``False`` turns it off for this handler.
     """
 
     name: str | None = None
     methods: tuple[str, ...] | None = None
     guard: Callable[..., Any] | None = None
+    component_guard: bool = True
     csrf: str | bool | Callable[..., Any] | None = None
     debounce: int | None = None
     throttle: int | None = None
@@ -137,6 +141,81 @@ def event_options(func: Callable[..., Any]) -> EventOptions | None:
     """The ``@event`` values stored on ``func``, or ``None`` for a bare handler."""
     options = getattr(func, EVENT_OPTIONS_ATTR, None)
     return options if isinstance(options, EventOptions) else None
+
+
+def refuse_stacked_event(handler: Any, handler_name: str) -> None:
+    """
+    Raise ``ValueError`` when ``handler`` already carries ``@event`` settings.
+
+    Each ``@event(...)`` call stores one ``EventOptions`` on the function,
+    so a second call replaces the first one's settings instead of adding to
+    them. A decorator written with ``functools.wraps`` copies the stored
+    settings onto its wrapper, and one that only sets ``__wrapped__`` leaves
+    them on the function it wraps, so the ``__wrapped__`` chain is checked
+    too. A decorator that keeps neither cannot be seen.
+
+    Args:
+        handler: The function ``@event(...)`` is about to decorate.
+        handler_name: The handler's name, as the error message shows it.
+
+    Raises:
+        ValueError: When ``handler``, or a function it wraps, already has
+            ``@event`` settings.
+
+    """
+    func = handler
+    # A chain of wrappers is short in practice; the bound only stops a
+    # ``__wrapped__`` that points back at itself from looping.
+    for _ in range(32):
+        if func is None:
+            return
+        if event_options(func) is not None:
+            msg = (
+                f"@event(...) on handler {handler_name!r}: the function already has @event settings,"
+                " from another @event(...) on it or from decorating the same function for another"
+                " class. A second @event(...) would replace them, so the first one's guard= and"
+                " other settings would stop applying. Put every setting in one @event(...), or give"
+                " each class its own function."
+            )
+            raise ValueError(msg)
+        func = getattr(func, "__wrapped__", None)
+
+
+def refuse_hidden_event_settings(comp_name: str, method_name: str, func: Any) -> None:
+    """
+    Raise ``ValueError`` when a handler wraps a function whose ``@event`` settings it lost.
+
+    ``@event(...)`` under a decorator that keeps ``__wrapped__`` but does
+    not copy the function's attributes leaves its settings on the inner
+    function, where Citry never reads them, so an inner ``guard=`` would
+    not run. ``functools.wraps`` copies them, so its wrappers pass.
+
+    Args:
+        comp_name: The component's name, as the error message shows it.
+        method_name: The handler's method name on the ``Events`` class.
+        func: The handler function Citry collected.
+
+    Raises:
+        ValueError: When a function down the ``__wrapped__`` chain has
+            ``@event`` settings that the handler itself does not carry.
+
+    """
+    outer = event_options(func)
+    inner_func = getattr(func, "__wrapped__", None)
+    # The bound only stops a ``__wrapped__`` that points back at itself.
+    for _ in range(32):
+        if inner_func is None:
+            return
+        inner = event_options(inner_func)
+        if inner is not None and inner != outer:
+            msg = (
+                f"Component {comp_name}: event handler {method_name!r} wraps a function that has"
+                " @event settings, but the wrapper does not carry them, so they would not apply"
+                " (a guard= among them). Put @event(...) above the decorator, or write the"
+                " decorator with functools.wraps so it copies the settings."
+            )
+            raise ValueError(msg)
+        inner_func = getattr(inner_func, "__wrapped__", None)
 
 
 def is_def_like(value: Any) -> bool:
@@ -215,10 +294,12 @@ def validate_timing_value(source: str, value: Any) -> int | None:
 
 def validate_bool_value(source: str, value: Any) -> bool:
     """
-    Check a ``latest_wins`` / ``bundle`` / ``detached`` value: a plain bool.
+    Check a ``latest_wins`` / ``bundle`` / ``detached`` / ``component_guard`` value: a plain bool.
 
-    The queue knobs exist at the handler level only (design 3.5), so unlike
-    the validators above, only the ``@event`` decorator calls this.
+    These knobs exist at the handler level only (design 3.5), so unlike the
+    validators above, only the ``@event`` decorator calls this. A plain bool
+    matters most for ``component_guard``: a stand-in such as ``0`` or
+    ``"no"`` must not decide whether an authorization check runs.
     """
     if not isinstance(value, bool):
         msg = f"{source} must be True or False; got {value!r}."
@@ -229,18 +310,154 @@ def validate_bool_value(source: str, value: Any) -> bool:
 
 
 def validate_csrf_value(source: str, value: Any) -> str | bool | Callable[..., Any]:
-    """Check a ``csrf`` value: ``"auto"``, ``False``, or a callable."""
-    if value == "auto" or value is False or callable(value):
+    """Check a ``csrf`` value: ``"auto"``, ``False``, or a plain (not async) function."""
+    if value == "auto" or value is False:
+        return value
+    if callable(value):
+        # The CSRF check calls the function and treats "it did not raise" as
+        # a pass, so an async one would pass every request unchecked.
+        refuse_deferred_body(source, value, "that takes the request and raises EventError to refuse it")
         return value
     msg = f'{source} must be "auto", False, or a callable; got {value!r}.'
     raise ValueError(msg)
+
+
+# What a guard does, for the error that refuses an async one.
+GUARD_PURPOSE = (
+    "that takes the Events instance and raises EventError, or returns an exception or a false value other than"
+    " None, to refuse the call; or None for no guard"
+)
+
+# Calling one of these returns an object whose code has not run yet: a
+# coroutine (async def), an async generator, or a generator.
+_DEFERRED_BODY_CHECKS = (inspect.iscoroutinefunction, inspect.isasyncgenfunction, inspect.isgeneratorfunction)
+
+
+def defers_its_body(func: Any) -> bool:
+    """
+    Whether calling ``func`` returns a coroutine or generator instead of running its code.
+
+    Citry calls guards and the other Events functions without awaiting or
+    iterating what they return, so the code of such a function would never
+    run. ``inspect.iscoroutinefunction`` alone misses an object whose
+    ``__call__`` is ``async def`` and a ``staticmethod`` or ``classmethod``
+    wrapper, so this unwraps those first. It does not follow ``__wrapped__``:
+    a plain wrapper such as ``asgiref.sync.async_to_sync`` sets it to the
+    async function it runs, and that wrapper is a valid plain function.
+    """
+    # A chain of wrappers is short in practice; the bound only stops a
+    # pathological self-referencing ``__call__`` from looping.
+    for _ in range(32):
+        if any(check(func) for check in _DEFERRED_BODY_CHECKS):
+            return True
+        if isinstance(func, (staticmethod, classmethod)):
+            func = func.__func__
+        elif isinstance(func, (functools.partial, functools.partialmethod)):
+            func = func.func
+        elif inspect.ismethod(func):
+            func = func.__func__
+        elif callable(func) and not isinstance(func, type) and not inspect.isroutine(func):
+            # An instance of a class with ``__call__``: what runs is that method.
+            call = type(func).__call__
+            if call is func:
+                return False
+            func = call
+        else:
+            return False
+    return False
+
+
+def refuse_deferred_body(source: str, value: Any, purpose: str) -> None:
+    """
+    Raise ``ValueError`` when ``value`` is an async (or generator) function.
+
+    Args:
+        source: The setting's name, as the error message shows it.
+        value: The callable the app gave.
+        purpose: What the function takes and does, completing "must be a
+            plain (not async) function ...".
+
+    Raises:
+        ValueError: When calling ``value`` would not run its code.
+
+    """
+    if defers_its_body(value):
+        msg = (
+            f"{source} must be a plain (not async) function {purpose}. Citry calls it without"
+            " awaiting it, so the code of an async (or generator) function would never run;"
+            f" got {value!r}."
+        )
+        raise ValueError(msg)
+
+
+def _not_started(result: Any) -> bool:
+    """Whether ``result`` is a Python coroutine or generator whose code has not started."""
+    if inspect.iscoroutine(result):
+        return inspect.getcoroutinestate(result) == inspect.CORO_CREATED
+    if inspect.isgenerator(result):
+        return inspect.getgeneratorstate(result) == inspect.GEN_CREATED
+    return False
+
+
+def refuse_deferred_result(source: str, result: Any, *, coroutine_only: bool = False) -> None:
+    """
+    Raise ``TypeError`` when a call returned a coroutine or generator.
+
+    The class-definition check cannot see every way to build such a
+    function (a plain ``def`` that returns ``some_async_function(...)``,
+    for one), so the result is checked on every call too. An unrun
+    coroutine or generator is closed first, so Python does not also warn
+    that it was never awaited.
+
+    Args:
+        source: The function's name, as the error message shows it.
+        result: What the function returned.
+        coroutine_only: Refuse only a coroutine, compiled ones included.
+            ``_context`` passes this: its value is app data, which may be
+            some other awaitable or a generator on purpose. A guard or CSRF
+            function never returns such an object on purpose, so a result
+            Citry would have to await or iterate means its check did not
+            run.
+
+    Raises:
+        TypeError: When ``result`` is a coroutine, or (without
+            ``coroutine_only``) any other awaitable, a generator, or an
+            async generator. The dispatcher answers the call with an
+            error, so the check fails closed.
+
+    """
+    if coroutine_only:
+        # A compiled coroutine (Cython, mypyc) is a ``collections.abc.Coroutine``
+        # but not a native coroutine, so ``inspect.iscoroutine`` misses it.
+        deferred = isinstance(result, Coroutine)
+    else:
+        # The abstract classes, not inspect.isgenerator / isasyncgen: a
+        # compiled (Cython) generator registers only with collections.abc,
+        # and a guard that returned one would otherwise let the call through.
+        deferred = inspect.isawaitable(result) or isinstance(result, (Generator, AsyncGenerator))
+    if not deferred:
+        return
+    # _context may return other awaitables and generators, so its message
+    # names only what it refuses.
+    refused = "coroutine" if coroutine_only else "coroutine, awaitable or generator"
+    # Closing an unstarted coroutine or generator stops Python warning that
+    # it was never awaited. One the app already started may still be in use
+    # elsewhere, and some other awaitable may be a resource the app owns, so
+    # those are left alone.
+    if _not_started(result):
+        result.close()
+    msg = (
+        f"{source} returned a {type(result).__name__!r} object. Write it as a plain def that returns no"
+        f" {refused}: Citry does not await or iterate what it returns, so this call is refused."
+    )
+    raise TypeError(msg)
 
 
 def validate_render_inputs_value(source: str, value: Any) -> Callable[..., Any] | None:
     """Check a ``_render_inputs`` value: a plain (not async) function that takes one argument, or None."""
     # The dispatcher calls the function without awaiting it, so an async
     # function would hand back a coroutine instead of the inputs.
-    if value is not None and (not callable(value) or inspect.iscoroutinefunction(value)):
+    if value is not None and (not callable(value) or defers_its_body(value)):
         msg = (
             f"{source} must be a plain (not async) function that takes the call's EventRequest"
             " and returns a dict with the optional keys 'template_globals' and 'provides', or None;"
@@ -275,9 +492,17 @@ def _takes_one_argument(func: Callable[..., Any]) -> bool:
     return True
 
 
-def validate_callable_value(source: str, value: Any) -> Callable[..., Any] | None:
-    """Check a ``guard`` / ``context`` value: a callable (or None)."""
-    if value is None or callable(value):
+def validate_callable_value(
+    source: str, value: Any, purpose: str = "that takes the Events instance, or None"
+) -> Callable[..., Any] | None:
+    """Check a ``guard`` / ``context`` value: a plain (not async) function, or None."""
+    if value is None:
+        return value
+    if callable(value):
+        # The dispatcher calls guards and _context without awaiting them. An
+        # async guard would only create a coroutine, never raise, and so let
+        # every call through; refusing it here fails at class definition.
+        refuse_deferred_body(source, value, purpose)
         return value
     msg = f"{source} must be a callable or None; got {value!r}."
     raise ValueError(msg)
@@ -298,6 +523,7 @@ def event(
     name: str | None = None,
     methods: tuple[str, ...] | list[str] | None = None,
     guard: Callable[..., Any] | None = None,
+    component_guard: bool = True,
     csrf: str | bool | Callable[..., Any] | None = None,
     debounce: int | None = None,
     throttle: int | None = None,
@@ -314,6 +540,7 @@ def event(
     name: str | None = None,
     methods: tuple[str, ...] | list[str] | None = None,
     guard: Callable[..., Any] | None = None,
+    component_guard: bool = True,
     csrf: str | bool | Callable[..., Any] | None = None,
     debounce: int | None = None,
     throttle: int | None = None,
@@ -327,10 +554,12 @@ def event(
     Bare handlers need no decorator; use ``@event(...)`` only to override the
     component-level defaults for one handler. Every key not given falls back
     to the component's underscore config
-    (``_methods``, ``_guard``, ``_csrf``, ``_debounce``, ``_throttle``),
-    which itself falls back to ``extensions_defaults["events"]`` and then the
-    built-in defaults. The queue knobs ``latest_wins``, ``bundle`` and
-    ``detached`` are the exception: they exist per handler only, so a call
+    (``_methods``, ``_csrf``, ``_debounce``, ``_throttle``), which itself
+    falls back to ``extensions_defaults["events"]`` and then the built-in
+    defaults. Guards work differently: a ``guard`` given here runs after
+    the component's ``_guard``, in addition to it (see ``guard`` and
+    ``component_guard`` below). The queue knobs ``latest_wins``,
+    ``bundle`` and ``detached`` exist per handler only, so a call
     site that needs different queue semantics names a different handler. A
     detached handler also needs the call site to pass ``wait: false``; a
     call without it waits its turn.
@@ -342,9 +571,33 @@ def event(
         methods: The allowed HTTP methods for this handler, e.g. ``("GET",)``.
             Each must be one of GET, HEAD, POST, PUT, PATCH, DELETE, or
             OPTIONS, the methods the per-event route accepts.
-        guard: Per-handler authorization callable; replaces (does not stack
-            on) the component's ``_guard``.
-        csrf: Per-handler CSRF policy: ``"auto"``, ``False``, or a callable.
+        guard: Per-handler authorization function. It receives the
+            ``Events`` instance and refuses the call by raising an
+            ``EventError``, by returning one (answered as if raised), or
+            by returning any other exception or any false value other
+            than ``None``, such as ``False`` or an empty QuerySet (a
+            403). Returning ``None`` or ``True`` lets the call go ahead.
+            Returning a function or other callable (``return
+            self.can_edit`` without the ``()``) fails the call with a
+            500 and logs the guard's name; any other true value lets
+            the call go ahead and logs a warning. It runs after the
+            component's
+            ``_guard`` (or the app-wide ``_guard`` in
+            ``extensions_defaults["events"]`` when the component defines
+            none), and either one refusing refuses the call. It must be a
+            plain ``def``, not ``async def``: Citry calls it without
+            awaiting it.
+        component_guard: Pass ``False`` to skip the component's ``_guard``
+            (or the app-wide ``_guard``) for this handler only, for a
+            handler that must accept callers the rest of its component
+            refuses, such as a public sign-up call. ``guard`` and
+            ``_context`` still run. Only ``True`` or ``False`` is
+            accepted. To keep every access rule in one place, the
+            component's ``_guard`` can instead return early when
+            ``self.event.name`` is the name of a public handler.
+        csrf: Per-handler CSRF policy: ``"auto"``, ``False``, or a plain
+            (not async) function that raises ``EventError`` to refuse the
+            request.
         debounce: Client-side debounce, in milliseconds.
         throttle: Client-side throttle, in milliseconds.
         latest_wins: Opt this handler into newest-wins queueing on the
@@ -396,14 +649,23 @@ def event(
                 @event(detached=True)
                 def spell_check(self, data: SpellCheckIn) -> dict:
                     return {"typos": find_typos(data.text)}
+
+                # Runs after the component's _guard, if it has one.
+                @event(guard=require_owner)
+                def delete(self, state: DocState):
+                    delete_document(state.doc_id)
         ```
 
     Raises:
         ValueError: When a value has the wrong shape (e.g. a ``methods``
-            string instead of a tuple), or when ``methods`` names a method
-            the per-event route does not accept (anything other than GET,
-            HEAD, POST, PUT, PATCH, DELETE, and OPTIONS), at decoration
-            time.
+            string instead of a tuple, or an ``async def`` guard), or when
+            ``methods`` names a method the per-event route does not accept
+            (anything other than GET, HEAD, POST, PUT, PATCH, DELETE, and
+            OPTIONS), at decoration time. Also when the handler already
+            has ``@event`` settings, such as from a second ``@event(...)``
+            stacked on it or from decorating the same function for another
+            class: put every setting in one ``@event(...)``, and give each
+            class its own function.
 
     """
     if name is not None and (not isinstance(name, str) or not name):
@@ -412,7 +674,8 @@ def event(
     options = EventOptions(
         name=name,
         methods=validate_methods_value("@event(methods=...)", methods) if methods is not None else None,
-        guard=validate_callable_value("@event(guard=...)", guard),
+        guard=validate_callable_value("@event(guard=...)", guard, GUARD_PURPOSE),
+        component_guard=validate_bool_value("@event(component_guard=...)", component_guard),
         csrf=validate_csrf_value("@event(csrf=...)", csrf) if csrf is not None else None,
         debounce=validate_timing_value("@event(debounce=...)", debounce),
         throttle=validate_timing_value("@event(throttle=...)", throttle),
@@ -422,10 +685,14 @@ def event(
     )
 
     def wrap(handler: _F) -> _F:
+        handler_name = getattr(handler, "__qualname__", repr(handler))
+        # A second @event(...) would replace the settings the first one
+        # stored, so an inner guard= would silently stop running. Refusing
+        # it at decoration makes the author merge the two.
+        refuse_stacked_event(handler, handler_name)
         # The shape was checked above, when ``@event(...)`` was called; the
         # route check waits for the handler so its error can name it.
         if options.methods is not None:
-            handler_name = getattr(handler, "__qualname__", repr(handler))
             validate_route_methods(f"@event(methods=...) on handler {handler_name!r}", options.methods)
         setattr(handler, EVENT_OPTIONS_ATTR, options)
         return handler

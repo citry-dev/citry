@@ -14,6 +14,7 @@ import pytest
 
 from citry import Citry, Component, Extension
 from citry.ext.events import EventError, event
+from citry.ext.events.handlers import event_options
 from citry.ext.events.view_events import (
     VERB_HANDLER_NAMES,
     VIEW_EVENT_PATH,
@@ -135,6 +136,81 @@ class TestVerbReservation:
         handler = _handlers(Timed)["post"]
         assert handler.methods == ("POST",)
         assert handler.debounce == 250
+
+    def test_a_verb_function_reused_in_another_class_keeps_each_class_s_methods(self):
+        # One plain function serves as a GET verb, then as a POST verb, then
+        # as a named handler. Each class gets the methods its own place
+        # gives, and creating a later class never changes an earlier one.
+        c = _citry()
+
+        def shared(self):
+            return {"ok": True}
+
+        def component(name, events_cls):
+            return type(name, (Component,), {"citry": c, "Events": events_cls, "template": "\n<p>x</p>\n"})
+
+        as_get = component("AsGet", type("Events", (ViewEvents,), {"get": shared}))
+        as_post = component("AsPost", type("Events", (ViewEvents,), {"post": shared}))
+        as_named = component("AsNamed", type("Events", (), {"refresh": shared}))
+        assert _handlers(as_get)["get"].methods == ("GET",)
+        assert _handlers(as_post)["post"].methods == ("POST",)
+        # A named handler on a plain Events class keeps the component's
+        # POST, so a GET (which skips the CSRF checks) cannot reach it.
+        assert _handlers(as_named)["refresh"].methods == ("POST",)
+        assert _handlers(as_get)["get"].methods == ("GET",)
+
+    def test_creating_a_view_events_class_leaves_the_function_alone(self):
+        def get(self):
+            return {"ok": True}
+
+        type("Events", (ViewEvents,), {"get": get})
+        # Nothing stored on the function, so a later @event(...) on it is
+        # its first and only one.
+        assert event_options(get) is None
+        event(debounce=10)(get)
+        assert event_options(get).methods is None
+
+    def test_a_verb_inherited_from_a_view_events_parent_keeps_its_method(self):
+        c = _citry()
+
+        class Base(ViewEvents):
+            def get(self):
+                return {"ok": True}
+
+        class Child(Component):
+            citry = c
+
+            class Events(Base):
+                def post(self):
+                    return {"ok": True}
+
+            template = """
+                <p>child</p>
+            """
+
+        handlers = _handlers(Child)
+        assert handlers["get"].methods == ("GET",)
+        assert handlers["post"].methods == ("POST",)
+
+    def test_a_verb_name_from_a_mixin_that_is_not_view_events_stays_a_plain_handler(self):
+        c = _citry()
+
+        class Mixin:
+            def get(self):
+                return {"ok": True}
+
+        class Mixed(Component):
+            citry = c
+
+            class Events(Mixin, ViewEvents):
+                pass
+
+            template = """
+                <p>mixed</p>
+            """
+
+        # Only a ViewEvents subclass makes a verb name a verb handler.
+        assert _handlers(Mixed)["get"].methods == ("POST",)
 
     def test_state_on_a_verb_handler_fails_at_class_definition(self):
         expected = (

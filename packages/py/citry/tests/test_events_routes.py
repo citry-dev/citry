@@ -648,6 +648,51 @@ class TestCsrfCheckThroughDispatch:
         assert error == {"status": 403, "code": "csrf_failed", "message": "Bad token."}
         assert seen["request"] is request
 
+    def test_an_async_policy_fails_at_class_definition(self):
+        # The check treats "the policy did not raise" as a pass, so an async
+        # policy, which only creates a coroutine, would pass every request.
+        async def policy(request):
+            raise EventError("Bad token.", status=403)
+
+        with pytest.raises(ValueError, match=r"@event\(csrf=\.\.\.\) must be a plain \(not async\) function"):
+            event(csrf=policy)
+
+        c = _citry(extensions_defaults={"events": {"_csrf": policy}})
+        with pytest.raises(ValueError, match=r"Events\._csrf must be a plain \(not async\) function"):
+
+            class Locked(Component):
+                citry = c
+                template = """
+                    <div>l</div>
+                """
+
+                class Events:
+                    def go(self):
+                        return None
+
+    def test_a_policy_that_returns_a_coroutine_answers_csrf_failed(self):
+        ran = []
+
+        async def check_token(request):
+            raise EventError("Bad token.", status=403)
+
+        c = _citry()
+
+        class Locked(Component):
+            citry = c
+            template = """
+                <div>l</div>
+            """
+
+            class Events:
+                @event(csrf=lambda request: check_token(request))
+                def go(self):
+                    ran.append("go")
+
+        result = self._dispatch_with(c, Locked, "go", _request(headers=[("X-Citry-Events", "1")]))
+        assert result["results"][0]["error"] == {"status": 403, "code": "csrf_failed", "message": CSRF_FAILED_MESSAGE}
+        assert ran == []
+
     def test_csrf_false_drops_only_the_token_layer(self):
         c = _citry()
 
@@ -2098,6 +2143,73 @@ class TestImmutableAssetRoutes:
         assert response.status_code == 403
         assert response.json()["results"][0]["error"]["code"] == "csrf_failed"
         assert response.headers.get("access-control-allow-origin") is None
+
+
+class TestGuardThatReturnsARefusalOnEveryRoute:
+    """A guard that returns a false value or an exception refuses the call on every route that runs guards."""
+
+    @staticmethod
+    def _locked(c, ran, refusal):
+        def refuse(events):
+            return refusal
+
+        class Locked(Component):
+            citry = c
+            template = """
+                <p>locked</p>
+            """
+
+            class Events:
+                _guard = refuse
+
+                @event(methods=("GET", "POST"))
+                def go(self):
+                    ran.append("go")
+
+        return Locked
+
+    @pytest.mark.parametrize("returned", ["false", "empty-list", "other-exception", "event-error"])
+    @pytest.mark.parametrize("adapter", ["asgi", "wsgi"])
+    @pytest.mark.parametrize("route", ["batch", "per-event", "per-event-get", "form"])
+    def test_refused(self, adapter, route, returned):
+        c = _citry()
+        ran = []
+        # Each refuses with a 403 here, so one set of checks covers them all.
+        refusal = {
+            "false": False,
+            "empty-list": [],
+            # Its text is not for the browser; the standard message answers.
+            "other-exception": PermissionError("secret"),
+            "event-error": EventError("Locked.", status=403),
+        }[returned]
+        locked = self._locked(c, ran, refusal)
+        client = _landing_client(c, adapter)
+        if route == "batch":
+            envelope = {
+                "protocol": "citry-events/1",
+                "requestId": "r1",
+                "calls": [{"componentClassId": locked.class_id, "handlerName": "go", "args": {}}],
+            }
+            response = _post_envelope(client, "/citry/ext/events/call", envelope)
+        elif route == "per-event":
+            response = _post_call(client, locked, "go", {})
+        elif route == "per-event-get":
+            response = client.get(_event_url(locked, "go"), headers=RUNTIME_HEADERS)
+        else:
+            # The no-JavaScript form post: no runtime header, HTML answer.
+            response = client.post(_event_url(locked, "go"), data={"_citry_caller_render_id": "i1"})
+        # The message tells the two apart: a returned error keeps its own.
+        message = "Locked." if returned == "event-error" else "You are not allowed to make this call."
+        if route == "form":
+            assert response.status_code == 403
+            assert message in response.text
+            assert "secret" not in response.text
+        else:
+            error = response.json()["results"][0]["error"]
+            assert error["code"] == "forbidden"
+            assert error["message"] == message
+            assert "secret" not in response.text
+        assert ran == []
 
 
 class TestCompatMode:

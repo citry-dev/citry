@@ -46,7 +46,7 @@ from typing import TYPE_CHECKING, NoReturn
 from urllib.parse import urlsplit
 
 from citry.ext.events.errors import EventError
-from citry.ext.events.handlers import DEFAULT_CSRF_FIELD_NAMES
+from citry.ext.events.handlers import DEFAULT_CSRF_FIELD_NAMES, refuse_deferred_result
 from citry.util.logger import logger
 
 if TYPE_CHECKING:
@@ -223,7 +223,9 @@ def build_csrf_check(request: RouteRequest) -> Callable[[EventHandler], None]:
         enforce_floor(request)
         policy = handler.csrf
         if callable(policy):
-            policy(request)
+            # The policy refuses by raising; a coroutine it returned unrun
+            # would pass the request, so that answers csrf_failed instead.
+            refuse_deferred_result(f"The CSRF policy of event {handler.name!r}", policy(request))
 
     return check
 

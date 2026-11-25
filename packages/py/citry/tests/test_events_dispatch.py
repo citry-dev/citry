@@ -13,11 +13,14 @@ indirection.
 """
 
 import asyncio
+import collections.abc
 import functools
 import importlib.util
+import inspect
 import json
 import logging
 import re
+import sys
 from collections import UserDict
 from dataclasses import dataclass
 from datetime import timedelta
@@ -28,7 +31,7 @@ import pytest
 
 from citry import Citry, Component, InMemoryCache
 from citry._protocol import events
-from citry.ext.events import actions, event, tokens
+from citry.ext.events import ViewEvents, actions, event, tokens
 from citry.ext.events import dispatcher as dispatcher_module
 from citry.ext.events import renderers as dispatcher_module_renderers
 from citry.ext.events.dispatcher import (
@@ -39,6 +42,7 @@ from citry.ext.events.dispatcher import (
     TransportContext,
 )
 from citry.ext.events.errors import EventError
+from citry.ext.events.handlers import EVENT_OPTIONS_ATTR, EventOptions
 from citry.ext.events.results import HTML_RENDER_ENCODER
 from citry.ext.events.tokens import mint_state_token, verify_state_token
 from citry.extension import Extension
@@ -1082,6 +1086,40 @@ class TestServerStoredState:
         now[0] += 24 * 3600 + 1
         c.cache.set("unrelated", "v")
         assert self._entries(c) == {}
+
+
+def test_the_500_log_line_names_a_state_validator_that_raised(monkeypatch, caplog):
+    # A State validator's own bug answers 500 before the handler runs, so
+    # the log names the State class's validator, not the handler.
+    c = _citry()
+    ran = []
+
+    class Notes(Component):
+        citry = c
+        template = "<div>n</div>"
+
+        class State:
+            note: str = ""
+
+        class Events:
+            def read(self, state):
+                ran.append(True)
+
+    def broken(*_args, **_kwargs):
+        msg = "validator bug"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr(dispatcher_module, "restore_state", broken)
+    token = mint_state_token(Notes.State(), class_id=Notes.class_id, secret=SIGNING_KEY, max_age=None, max_bytes=None)
+    call = {"componentClassId": Notes.class_id, "handlerName": "read", "stateToken": token}
+    with caplog.at_level(logging.ERROR, logger="citry"):
+        [item] = _dispatch(c, call)["results"]
+    assert item["error"]["code"] == "handler_error"
+    assert ran == []
+    assert (
+        "Uncaught exception from a validator of Notes.State of event 'read' on component Notes;"
+        " the event handler did not run."
+    ) in caplog.text
 
 
 class TestSignedStateCap:
@@ -2579,6 +2617,1185 @@ class TestPipelineOrder:
         assert item["error"]["fieldErrors"] == fields
 
 
+async def _async_deny(events, *_extra):
+    raise EventError("Denied.", status=403)
+
+
+async def _async_context(events):
+    return {"user": "ada"}
+
+
+class _AsyncCallable:
+    """An object whose call is ``async def``: ``inspect.iscoroutinefunction`` misses it."""
+
+    async def __call__(self, events):
+        raise EventError("Denied.", status=403)
+
+
+async def _async_gen_guard(events):
+    raise EventError("Denied.", status=403)
+    yield
+
+
+def _gen_guard(events):
+    raise EventError("Denied.", status=403)
+    yield
+
+
+class TestAsyncGuardsAreRefused:
+    """
+    Citry calls guards and ``_context`` without awaiting them.
+
+    An async guard would only create a coroutine, never raise, and so let
+    every call through; Citry refuses it when the class is defined, and
+    refuses a call whose guard or ``_context`` still returns one.
+    """
+
+    def _guarded(self, c, **events_attrs):
+        ran = []
+
+        def go(self):
+            ran.append("go")
+            return {"ok": True}
+
+        events_cls = type("Events", (), {**events_attrs, "go": go})
+        comp = type(
+            "Guarded",
+            (Component,),
+            {"citry": c, "Events": events_cls, "template": "\n<div>g</div>\n"},
+        )
+        return comp, ran
+
+    @pytest.mark.parametrize(
+        "guard",
+        [
+            _async_deny,
+            staticmethod(_async_deny),
+            functools.partial(_async_deny),
+            _AsyncCallable(),
+            _async_gen_guard,
+            _gen_guard,
+        ],
+        ids=["async-def", "staticmethod", "partial", "async-call-object", "async-generator", "generator"],
+    )
+    def test_a_guard_whose_code_would_not_run_fails_at_class_definition(self, guard):
+        with pytest.raises(ValueError, match=r"Events\._guard must be a plain \(not async\) function"):
+            self._guarded(_citry(), _guard=guard)
+
+    def test_an_async_guard_written_in_the_events_class_fails_at_class_definition(self):
+        c = _citry()
+        with pytest.raises(ValueError, match=r"Events\._guard must be a plain \(not async\) function"):
+
+            class Guarded(Component):
+                citry = c
+                template = """
+                    <div>g</div>
+                """
+
+                class Events:
+                    async def _guard(self):
+                        raise EventError("Denied.", status=403)
+
+                    def go(self):
+                        return None
+
+    def test_an_async_event_guard_fails_at_decoration(self):
+        with pytest.raises(ValueError, match=r"@event\(guard=\.\.\.\) must be a plain \(not async\) function"):
+            event(guard=_AsyncCallable())
+
+    @pytest.mark.parametrize("name", ["_guard", "_context"])
+    def test_an_async_engine_default_fails_at_class_definition(self, name):
+        c = _citry(extensions_defaults={"events": {name: _async_deny}})
+        with pytest.raises(ValueError, match=rf"Events\.{name} must be a plain \(not async\) function"):
+            self._guarded(c)
+
+    def test_an_async_context_fails_at_class_definition(self):
+        with pytest.raises(ValueError, match=r"Events\._context must be a plain \(not async\) function"):
+            self._guarded(_citry(), _context=_async_context)
+
+    def test_an_async_guard_on_view_events_fails_at_class_definition(self):
+        c = _citry()
+        with pytest.raises(ValueError, match=r"Events\._guard must be a plain \(not async\) function"):
+
+            class Page(Component):
+                citry = c
+                template = """
+                    <div>p</div>
+                """
+
+                class Events(ViewEvents):
+                    _guard = _async_deny
+
+                    def post(self):
+                        return None
+
+    def test_a_plain_wrapper_around_an_async_function_is_accepted(self):
+        # A sync wrapper such as asgiref's async_to_sync points __wrapped__
+        # at the async function it runs; it is still a plain function.
+        def run_async(func):
+            @functools.wraps(func)
+            def wrapper(events):
+                asyncio.run(func(events))
+
+            return wrapper
+
+        comp, ran = self._guarded(_citry(), _guard=run_async(_async_deny))
+        [item] = _dispatch(comp.citry, {"componentClassId": comp.class_id, "handlerName": "go"})["results"]
+        assert item["error"]["code"] == "forbidden"
+        assert ran == []
+
+    def test_a_guard_that_returns_a_coroutine_refuses_the_call(self, recwarn):
+        # A plain def that returns a coroutine passes the definition check;
+        # the call still must not reach the handler.
+        comp, ran = self._guarded(_citry(), _guard=lambda events: _async_deny(events))
+        [item] = _dispatch(comp.citry, {"componentClassId": comp.class_id, "handlerName": "go"})["results"]
+        assert item["error"]["code"] == "handler_error"
+        assert ran == []
+        # The unrun coroutine is closed, so Python has nothing to warn about.
+        assert not [w for w in recwarn if "never awaited" in str(w.message)]
+
+    def test_an_event_guard_that_returns_a_coroutine_refuses_the_call(self):
+        c = _citry()
+        ran = []
+
+        class Guarded(Component):
+            citry = c
+            template = """
+                <div>g</div>
+            """
+
+            class Events:
+                @event(guard=lambda events: _async_deny(events))
+                def go(self):
+                    ran.append("go")
+
+        [item] = _dispatch(c, {"componentClassId": Guarded.class_id, "handlerName": "go"})["results"]
+        assert item["error"]["code"] == "handler_error"
+        assert ran == []
+
+    def test_a_context_that_returns_a_coroutine_refuses_the_call(self):
+        comp, ran = self._guarded(_citry(), _context=lambda events: _async_context(events))
+        [item] = _dispatch(comp.citry, {"componentClassId": comp.class_id, "handlerName": "go"})["results"]
+        assert item["error"]["code"] == "handler_error"
+        assert ran == []
+
+    def test_a_context_that_returns_a_compiled_style_coroutine_refuses_the_call(self):
+        # Cython and mypyc coroutines register only as collections.abc.Coroutine,
+        # so inspect.iscoroutine misses them; the call must still be refused.
+        class CompiledCoroutine(collections.abc.Coroutine):
+            def send(self, value):
+                raise StopIteration
+
+            def throw(self, *args):
+                raise StopIteration
+
+            def __await__(self):
+                yield from ()
+
+        assert not inspect.iscoroutine(CompiledCoroutine())
+        comp, ran = self._guarded(_citry(), _context=lambda _events: CompiledCoroutine())
+        [item] = _dispatch(comp.citry, {"componentClassId": comp.class_id, "handlerName": "go"})["results"]
+        assert item["error"]["code"] == "handler_error"
+        assert ran == []
+
+    @pytest.mark.parametrize("kind", ["generator", "async-generator"])
+    def test_a_guard_that_returns_a_compiled_style_generator_refuses_the_call(self, kind):
+        # Cython generators register only with collections.abc, so
+        # inspect.isgenerator and isasyncgen miss them.
+        class CompiledGenerator(collections.abc.Generator):
+            def send(self, value):
+                raise StopIteration
+
+            def throw(self, *args):
+                raise StopIteration
+
+        class CompiledAsyncGenerator(collections.abc.AsyncGenerator):
+            async def asend(self, value):
+                raise StopAsyncIteration
+
+            async def athrow(self, *args):
+                raise StopAsyncIteration
+
+        result = CompiledGenerator() if kind == "generator" else CompiledAsyncGenerator()
+        assert not inspect.isgenerator(result)
+        assert not inspect.isasyncgen(result)
+        comp, ran = self._guarded(_citry(), _guard=lambda _events: result)
+        [item] = _dispatch(comp.citry, {"componentClassId": comp.class_id, "handlerName": "go"})["results"]
+        assert item["error"]["code"] == "handler_error"
+        assert ran == []
+
+    def test_a_started_generator_from_a_guard_is_refused_but_not_closed(self):
+        # The app may still use a generator it already started; Citry
+        # refuses the call without closing it.
+        def numbers():
+            yield 1
+            yield 2
+
+        started = numbers()
+        next(started)
+        comp, ran = self._guarded(_citry(), _guard=lambda _events: started)
+        [item] = _dispatch(comp.citry, {"componentClassId": comp.class_id, "handlerName": "go"})["results"]
+        assert item["error"]["code"] == "handler_error"
+        assert ran == []
+        assert next(started) == 2
+
+    def test_a_context_may_return_other_awaitable_data(self):
+        # _context's value is app data; only an unrun coroutine is refused.
+        class Pool:
+            closed = False
+
+            def __await__(self):
+                yield from ()
+
+            def close(self):
+                self.closed = True
+
+        pool = Pool()
+        seen = []
+
+        def go(self, context):
+            seen.append(context)
+
+        events_cls = type("Events", (), {"_context": lambda _events: pool, "go": go})
+        comp = type("Ctx", (Component,), {"citry": _citry(), "Events": events_cls, "template": "\n<div>c</div>\n"})
+        [item] = _dispatch(comp.citry, {"componentClassId": comp.class_id, "handlerName": "go"})["results"]
+        assert item["ok"] is True
+        assert seen == [pool]
+        assert pool.closed is False
+
+    def test_a_plain_guard_still_runs(self):
+        def deny(events):
+            raise EventError("Denied.", status=403)
+
+        comp, ran = self._guarded(_citry(), _guard=deny)
+        [item] = _dispatch(comp.citry, {"componentClassId": comp.class_id, "handlerName": "go"})["results"]
+        assert item["error"]["code"] == "forbidden"
+        assert ran == []
+
+    def test_the_async_dispatch_path_refuses_too(self):
+        comp, ran = self._guarded(_citry(), _guard=lambda events: _async_deny(events))
+        result = asyncio.run(
+            EventsDispatcher().dispatch_async(
+                _envelope({"componentClassId": comp.class_id, "handlerName": "go"}), _ctx(comp.citry)
+            )
+        )
+        assert result["results"][0]["error"]["code"] == "handler_error"
+        assert ran == []
+
+
+class TestComponentAndHandlerGuardsBothRun:
+    """A handler's own guard runs after the component-level guard, not in its place."""
+
+    def _logging_guard(self, log, name, *, refuse=False):
+        def guard(events):
+            log.append(name)
+            if refuse:
+                raise EventError(f"{name} refused.", status=403)
+
+        return guard
+
+    def _component(self, c, log, *, component_guard=None, handler_guard=None, skip_component_guard=False):
+        """A component whose ``go`` handler has its own guard and whose ``plain`` handler has none."""
+        options = {"guard": handler_guard}
+        if skip_component_guard:
+            options["component_guard"] = False
+
+        def go(self):
+            log.append("go")
+            return {"ok": True}
+
+        def plain(self):
+            log.append("plain")
+            return {"ok": True}
+
+        attrs = {"go": event(**options)(go), "plain": plain}
+        if component_guard is not None:
+            attrs["_guard"] = component_guard
+        events_cls = type("Events", (), attrs)
+        return type("Guarded", (Component,), {"citry": c, "Events": events_cls, "template": "\n<div>g</div>\n"})
+
+    @staticmethod
+    def _call(comp, handler, *, use_async_dispatch=False):
+        envelope = _envelope({"componentClassId": comp.class_id, "handlerName": handler})
+        dispatcher = EventsDispatcher()
+        if use_async_dispatch:
+            result = asyncio.run(dispatcher.dispatch_async(envelope, _ctx(comp.citry)))
+        else:
+            result = dispatcher.dispatch(envelope, _ctx(comp.citry))
+        return result["results"][0]
+
+    @pytest.mark.parametrize("use_async_dispatch", [False, True], ids=["sync", "async"])
+    def test_the_component_guard_refuses_a_handler_that_has_its_own_guard(self, use_async_dispatch):
+        log = []
+        comp = self._component(
+            _citry(),
+            log,
+            component_guard=self._logging_guard(log, "component", refuse=True),
+            handler_guard=self._logging_guard(log, "handler"),
+        )
+        item = self._call(comp, "go", use_async_dispatch=use_async_dispatch)
+        assert item["error"]["status"] == 403
+        assert item["error"]["message"] == "component refused."
+        # The component guard refused first, so the handler guard never ran.
+        assert log == ["component"]
+
+    def test_the_handler_guard_refuses_after_the_component_guard_allows(self):
+        log = []
+        comp = self._component(
+            _citry(),
+            log,
+            component_guard=self._logging_guard(log, "component"),
+            handler_guard=self._logging_guard(log, "handler", refuse=True),
+        )
+        item = self._call(comp, "go")
+        assert item["error"]["message"] == "handler refused."
+        assert log == ["component", "handler"]
+
+    def test_both_guards_allow_in_order_after_one_context_call(self):
+        log = []
+
+        def context(events):
+            log.append("context")
+            return {"user": "ada"}
+
+        def component_guard(events):
+            log.append(f"component sees {events.context['user']}")
+
+        def handler_guard(events):
+            log.append(f"handler sees {events.context['user']}")
+
+        class Ordered(Component):
+            citry = _citry()
+            template = """
+                <div>o</div>
+            """
+
+            class Events:
+                _context = context
+                _guard = component_guard
+
+                @event(guard=handler_guard)
+                def go(self):
+                    log.append("go")
+
+        comp = Ordered
+        item = self._call(comp, "go")
+        assert item["ok"] is True
+        assert log == ["context", "component sees ada", "handler sees ada", "go"]
+
+    def test_the_engine_default_guard_runs_before_a_handler_guard(self):
+        log = []
+        c = _citry(extensions_defaults={"events": {"_guard": self._logging_guard(log, "engine", refuse=True)}})
+        comp = self._component(c, log, handler_guard=self._logging_guard(log, "handler"))
+        item = self._call(comp, "go")
+        assert item["error"]["message"] == "engine refused."
+        assert log == ["engine"]
+
+    def test_a_component_guard_replaces_the_engine_default(self):
+        # Between the component and the engine, the most specific _guard
+        # still wins; only the handler level adds rather than replaces.
+        log = []
+        c = _citry(extensions_defaults={"events": {"_guard": self._logging_guard(log, "engine", refuse=True)}})
+        comp = self._component(
+            c,
+            log,
+            component_guard=self._logging_guard(log, "component"),
+            handler_guard=self._logging_guard(log, "handler"),
+        )
+        assert self._call(comp, "go")["ok"] is True
+        assert log == ["component", "handler", "go"]
+
+    def test_component_guard_false_skips_only_that_handlers_component_guard(self):
+        log = []
+        comp = self._component(
+            _citry(),
+            log,
+            component_guard=self._logging_guard(log, "component", refuse=True),
+            handler_guard=self._logging_guard(log, "handler"),
+            skip_component_guard=True,
+        )
+        assert self._call(comp, "go")["ok"] is True
+        assert log == ["handler", "go"]
+        # The component's other handlers keep its guard.
+        log.clear()
+        assert self._call(comp, "plain")["error"]["status"] == 403
+        assert log == ["component"]
+
+    def test_component_guard_false_without_a_handler_guard_runs_no_guard(self):
+        log = []
+        comp = self._component(
+            _citry(),
+            log,
+            component_guard=self._logging_guard(log, "component", refuse=True),
+            skip_component_guard=True,
+        )
+        assert self._call(comp, "go")["ok"] is True
+        assert log == ["go"]
+
+    def test_component_guard_false_also_skips_the_engine_default(self):
+        log = []
+        c = _citry(extensions_defaults={"events": {"_guard": self._logging_guard(log, "engine", refuse=True)}})
+        comp = self._component(c, log, skip_component_guard=True)
+        assert self._call(comp, "go")["ok"] is True
+        assert self._call(comp, "plain")["error"]["status"] == 403
+        assert log == ["go", "engine"]
+
+    def test_the_same_function_at_both_levels_runs_once(self):
+        log = []
+        guard = self._logging_guard(log, "shared")
+        comp = self._component(_citry(), log, component_guard=guard, handler_guard=guard)
+        assert self._call(comp, "go")["ok"] is True
+        assert log == ["shared", "go"]
+
+    def test_an_inherited_component_guard_runs_before_a_subclass_handler_guard(self):
+        log = []
+        c = _citry()
+        component_guard = self._logging_guard(log, "component", refuse=True)
+        handler_guard = self._logging_guard(log, "handler")
+
+        class BaseEvents:
+            _guard = component_guard
+
+        class Child(Component):
+            citry = c
+            template = """
+                <div>c</div>
+            """
+
+            class Events(BaseEvents):
+                @event(guard=handler_guard)
+                def go(self):
+                    log.append("go")
+
+        assert self._call(Child, "go")["error"]["status"] == 403
+        assert log == ["component"]
+
+    def test_a_view_events_verb_runs_both_guards(self):
+        log = []
+        c = _citry()
+        component_guard = self._logging_guard(log, "component", refuse=True)
+        handler_guard = self._logging_guard(log, "handler")
+
+        class Page(Component):
+            citry = c
+            template = """
+                <div>p</div>
+            """
+
+            class Events(ViewEvents):
+                _guard = component_guard
+
+                @event(guard=handler_guard)
+                def post(self):
+                    log.append("post")
+
+                @event(guard=handler_guard, component_guard=False)
+                def put(self):
+                    log.append("put")
+
+        assert self._call(Page, "post")["error"]["status"] == 403
+        assert log == ["component"]
+        log.clear()
+        assert self._call(Page, "put")["ok"] is True
+        assert log == ["handler", "put"]
+
+    def test_a_component_guard_that_crashes_refuses_a_handler_with_its_own_guard(self):
+        log = []
+
+        def crash(events):
+            log.append("component")
+            raise RuntimeError("boom")
+
+        comp = self._component(_citry(), log, component_guard=crash, handler_guard=self._logging_guard(log, "handler"))
+        assert self._call(comp, "go")["error"]["code"] == "handler_error"
+        assert log == ["component"]
+
+    def test_only_false_skips_the_component_guard(self):
+        # The decorator accepts only a bool; an options record built some
+        # other way with a falsy stand-in still runs the component guard.
+        log = []
+
+        def go(self):
+            log.append("go")
+
+        setattr(go, EVENT_OPTIONS_ATTR, EventOptions(component_guard=0))
+        events_cls = type("Events", (), {"_guard": self._logging_guard(log, "component", refuse=True), "go": go})
+        comp = type("Guarded", (Component,), {"citry": _citry(), "Events": events_cls, "template": "\n<div>g</div>\n"})
+        assert self._call(comp, "go")["error"]["status"] == 403
+        assert log == ["component"]
+
+    @pytest.mark.parametrize("value", [0, 1, "no", None])
+    def test_component_guard_must_be_a_bool(self, value):
+        # A truthy stand-in must not decide whether an authorization check runs.
+        with pytest.raises(ValueError, match=r"@event\(component_guard=\.\.\.\) must be True or False"):
+            event(component_guard=value)
+
+
+class _FalseLikeNumpy:
+    """Stands in for numpy.False_: not the bool False, but false when tested."""
+
+    def __bool__(self):
+        return False
+
+
+class _TrueLikeNumpy:
+    """Stands in for numpy.True_: not the bool True, but true when tested."""
+
+    def __bool__(self):
+        return True
+
+
+class _EmptyLazyQuery:
+    """Stands in for an empty Django QuerySet: testing it runs the query."""
+
+    def __init__(self):
+        self.evaluations = 0
+
+    def __len__(self):
+        self.evaluations += 1
+        return 0
+
+
+class _BrokenTruth:
+    """A value whose true-or-false test raises, like a QuerySet whose database is down."""
+
+    def __bool__(self):
+        msg = "database is down"
+        raise RuntimeError(msg)
+
+
+class _AmbiguousArray:
+    """Stands in for a numpy array of several items, whose truth is ambiguous."""
+
+    def __bool__(self):
+        msg = "The truth value of an array with more than one element is ambiguous."
+        raise ValueError(msg)
+
+
+class _PermissionDenied(Exception):
+    """Stands in for django.core.exceptions.PermissionDenied."""
+
+
+def _can_edit(events):
+    return False
+
+
+class _Checks:
+    def can_edit(self, events):
+        return False
+
+
+class _CallableCheck:
+    def __call__(self, events):
+        return False
+
+
+class TestGuardReturnValues:
+    """
+    Any false value or a returned exception refuses the call.
+
+    None and True go ahead silently; a callable answers 500; any other true
+    value goes ahead with a warning.
+    """
+
+    @staticmethod
+    def _returning(log, name, *, value):
+        def guard(events):
+            log.append(name)
+            return value
+
+        return guard
+
+    def _component(self, c, log, *, component_guard=None, handler_guard=None):
+        def go(self):
+            log.append("go")
+            return {"ok": True}
+
+        attrs = {"go": event(guard=handler_guard)(go)}
+        if component_guard is not None:
+            attrs["_guard"] = component_guard
+        events_cls = type("Events", (), attrs)
+        return type("Returning", (Component,), {"citry": c, "Events": events_cls, "template": "\n<div>r</div>\n"})
+
+    @staticmethod
+    def _call(comp, handler, *, use_async_dispatch=False):
+        envelope = _envelope({"componentClassId": comp.class_id, "handlerName": handler})
+        dispatcher = EventsDispatcher()
+        if use_async_dispatch:
+            result = asyncio.run(dispatcher.dispatch_async(envelope, _ctx(comp.citry)))
+        else:
+            result = dispatcher.dispatch(envelope, _ctx(comp.citry))
+        return result["results"][0]
+
+    @pytest.mark.parametrize("use_async_dispatch", [False, True], ids=["sync", "async"])
+    @pytest.mark.parametrize("level", ["component", "engine", "handler"])
+    def test_false_refuses_the_call_like_a_raised_403(self, level, use_async_dispatch):
+        log = []
+        guard = self._returning(log, level, value=False)
+        c = _citry(extensions_defaults={"events": {"_guard": guard}}) if level == "engine" else _citry()
+        comp = self._component(
+            c,
+            log,
+            component_guard=guard if level == "component" else None,
+            handler_guard=guard if level == "handler" else None,
+        )
+        item = self._call(comp, "go", use_async_dispatch=use_async_dispatch)
+        # The same answer a guard gets by raising EventError(..., status=403).
+        assert item["error"] == {
+            "status": 403,
+            "code": "forbidden",
+            "message": "You are not allowed to make this call.",
+        }
+        assert log == [level]
+
+    def test_false_from_the_component_guard_stops_the_handler_guard(self):
+        log = []
+        comp = self._component(
+            _citry(),
+            log,
+            component_guard=self._returning(log, "component", value=False),
+            handler_guard=self._returning(log, "handler", value=None),
+        )
+        assert self._call(comp, "go")["error"]["status"] == 403
+        assert log == ["component"]
+
+    def test_false_from_the_handler_guard_refuses_after_the_component_guard_allows(self):
+        log = []
+        comp = self._component(
+            _citry(),
+            log,
+            component_guard=self._returning(log, "component", value=None),
+            handler_guard=self._returning(log, "handler", value=False),
+        )
+        assert self._call(comp, "go")["error"]["status"] == 403
+        assert log == ["component", "handler"]
+
+    def test_false_refuses_a_view_events_verb(self):
+        log = []
+        guard = self._returning(log, "guard", value=False)
+
+        class Page(Component):
+            citry = _citry()
+            template = """
+                <div>p</div>
+            """
+
+            class Events(ViewEvents):
+                _guard = guard
+
+                def post(self):
+                    log.append("post")
+
+        assert self._call(Page, "post")["error"]["status"] == 403
+        assert log == ["guard"]
+
+    @pytest.mark.parametrize("use_async_dispatch", [False, True], ids=["sync", "async"])
+    @pytest.mark.parametrize("level", ["component", "engine", "handler"])
+    def test_a_returned_event_error_refuses_like_raising_it(self, level, use_async_dispatch):
+        log = []
+        guard = self._returning(log, level, value=EventError("Sign in first.", status=401))
+        c = _citry(extensions_defaults={"events": {"_guard": guard}}) if level == "engine" else _citry()
+        comp = self._component(
+            c,
+            log,
+            component_guard=guard if level == "component" else None,
+            handler_guard=guard if level == "handler" else None,
+        )
+        item = self._call(comp, "go", use_async_dispatch=use_async_dispatch)
+        # The error's own status and message, not the 403 that False gives.
+        assert item["error"] == {"status": 401, "code": "error", "message": "Sign in first."}
+        assert log == [level]
+
+    def test_a_returned_event_error_keeps_its_field_errors(self):
+        log = []
+        error = EventError("Not yours.", status=403, fields={"owner": "Someone else owns this."})
+        comp = self._component(_citry(), log, handler_guard=self._returning(log, "handler", value=error))
+        assert self._call(comp, "go")["error"] == {
+            "status": 403,
+            "code": "forbidden",
+            "message": "Not yours.",
+            "fieldErrors": {"owner": "Someone else owns this."},
+        }
+
+    def test_a_returned_event_error_subclass_refuses(self):
+        class NotOwner(EventError):
+            pass
+
+        log = []
+        comp = self._component(
+            _citry(),
+            log,
+            component_guard=self._returning(log, "component", value=NotOwner("Not yours.", status=404)),
+            handler_guard=self._returning(log, "handler", value=None),
+        )
+        assert self._call(comp, "go")["error"]["status"] == 404
+        # The component guard refused, so the handler guard never ran.
+        assert log == ["component"]
+
+    def test_an_event_error_from_the_handler_guard_refuses_after_the_component_guard_allows(self):
+        log = []
+        comp = self._component(
+            _citry(),
+            log,
+            component_guard=self._returning(log, "component", value=True),
+            handler_guard=self._returning(log, "handler", value=EventError("No.", status=403)),
+        )
+        assert self._call(comp, "go")["error"]["message"] == "No."
+        assert log == ["component", "handler"]
+
+    def test_an_event_error_returned_on_every_call_does_not_collect_tracebacks(self):
+        # An app may keep one error in a module constant and return it from
+        # each call; raising it must not chain one traceback per call onto it.
+        log = []
+        error = EventError("No.", status=403)
+        comp = self._component(_citry(), log, handler_guard=self._returning(log, "handler", value=error))
+        for _ in range(3):
+            assert self._call(comp, "go")["error"]["message"] == "No."
+            # Nothing from the call stays reachable through the shared error.
+            assert error.__traceback__ is None
+
+    def test_a_returned_event_error_refuses_a_view_events_verb(self):
+        log = []
+        guard = self._returning(log, "guard", value=EventError("Closed.", status=403))
+
+        class Page(Component):
+            citry = _citry()
+            template = """
+                <div>p</div>
+            """
+
+            class Events(ViewEvents):
+                _guard = guard
+
+                def post(self):
+                    log.append("post")
+
+        assert self._call(Page, "post")["error"]["message"] == "Closed."
+        assert log == ["guard"]
+
+    @pytest.mark.parametrize("level", ["component", "engine", "handler"])
+    def test_true_goes_ahead_without_a_warning(self, level, caplog):
+        log = []
+        guard = self._returning(log, level, value=True)
+        c = _citry(extensions_defaults={"events": {"_guard": guard}}) if level == "engine" else _citry()
+        comp = self._component(
+            c,
+            log,
+            component_guard=guard if level == "component" else None,
+            handler_guard=guard if level == "handler" else None,
+        )
+        with caplog.at_level(logging.WARNING, logger="citry"):
+            assert self._call(comp, "go")["ok"] is True
+        assert "which Citry ignores" not in caplog.text
+        assert log == [level, "go"]
+
+    @pytest.mark.parametrize("use_async_dispatch", [False, True], ids=["sync", "async"])
+    @pytest.mark.parametrize("level", ["component", "engine", "handler"])
+    @pytest.mark.parametrize(
+        "value",
+        [0, 0.0, "", [], _FalseLikeNumpy(), _EmptyLazyQuery()],
+        ids=["zero", "zero-float", "empty-str", "empty-list", "numpy-false", "empty-queryset"],
+    )
+    def test_every_false_value_refuses_like_false(self, value, level, use_async_dispatch):
+        # `return <check>` that comes out false means "no" whatever its
+        # type: an empty QuerySet from `.filter(...)`, numpy.False_, 0.
+        log = []
+        guard = self._returning(log, level, value=value)
+        c = _citry(extensions_defaults={"events": {"_guard": guard}}) if level == "engine" else _citry()
+        comp = self._component(
+            c,
+            log,
+            component_guard=guard if level == "component" else None,
+            handler_guard=guard if level == "handler" else None,
+        )
+        item = self._call(comp, "go", use_async_dispatch=use_async_dispatch)
+        assert item["error"] == {
+            "status": 403,
+            "code": "forbidden",
+            "message": "You are not allowed to make this call.",
+        }
+        assert log == [level]
+
+    def test_an_empty_value_from_the_handler_guard_refuses_after_the_component_guard_allows(self):
+        log = []
+        comp = self._component(
+            _citry(),
+            log,
+            component_guard=self._returning(log, "component", value=True),
+            handler_guard=self._returning(log, "handler", value=_EmptyLazyQuery()),
+        )
+        assert self._call(comp, "go")["error"]["status"] == 403
+        assert log == ["component", "handler"]
+
+    @pytest.mark.parametrize("use_async_dispatch", [False, True], ids=["sync", "async"])
+    @pytest.mark.parametrize("level", ["component", "engine", "handler"])
+    @pytest.mark.parametrize(
+        "value",
+        [
+            _PermissionDenied("secret <b>text</b>"),
+            ValueError("secret <b>text</b>"),
+            BaseException("secret <b>text</b>"),
+            _PermissionDenied,
+        ],
+        ids=["permission-denied", "value-error", "base-exception", "exception-class"],
+    )
+    def test_a_returned_exception_refuses_with_the_standard_403(self, value, level, use_async_dispatch):
+        log = []
+        guard = self._returning(log, level, value=value)
+        c = _citry(extensions_defaults={"events": {"_guard": guard}}) if level == "engine" else _citry()
+        comp = self._component(
+            c,
+            log,
+            component_guard=guard if level == "component" else None,
+            handler_guard=guard if level == "handler" else None,
+        )
+        item = self._call(comp, "go", use_async_dispatch=use_async_dispatch)
+        # The exception's own text was not written for the browser, so the
+        # answer is the standard one and never carries it.
+        assert item["error"] == {
+            "status": 403,
+            "code": "forbidden",
+            "message": "You are not allowed to make this call.",
+        }
+        assert "secret" not in json.dumps(item)
+        assert log == [level]
+
+    def test_a_returned_exception_does_not_keep_the_call_s_frames(self):
+        # A guard that catches an exception and returns it hands back an
+        # object whose traceback holds the guard's frame (and through it
+        # the request and the State). Citry clears it, so an exception kept
+        # beyond the call does not keep those alive.
+        log = []
+        kept = []
+
+        def guard(events):
+            log.append("guard")
+            try:
+                raise _PermissionDenied
+            except _PermissionDenied as error:
+                kept.append(error)
+                return error
+
+        comp = self._component(_citry(), log, handler_guard=guard)
+        assert self._call(comp, "go")["error"]["status"] == 403
+        assert kept[0].__traceback__ is None
+        assert log == ["guard"]
+
+    @pytest.mark.parametrize("use_async_dispatch", [False, True], ids=["sync", "async"])
+    @pytest.mark.parametrize("value", [_BrokenTruth(), _AmbiguousArray()], ids=["raises", "ambiguous-array"])
+    def test_a_value_whose_true_or_false_test_raises_refuses_as_handler_error(self, value, use_async_dispatch, caplog):
+        log = []
+        comp = self._component(_citry(), log, handler_guard=self._returning(log, "handler", value=value))
+        with caplog.at_level(logging.ERROR, logger="citry"):
+            item = self._call(comp, "go", use_async_dispatch=use_async_dispatch)
+        # The guard gave no answer, so this is the 500 a guard that raises
+        # an unexpected error gets, not a 403; the handler never runs.
+        assert item["error"]["status"] == 500
+        assert item["error"]["code"] == "handler_error"
+        assert "database is down" not in json.dumps(item)
+        assert log == ["handler"]
+        # The server log names the guard and what went wrong.
+        assert "testing it for true or false raised" in caplog.text
+        assert "_returning.<locals>.guard" in caplog.text
+
+    def test_an_event_error_from_the_true_or_false_test_answers_as_raised(self):
+        # The value's own test refused in the author's words, so that error
+        # answers, as if the guard had raised it.
+        class Refusing:
+            def __bool__(self):
+                msg = "Sign in first."
+                raise EventError(msg, status=401)
+
+        log = []
+        comp = self._component(_citry(), log, handler_guard=self._returning(log, "handler", value=Refusing()))
+        item = self._call(comp, "go")
+        assert item["error"] == {"status": 401, "code": "error", "message": "Sign in first."}
+        assert log == ["handler"]
+
+    def test_a_false_value_is_tested_once(self):
+        log = []
+        lazy = _EmptyLazyQuery()
+        comp = self._component(_citry(), log, handler_guard=self._returning(log, "handler", value=lazy))
+        assert self._call(comp, "go")["error"]["status"] == 403
+        # Testing the value runs app code (a database query for a QuerySet),
+        # so Citry does it once.
+        assert lazy.evaluations == 1
+
+    @pytest.mark.parametrize(
+        "value",
+        [1, "no", [0], _TrueLikeNumpy(), object()],
+        ids=["one", "str", "list", "numpy-true", "object"],
+    )
+    def test_other_values_go_ahead_with_a_warning(self, value, caplog):
+        log = []
+        comp = self._component(_citry(), log, handler_guard=self._returning(log, "handler", value=value))
+        with caplog.at_level(logging.WARNING, logger="citry"):
+            item = self._call(comp, "go")
+        assert item["ok"] is True
+        assert log == ["handler", "go"]
+        [record] = [r for r in caplog.records if "which Citry ignores" in r.message]
+        # The warning names the guard and the component, so the author can
+        # find the function that returns the stray value.
+        assert "_returning.<locals>.guard" in record.message
+        assert "on Returning" in record.message
+        assert f"value of type {type(value).__name__!r}" in record.message
+
+    def test_the_warning_shows_the_type_not_the_value(self, caplog):
+        # The value may carry request data; the log line must not.
+        log = []
+        comp = self._component(_citry(), log, component_guard=self._returning(log, "c", value="secret\nforged line"))
+        with caplog.at_level(logging.WARNING, logger="citry"):
+            assert self._call(comp, "go")["ok"] is True
+        assert "secret" not in caplog.text
+        assert "forged line" not in caplog.text
+
+    @pytest.mark.parametrize("use_async_dispatch", [False, True], ids=["sync", "async"])
+    @pytest.mark.parametrize("level", ["component", "engine", "handler"])
+    @pytest.mark.parametrize(
+        ("value", "returned_name"),
+        [
+            (_Checks().can_edit, "_Checks.can_edit"),
+            (_can_edit, "_can_edit"),
+            (functools.partial(_can_edit, None), "partial"),
+            (_Checks, "_Checks"),
+            (_CallableCheck(), "_CallableCheck"),
+        ],
+        ids=["bound-method", "function", "partial", "class", "callable-object"],
+    )
+    def test_a_returned_callable_refuses_as_handler_error(
+        self, value, returned_name, level, use_async_dispatch, caplog
+    ):
+        # `return self.can_edit` without the `()` hands back the check
+        # itself, which never ran. Letting it through would fail open, so
+        # the call answers 500 and the log names the guard and the callable.
+        log = []
+        guard = self._returning(log, level, value=value)
+        c = _citry(extensions_defaults={"events": {"_guard": guard}}) if level == "engine" else _citry()
+        comp = self._component(
+            c,
+            log,
+            component_guard=guard if level == "component" else None,
+            handler_guard=guard if level == "handler" else None,
+        )
+        with caplog.at_level(logging.ERROR, logger="citry"):
+            item = self._call(comp, "go", use_async_dispatch=use_async_dispatch)
+        assert item["error"]["status"] == 500
+        assert item["error"]["code"] == "handler_error"
+        assert log == [level]
+        assert f"_returning.<locals>.guard' returned the callable {returned_name!r}" in caplog.text
+        assert "which Citry ignores" not in caplog.text
+
+    def test_a_returned_exception_s_chain_does_not_keep_the_call_s_frames(self):
+        # The exception a guard returns may have been raised from another
+        # one; each traceback on the chain holds the guard's frames, so all
+        # of them are cleared, not only the top one.
+        log = []
+        kept = []
+
+        def guard(events):
+            log.append("guard")
+            try:
+                try:
+                    raise LookupError("no row")
+                except LookupError as missing:
+                    raise _PermissionDenied from missing
+            except _PermissionDenied as error:
+                kept.append(error)
+                return error
+
+        comp = self._component(_citry(), log, handler_guard=guard)
+        assert self._call(comp, "go")["error"]["status"] == 403
+        [error] = kept
+        assert error.__traceback__ is None
+        assert error.__cause__ is not None
+        assert error.__cause__.__traceback__ is None
+        assert error.__context__ is error.__cause__
+
+    @pytest.mark.parametrize("returned", [True, False], ids=["returned", "raised"])
+    def test_an_event_error_s_chain_does_not_keep_the_call_s_frames(self, returned):
+        log = []
+        kept = []
+
+        def guard(events):
+            log.append("guard")
+            try:
+                raise LookupError("no row")
+            except LookupError:
+                error = EventError("No.", status=403)
+                kept.append(error)
+                if returned:
+                    # Returned inside the `except`, so the error has no
+                    # __context__ of its own yet; give it one as `raise ... from` would.
+                    error.__cause__ = sys.exc_info()[1]
+                    return error
+                raise error from None
+
+        comp = self._component(_citry(), log, handler_guard=guard)
+        assert self._call(comp, "go")["error"]["message"] == "No."
+        [error] = kept
+        chained = error.__cause__ or error.__context__
+        assert chained is not None
+        assert error.__traceback__ is None
+        assert chained.__traceback__ is None
+
+    @pytest.mark.parametrize("returned", [True, False], ids=["returned", "raised"])
+    def test_the_host_s_own_exception_keeps_its_traceback(self, returned):
+        # A host may call the dispatcher inside an `except` block (a retry
+        # middleware, say). Python chains the host's exception onto every
+        # exception the guard raises; it is the host's, so it keeps its
+        # traceback for the host to re-raise or log.
+        log = []
+
+        def guard(events):
+            log.append("guard")
+            error = EventError("No.", status=403)
+            if returned:
+                return error
+            raise error
+
+        comp = self._component(_citry(), log, handler_guard=guard)
+        host_error = RuntimeError("host")
+        try:
+            raise host_error
+        except RuntimeError:
+            assert self._call(comp, "go")["error"]["message"] == "No."
+        assert host_error.__traceback__ is not None
+        assert log == ["guard"]
+
+    def test_an_exception_whose_chain_raises_still_answers(self):
+        # Clearing tracebacks is best effort: an app exception class whose
+        # `__cause__` raises must not turn the answered call into an error
+        # that ends the whole request.
+        class Odd(EventError):
+            @property
+            def __cause__(self):
+                msg = "odd"
+                raise RuntimeError(msg)
+
+        log = []
+
+        def guard(events):
+            log.append("guard")
+            raise Odd("No.", status=403)
+
+        comp = self._component(_citry(), log, handler_guard=guard)
+        assert self._call(comp, "go")["error"]["message"] == "No."
+        assert log == ["guard"]
+
+    def test_an_exception_chain_that_loops_is_cleared_once(self):
+        # A chain can point back at itself (`a.__context__ = b`,
+        # `b.__context__ = a`); clearing it must still finish.
+        log = []
+        first = _PermissionDenied("first")
+        second = ValueError("second")
+        for error in (first, second):
+            try:
+                raise error
+            except type(error):
+                pass
+        first.__context__ = second
+        second.__context__ = first
+        comp = self._component(_citry(), log, handler_guard=self._returning(log, "handler", value=first))
+        assert self._call(comp, "go")["error"]["status"] == 403
+        assert first.__traceback__ is None
+        assert second.__traceback__ is None
+
+    def test_an_exception_group_s_members_are_cleared(self):
+        log = []
+        member = ValueError("member")
+        try:
+            raise member
+        except ValueError:
+            pass
+        group = ExceptionGroup("refused", [member])  # noqa: F821 - Python 3.11+; ruff checks for 3.10 (#331)
+        comp = self._component(_citry(), log, handler_guard=self._returning(log, "handler", value=group))
+        assert self._call(comp, "go")["error"]["status"] == 403
+        assert member.__traceback__ is None
+
+    @pytest.mark.parametrize(
+        ("level", "label"),
+        [("component", "the component guard"), ("engine", "the component guard"), ("handler", "the guard")],
+    )
+    def test_the_500_log_line_names_the_guard_that_raised(self, level, label, caplog):
+        # The handler never ran, so the log points the author at the guard.
+        log = []
+
+        def guard(events):
+            log.append(level)
+            msg = "database is down"
+            raise RuntimeError(msg)
+
+        c = _citry(extensions_defaults={"events": {"_guard": guard}}) if level == "engine" else _citry()
+        comp = self._component(
+            c,
+            log,
+            component_guard=guard if level == "component" else None,
+            handler_guard=guard if level == "handler" else None,
+        )
+        with caplog.at_level(logging.ERROR, logger="citry"):
+            item = self._call(comp, "go")
+        assert item["error"] == {
+            "status": 500,
+            "code": "handler_error",
+            "message": "The event handler raised an unexpected error.",
+        }
+        assert log == [level]
+        assert (
+            f"Uncaught exception from {label} {guard.__qualname__!r} of event 'go' on component Returning;"
+            " the event handler did not run."
+        ) in caplog.text
+        assert "Uncaught exception from event handler" not in caplog.text
+
+    def test_the_debug_message_names_the_guard_that_raised(self, caplog):
+        log = []
+
+        def guard(events):
+            msg = "database is down"
+            raise RuntimeError(msg)
+
+        comp = self._component(_citry(), log, handler_guard=guard)
+        with caplog.at_level(logging.DEBUG, logger="citry"):
+            item = self._call(comp, "go")
+        assert item["error"]["message"] == (
+            f"The guard {guard.__qualname__!r} failed with an unexpected error: RuntimeError: database is down"
+        )
+
+    def test_the_500_log_line_names_context_when_it_raised(self, caplog):
+        log = []
+
+        def context(events):
+            msg = "no session"
+            raise RuntimeError(msg)
+
+        def go(self):
+            log.append("go")
+
+        events_cls = type("Events", (), {"_context": context, "go": go})
+        comp = type(
+            "Returning", (Component,), {"citry": _citry(), "Events": events_cls, "template": "\n<div>r</div>\n"}
+        )
+        with caplog.at_level(logging.ERROR, logger="citry"):
+            assert self._call(comp, "go")["error"]["status"] == 500
+        assert log == []
+        assert (
+            "Uncaught exception from Events._context of event 'go' on component Returning;"
+            " the event handler did not run."
+        ) in caplog.text
+
+    def test_none_goes_ahead_without_a_warning(self, caplog):
+        log = []
+        comp = self._component(
+            _citry(),
+            log,
+            component_guard=self._returning(log, "component", value=None),
+            handler_guard=self._returning(log, "handler", value=None),
+        )
+        with caplog.at_level(logging.WARNING, logger="citry"):
+            assert self._call(comp, "go")["ok"] is True
+        assert "which Citry ignores" not in caplog.text
+        assert log == ["component", "handler", "go"]
+
+
 class TestInjection:
     def test_request_and_event_injectables(self):
         c = _citry()
@@ -3398,6 +4615,79 @@ class TestEpochEchoOnRejections:
         assert [item["sendSequence"] for item in results] == list(range(17))
 
 
+class TestHandlerSettingsAreCopiedAtClassCreation:
+    """
+    A handler keeps the ``@event`` settings it had when its class was created.
+
+    Changing the function's stored settings afterwards (another decoration,
+    or a direct edit) must not change how an existing class behaves.
+    """
+
+    def test_turning_bundle_off_later_does_not_let_a_raw_response_through(self, caplog):
+        c = _citry()
+        written = []
+
+        class Export(Component):
+            citry = c
+            template = """
+                <div>export</div>
+            """
+
+            class Events:
+                def run(self):
+                    return RouteResponse(content=b"x")
+
+                written.append(run)
+
+        # The class was created without bundle=False; set it on the function now.
+        setattr(written[0], EVENT_OPTIONS_ATTR, EventOptions(bundle=False))
+        with caplog.at_level(logging.DEBUG, logger="citry"):
+            result = _dispatch(c, {"args": {}}, url_component=Export.class_id, url_event="run")
+        error = result["results"][0]["error"]
+        # Still refused, because the handler kept the settings it was created with.
+        assert error["code"] == "handler_error"
+        assert "@event(bundle=False)" in error["message"]
+
+    def test_turning_detached_off_later_keeps_the_render_refusal(self, caplog):
+        c = _citry()
+        written = []
+
+        class BoardState:
+            moves: int = 0
+
+        class Board(Component):
+            citry = c
+            State = BoardState
+            template = """
+                <div>{{ moves }}</div>
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"moves": 0}
+
+            class Events:
+                @event(detached=True)
+                def redraw(self, state):
+                    return Board()
+
+                written.append(redraw)
+
+        setattr(written[0], EVENT_OPTIONS_ATTR, EventOptions())
+        call = {
+            "componentClassId": Board.class_id,
+            "handlerName": "redraw",
+            "callerRenderId": "i1",
+            "stateToken": _token(Board),
+            "sendSequence": 3,
+        }
+        with caplog.at_level(logging.ERROR, logger="citry"):
+            [item] = _dispatch(c, call)["results"]
+        # Still detached, so the render it returned is refused.
+        assert item["error"]["code"] == "handler_error"
+        logged = "\n".join(record.getMessage() + str(record.exc_info[1]) for record in caplog.records)
+        assert "declared with @event(detached=True)" in logged
+
+
 class TestDetachedHandlers:
     """``@event(detached=True)``: the handler may read State but never render or change it."""
 
@@ -3642,6 +4932,10 @@ class TestPageCspNonce:
 
         with pytest.raises(ValueError, match="plain \\(not async\\) function"):
             _counter(_citry(extensions_defaults={"events": {"_csp_nonce": page_nonce}}))
+
+    def test_an_object_with_an_async_call_is_refused(self):
+        with pytest.raises(ValueError, match="plain \\(not async\\) function"):
+            _citry(extensions_defaults={"events": {"_csp_nonce": _AsyncCallable()}})
 
 
 _NOT_SET = object()
@@ -3897,6 +5191,10 @@ class TestRenderInputs:
 
         with pytest.raises(ValueError, match="plain \\(not async\\) function"):
             _citry(extensions_defaults={"events": {"_render_inputs": render_inputs}})
+
+    def test_an_object_with_an_async_call_is_refused(self):
+        with pytest.raises(ValueError, match="plain \\(not async\\) function"):
+            _citry(extensions_defaults={"events": {"_render_inputs": _AsyncCallable()}})
 
     def test_a_component_can_set_its_own_function(self):
         seen = []

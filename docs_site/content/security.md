@@ -167,10 +167,15 @@ the page. Check that the current user may perform the action, in one of
 three places:
 
 - `_guard` on `Events`, which runs before every handler of the component;
-- `@event(guard=...)`, which runs before one handler;
+- `@event(guard=...)`, which adds a second check for one handler and
+  runs after `_guard`;
 - a check inside the handler body.
 
-A guard rejects a call by raising `EventError`:
+A guard refuses a call by raising `EventError`, or by returning
+`False` or another value that means "no" (see below). An `EventError`,
+raised or returned, lets you choose the message and status; returning
+`False` answers with status 403 and the message "You are not allowed to
+make this call." For example:
 
 ```citry
 from citry.ext.events import EventError
@@ -200,9 +205,49 @@ Use a guard for a rule every handler shares. Put a check that depends on
 the submitted data in the handler body, where the data has already been
 validated.
 
-A guard runs before Citry checks the call's args against the handler's
-`data` class (`SaveIn` above). A caller the guard refuses gets the
-guard's error, not a 422 error that lists what is wrong with its args.
+Return `None` (or nothing) or `True` to let the call go ahead. A guard
+can also refuse the call by returning a value that means "no":
+
+- A returned `EventError` refuses the call as if the guard had raised
+  it, with the error's own status and message.
+- Any other exception, such as Django's `PermissionDenied()`, refuses
+  it with a 403 and the message above. The exception's own text never
+  reaches the browser.
+- Any false value other than `None`, such as `False`, `0`, an empty
+  list or an empty QuerySet, refuses it with a 403.
+
+Raising another exception, such as `raise PermissionDenied`, is not the
+same as returning it: it fails the call with a 500. Return it, or raise
+`EventError`.
+
+A guard that returns a function or other callable, as
+`return self.can_edit` does when the `()` is missing, fails the call
+with a 500, and the server log names the guard, since the check it
+meant to run never ran. Any other true value lets the call go ahead,
+and Citry logs a warning that names the guard.
+
+Citry tests a returned value for true or false once, which runs a
+QuerySet's database query; return `queryset.exists()` instead of the
+QuerySet so the query loads no rows.
+If that test raises an error, the call fails with a 500, as when the
+guard itself raises one. Under an async server such as Starlette or
+FastAPI, Citry runs guards on the event loop, where Django refuses a
+database query (including `.exists()`) with `SynchronousOnlyOperation`,
+so such a guard refuses every call with a 500.
+
+`None` lets the call go ahead, so return `False` explicitly: an
+expression such as `user and user.is_staff` gives `None` when there is
+no user.
+
+A handler's own guard runs in addition to the component's `_guard`.
+Citry first builds `self.context` with `_context`, so both guards can
+read it. It then runs `_guard`, then the handler's guard. The first one
+that refuses the call stops it, and nothing after it runs.
+
+Both guards run before Citry checks the call's args against the
+handler's `data` class (`SaveIn` above). A caller that either guard
+refuses gets that guard's error, not a 422 error that lists what is
+wrong with its args.
 Two things to know about what a guard reads:
 
 - `self.state` holds the browser's writes to the fields in
@@ -215,8 +260,92 @@ Two things to know about what a guard reads:
   before Citry has checked them. A key can be missing, have another
   type, such as text where the handler expects a number, or be longer
   than the `data` class allows. Read it with `.get()` and check the type
-  before you use it. A guard that raises anything other than
-  `EventError` answers with a 500 error.
+  before you use it. A guard that fails while it reads one, with a
+  `KeyError` say, fails the call with a 500.
+
+To check every component the same way, set an app-wide guard once:
+
+```python
+citry = Citry(
+    extensions_defaults={"events": {"_guard": require_login}},
+)
+```
+
+It runs wherever a component's `Events` class does not define `_guard`.
+A component that defines its own `_guard`, even `_guard = None`,
+replaces the app-wide one, so return `require_login(self)` from the
+component's `_guard` when both must run. Return its result rather than
+only calling it: a guard that refuses by returning `False` or an
+error refuses nothing when its caller drops that value.
+
+Some handlers must accept callers the rest of the component refuses,
+such as a public `ping` on a component that needs a login. The
+component's `_guard` can let them through by checking `self.event.name`,
+the name of the handler being called:
+
+```citry
+class Dashboard(Component):
+    class Events:
+        def _guard(self):
+            if self.event.name == "ping":  # public
+                return
+            return require_login(self)
+
+        def ping(self):
+            return {"ok": True}
+
+        def save(self, data: SaveIn):
+            ...
+```
+
+This keeps every access rule of the component in one place, so a
+reader sees which handlers are public without opening each one.
+`self.event.name` is the name the browser calls: the method name, or
+the `name=` given to `@event`. Renaming a handler changes which rule
+applies to it, and Citry does not warn you: a renamed `ping` no longer
+matches, so it falls back to the login check. Update the guard when you
+rename a handler.
+
+For an occasional public handler, set `@event(component_guard=False)`
+on the handler instead. It skips the component's `_guard`, or the
+app-wide one when the component has none, for that handler only.
+`_context` still runs. Anyone who can reach the page can then call the
+handler, so check inside it if it needs a check. `component_guard`
+takes only `True` or `False`:
+
+```citry
+from citry.ext.events import event
+
+
+class Newsletter(Component):
+    class Events:
+        _guard = require_login
+
+        @event(component_guard=False)
+        def sign_up(self, data: SignUpIn):
+            ...
+```
+
+A `guard=` on the same handler still runs, so a public handler can keep
+a check of its own, as in
+`@event(component_guard=False, guard=rate_limit)`.
+
+Put every setting for a handler in one `@event(...)`. Citry raises an
+error when a second `@event(...)` decorates the same function, or when
+one function is decorated for two classes, because only one set of
+settings would take effect and a `guard=` could be dropped. Give each
+class its own function. It also raises one when a decorator above `@event(...)`
+hides its settings; write such a decorator with `functools.wraps`.
+
+Write guards and `_context` as plain `def` functions, not `async def`.
+Citry calls them without awaiting them, on WSGI and ASGI servers alike,
+so it refuses an async one with an error when the component class is
+defined. A decorator you put on a guard must run any async function it
+calls to the end, for example with `asgiref.sync.async_to_sync`. Citry
+cannot see inside the decorator, so a call it starts and never finishes
+refuses nothing. Put a check that needs `await` at the start of an
+`async def` handler and raise `EventError` there, as a guard would. An
+`async def` handler needs an ASGI server.
 
 Citry does not log users in. Your web framework does, and a handler reads
 the user from the `request` it receives, or from `request.native` for the
@@ -531,7 +660,10 @@ FastAPI, Starlette, Flask, and plain ASGI or WSGI apps have no standard
 CSRF token. If your app uses one, check it with a function set as `_csrf`
 on `Events` for the whole component, or with `@event(csrf=...)` for one
 handler. The function receives the request and raises `EventError` to
-reject the call:
+reject the call. A handler's `csrf=` replaces the component's `_csrf`
+for that handler; unlike guards, the two do not both run. Like a guard,
+the function must be a plain `def` function, and Citry refuses an
+`async def` one when the component class is defined:
 
 ```citry
 from citry.ext.events import EventError, event
@@ -744,19 +876,24 @@ such as in a computed field or a plain dataclass's `__post_init__`.
 
 Citry refuses data that nests more than 64 levels of models, dataclasses,
 TypedDicts, unions, wrap validators, and `Iterable` fields, when a
-Pydantic v2 class checks it. Each model, dataclass, TypedDict, wrap
-validator, and `Iterable[...]` or `Generator[...]` field that a value
-passes through counts one level. So does each union whose members could
-read the value. Citry checks the items of an `Iterable[...]` field
-before the handler runs, and the handler gets an iterator over the
-checked items.
+Pydantic v2 class checks it (on PyPy the limit is 32 and some parts
+count more; see [Event data on PyPy](#event-data-on-pypy)). Each model,
+dataclass, TypedDict, wrap validator, and `Iterable[...]` or
+`Generator[...]` field that a value passes through counts one level.
+So does each union whose members could read the value. Citry checks
+the items of an `Iterable[...]` field before the handler runs, and the
+handler gets an iterator over the checked items.
 
 The limit also applies when Citry checks a plain class, a dataclass or a
 Pydantic dataclass `data` class with its own code: each object counts
 one level.
 
 Lists and dicts do not count, so a `pydantic.JsonValue` field accepts
-data nested as deeply as the 200-level limit on request JSON. Citry's
+data nested as deeply as the 200-level limit on request JSON, except
+where Pydantic's own limit is lower. Pydantic refuses a `JsonValue`
+nested more than about 98 levels on PyPy or Windows, and more than
+about 48 on PyPy for Windows or in Pyodide. The call then gets a 422
+for that field. Citry's
 own work with such a value runs on its threads, described below. Code
 of yours that checks or writes out the value again on your thread needs
 much more stack than data at the limit: on Python 3.11, `model_dump()`
@@ -792,8 +929,11 @@ that something else starts gets only 512 KiB. A server that starts its
 own threads outside Python should set a larger size in its own
 settings.
 
-Citry checks the data on a thread of its own with a 16 MiB stack, so the
-limit is the same whatever stack size your server gives its threads.
+Citry checks the data on a thread of its own with a 16 MiB stack, so on
+CPython the limit does not depend on the stack size your server gives
+its threads. On PyPy a larger stack does not help, because PyPy caps
+each thread's stack use at a fixed amount
+([Event data on PyPy](#event-data-on-pypy)).
 Citry also builds State for a render, writes State out for its token
 and for the page, and checks State a handler changed, all on those
 threads. Your request thread waits each time Citry hands work to such
@@ -832,10 +972,14 @@ because counting each class would change how the class reads JSON. So
 defining the component raises `ValueError` when a field the browser may
 write holds a recursive model, dataclass, or TypedDict (one that can
 hold itself) with no wrap validator on the way back to itself. A loop
-that passes through an `Iterable` field is still such a loop. Fix it by
+that passes through an `Iterable` field is still such a loop. On PyPy
+the same goes for a recursive type of any other kind, such as a list
+alias: nothing counts the up to 200 levels Pydantic reads there, and
+for some types, such as `Sequence[...]`, writing the State back out
+calls Python at each level, which can end PyPy. Fix it by
 removing what makes Citry check the State only as JSON, by leaving the
 field out of `_model`, or by adding a wrap validator to the recursive
-class.
+type.
 
 Citry stops checking a request's data once its checks have used about 1
 second of CPU time. The call then fails with a 422 that says the data
@@ -876,6 +1020,80 @@ parses a string, check the string's length first. If it calls another
 model's `model_validate`, declare that model as a field type instead,
 so the limits apply to it.
 
+### Event data on PyPy { #event-data-on-pypy }
+
+PyPy lets each thread use only a fixed amount of stack, set by
+`sys.setrecursionlimit()` and not by the thread's stack size. When
+Pydantic's compiled code uses it up while it checks deeply nested data,
+PyPy ends the whole server process instead of raising an error. So on
+PyPy, Citry checks event data and State writes with tighter rules.
+
+The limit is 32 levels, and some parts of a schema count as more than
+one level. A level is one model, dataclass, TypedDict, wrap validator
+or union that the data passes through. On PyPy a wrap validator counts
+three levels, so a model with one counts four, and a union counts two.
+Each `Sequence[...]` or `defaultdict` field and each `OnErrorOmit` item
+adds one more, and so does each level of a recursive type that has a
+serializer function such as `WrapSerializer`, because Pydantic calls
+that function at each level when Citry writes State back out. So
+recursive data can nest fewer levels on PyPy than on CPython. Measured
+on PyPy 7.3.23, a tree of models was accepted up to
+about 30 levels when each model held its children in a `list`, 15 in a
+`Sequence`, and 10 in `list[OnErrorOmit[list[OnErrorOmit[Tree]]]]`.
+
+Defining a component also raises `ValueError` on PyPy in these cases,
+described in [Fix a refused schema](#schemas-citry-refuses):
+
+- its event `data` class, or a State field the browser may write, holds
+  a recursive type inside `Json[...]`;
+- a State that Citry checks only as JSON text lets the browser write a
+  recursive type of any kind (see [Check event data](#check-event-data));
+- its event `data` class or any State field has a serializer whose
+  return type leads into a recursive type with a serializer of its own,
+  or a `PlainValidator` on a level of a recursive type.
+
+These rules kept the ordinary schemas in our tests on PyPy 7.3.23 from
+ending the process, but these things can still use up PyPy's stack and
+end it:
+
+- A schema with many validators or other parts at each level, more so
+  with a `Json[Any]`, `JsonValue` or other free-form field deep inside
+  it. Citry does not count the up to 200 levels of such a field, and
+  its own checks use part of the stack too. In our tests a model with
+  48 validators, 31 levels deep, with 100 levels of `Json[Any]` below
+  it ended the process, as it does with citry 1.2.0.
+- Many `AfterValidator`s on one recursive type (25 in our tests).
+  Pydantic runs them without leaving a Python call on the stack, so
+  Citry counts nothing for them, but each one makes every level take
+  more stack. In our tests 25 of them on a recursive list alias ended
+  PyPy at 98 levels, and Pydantic alone ends PyPy on the same type and
+  data.
+- A handler that stores event data in a State field of a different
+  type that has a serializer, such as a `Sequence[...]` or a type with
+  a `WrapSerializer`. Citry counts the levels of the event data's own
+  type, and Pydantic calls the State field's serializer at every level
+  of the data when Citry writes the State out.
+- A handler that stores, in a free-form State field such as `Any`, a
+  Pydantic class taken from a `data` class that is not itself a
+  Pydantic class, such as a standard-library dataclass. Citry looks for
+  the serializers above only in a Pydantic `data` class, and the stored
+  value keeps its own serializers when Citry writes the State out.
+- Your own code that checks nested data again, such as a validator
+  that calls `model_validate` on a nested value.
+
+A larger thread stack does not help on PyPy, but the recursion limit
+does: the depth at which data ends the process moves with
+`sys.setrecursionlimit()`. Citry's limit of 32 levels was measured at
+PyPy's default recursion limit of 1,000, so do not set the recursion
+limit lower than that. A higher recursion limit lets the cases above
+nest deeper before PyPy ends the process, but it applies to the whole
+process, and data nested deeper still ends the process instead of
+raising an error. If your app takes deeply nested data from the
+browser, run it on CPython.
+
+Citry applies the same rules on every Python implementation other than
+CPython, such as GraalPy.
+
 ### Allow deep filter trees { #trees-in-event-data }
 
 Event data can hold a tree, such as a filter whose `And` and `Or` nodes
@@ -894,7 +1112,8 @@ node. More children, or more data in each node, lower that number.
 To check deeper trees, declare the discriminator where you define the
 recursive type (a type that contains itself, here `Node`), and give each
 class a `Literal` tag field. Then each node counts one level toward the
-[nesting limit](#check-event-data), so a tree can nest about 60 levels:
+[nesting limit](#check-event-data), so a tree can nest about 60 levels
+(about 30 on PyPy, see [Event data on PyPy](#event-data-on-pypy)):
 
 ```python
 from typing import Annotated, Literal
@@ -939,8 +1158,11 @@ class, when the part sits outside any field) and a change that fixes
 it, so you rarely need this list. The usual fixes are the discriminator
 above, another type for the extra keys or items, or `_model` set to the
 fields the browser may change, without that field. For a `data` class,
-declaring the field as the type itself instead of `Json[...]` works
-too.
+the error also offers declaring a field with the type inside
+`Json[...]`, as in `Tree` for `Json[Tree]`. It names the field that
+holds `Json[...]`, which can sit inside a class nested in the field
+the error is about. That field then takes the value itself, not JSON
+text, so change the browser code that sends it.
 
 - **A tree without a discriminator.** A union of node classes where two
   or more can hold more nodes, as in the filter tree above.
@@ -1006,6 +1228,64 @@ too.
       the browser writes the field, but not when it restores the State
       at the start of a call.
     - Fix a refused class: make the v1 class a Pydantic v2 model.
+- **On PyPy, a recursive type inside `Json[...]`.** A `Json[...]`
+  field in a `data` class, or in a State field the browser may write,
+  holds a type that can contain itself:
+    - Refused: a model, dataclass, TypedDict or `NamedTuple` that can
+      contain itself.
+    - Refused: a recursive type of any other kind, such as a list or
+      tuple alias. Pydantic lets one JSON string nest 200 lists and
+      objects, and those levels come on top of the levels Citry already
+      checked outside the string. A JSON string can also hold another
+      JSON string, and Pydantic reads each one separately, so the
+      levels add up.
+    - Fine: a type inside `Json[...]` that cannot hold itself, such as
+      `Json[list[Item]]`, and `Json[Any]` or `Json[pydantic.JsonValue]`,
+      which Pydantic only parses when it reads JSON. For other free-form
+      JSON on PyPy, use one of these and check the value in your
+      handler.
+    - Fine: a refused type with a wrap validator of its own, such as a
+      `model_validator(mode="wrap")` that returns `handler(value)`, or
+      `WrapValidator` in a type alias, so that each of its levels
+      passes the validator. Citry counts each level there. A wrap
+      validator elsewhere, such as on a model that holds the
+      `Json[...]` field, does not count the levels of the recursive
+      type inside the text, so the error names the type that needs one.
+      Below a wrap validator the type checks Python values instead of
+      JSON text, so a strict model refuses a date, UUID or similar
+      value that JSON writes as a string.
+    - Fine, in a `data` class: the field the error names declared with
+      the type inside `Json[...]`, as in `Tree` for `Json[Tree]`. The
+      field then takes the value itself, not JSON text, so change the
+      browser code that sends it.
+- **On PyPy, a serializer that returns a recursive type.** A
+  serializer in a `data` class or in any State field, writable or not,
+  has a return type that leads into a recursive type with a serializer
+  of its own. The serializer can be a `PlainSerializer` or
+  `WrapSerializer` with `return_type=`, or a `field_serializer` or
+  `model_serializer` with `return_type=` or a return annotation.
+  Pydantic also gives a `PlainValidator` such a serializer, with the
+  type it sits on as the return type. Citry checks the value with the
+  field's own type, such as `Any`, but Pydantic writes it out with the
+  return type when Citry writes the State out, and calls Python at
+  each of its levels:
+    - Refused: `Annotated[Any, PlainSerializer(f, return_type=Tree)]`,
+      where `Tree` is a recursive alias with a `WrapSerializer` on its
+      levels, or a recursive `Sequence[...]` alias.
+    - Refused: `Tree = Annotated[list[Tree], PlainValidator(f)]`.
+    - Refused, though it does not end PyPy: a return type that is
+      recursive and has a serializer only on a value that does not
+      nest, such as a `field_serializer` for a date field. Citry refuses
+      any recursive return type that holds a serializer function.
+    - Fine: the same serializer without `return_type`, or a
+      `field_serializer` or `model_serializer` annotated as returning
+      `Any`. Pydantic then writes the returned value by its type,
+      without calling Python at each level.
+    - Fine: a return type that is recursive but has no serializer
+      function, such as `list[Tree]` where `Tree` is a plain recursive
+      list alias.
+    - Fine: an `AfterValidator` or `WrapValidator` on the recursive
+      type in place of the `PlainValidator`.
 
 Citry looks for these parts when the component class is defined. It
 cannot look inside a class it meets only when a call arrives: a Pydantic
@@ -1030,7 +1310,8 @@ can check the write only as JSON text when the State has one of these:
 Without any of these, Citry checks the write as Python values first.
 When that check accepts the write, Citry then reads it as JSON text.
 A State checked only as JSON text cannot let the browser write a
-recursive class ([nesting limit](#check-event-data)).
+recursive class, or on PyPy a recursive type of any kind
+([nesting limit](#check-event-data)).
 
 ### Use Pydantic in events { #pydantic-classes-in-events }
 

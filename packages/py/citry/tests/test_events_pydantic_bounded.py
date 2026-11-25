@@ -33,7 +33,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from typing import Annotated, Any, Literal, cast, get_args
+from typing import Annotated, Any, Literal, NamedTuple, cast, get_args
 from weakref import WeakKeyDictionary, ref
 
 import pydantic
@@ -67,6 +67,10 @@ IS_PYPY = platform.python_implementation() == "PyPy"
 PYPY_CRASHES_IN_SUBPROCESS = "PyPy's C-API layer crashes in this subprocess; see #708"
 
 SIGNING_KEY = "test-secret-key"
+# The nesting limit a check applies on a check thread. PyPy lets a thread
+# use only as much stack as its recursion limit sets, so there it is the
+# small-stack limit (see `bounded.STACK_SET_BY_RECURSION_LIMIT`).
+CHECK_LIMIT = bounded.SMALL_STACK_CHECK_DEPTH if bounded.STACK_SET_BY_RECURSION_LIMIT else bounded.MAX_CHECK_DEPTH
 
 
 @pytest.fixture(autouse=True)
@@ -96,6 +100,25 @@ def deep_checks(monkeypatch: pytest.MonkeyPatch) -> None:
     # out before the nesting limit stops it, so these tests raise the limit
     # to 100, which the stack of a check thread holds many times over.
     monkeypatch.setattr(bounded, "MAX_CHECK_DEPTH", 100)
+    _raise_pypy_limit(monkeypatch)
+
+
+@pytest.fixture
+def pypy_deep_checks(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A test of the work budget at the real limit on CPython; on PyPy the
+    # limits are raised (see `_raise_pypy_limit`).
+    _raise_pypy_limit(monkeypatch)
+
+
+def _raise_pypy_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    # On PyPy a level of a recursive union counts three times or more (the
+    # union, the member's wrapper and the object) and the limit is the
+    # small-stack one, so a test of the work budget there raises both limits
+    # to 150. The data in these tests passed on PyPy with 1.2.0's counting, so
+    # it fits PyPy's stack; the rules themselves are tested on their own.
+    if bounded.STACK_SET_BY_RECURSION_LIMIT:
+        monkeypatch.setattr(bounded, "MAX_CHECK_DEPTH", 150)
+        monkeypatch.setattr(bounded, "SMALL_STACK_CHECK_DEPTH", 150)
 
 
 @pytest.fixture
@@ -610,7 +633,7 @@ def test_data_past_the_nesting_limit_is_refused_and_logged_once(caplog: pytest.L
         c: Node | None = None
 
     payload: dict[str, Any] = {}
-    for _ in range(bounded.MAX_CHECK_DEPTH):
+    for _ in range(CHECK_LIMIT):
         payload = {"c": payload}
 
     with caplog.at_level(logging.WARNING, logger="citry"):
@@ -619,7 +642,7 @@ def test_data_past_the_nesting_limit_is_refused_and_logged_once(caplog: pytest.L
 
     assert first.fields == second.fields == {"_args": bounded.TOO_DEEP_MESSAGE}
     # Any client can send deep data again, so the warning comes once per class.
-    assert caplog.text.count(f"nests more than {bounded.MAX_CHECK_DEPTH} objects") == 1
+    assert caplog.text.count(f"nests more than {CHECK_LIMIT} objects") == 1
 
 
 def test_a_part_that_drops_bad_items_does_not_swallow_the_nesting_limit() -> None:
@@ -634,6 +657,635 @@ def test_a_part_that_drops_bad_items_does_not_swallow_the_nesting_limit() -> Non
         payload = {"c": [payload]}
 
     assert validate_args(ONode, payload).fields == {"_args": bounded.TOO_DEEP_MESSAGE}
+
+
+# --- PyPy's fixed stack budget ----------------------------------------------------
+#
+# PyPy lets a thread use only as much stack as the recursion limit sets, and
+# ends the process when pydantic-core uses it up, so there Citry counts every
+# Python call its copy makes on the way down, and applies the small-stack
+# limit on check threads too. These tests set the rule on CPython, so CI runs
+# them; each class is made inside its test, because the copy of a class is
+# built once, under the rule set when it is first checked.
+
+
+@pytest.fixture
+def pypy_stack_rules(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", True)
+
+
+def _omit_tree_class() -> type[pydantic.BaseModel]:
+    class OTree(pydantic.BaseModel):
+        children: list[pydantic.OnErrorOmit[list[pydantic.OnErrorOmit[OTree]]]] = []
+
+    return OTree
+
+
+def _omit_tree(depth: int) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for _ in range(depth):
+        payload = {"children": [[payload]]}
+    return payload
+
+
+def _sequence_tree_class() -> type[pydantic.BaseModel]:
+    class STree(pydantic.BaseModel):
+        children: Sequence[STree] = ()
+
+    return STree
+
+
+def _sequence_tree(depth: int) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for _ in range(depth):
+        payload = {"children": [payload]}
+    return payload
+
+
+def test_on_pypy_a_check_thread_applies_the_small_stack_limit(pypy_stack_rules: None) -> None:
+    # A check thread's 16 MiB does not raise PyPy's budget, so it gets the
+    # limit sized for a small stack.
+    assert bounded.run_on_check_thread(bounded.nesting_limit) == bounded.SMALL_STACK_CHECK_DEPTH
+
+
+def test_on_cpython_a_check_thread_applies_the_full_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", False)
+
+    assert bounded.run_on_check_thread(bounded.nesting_limit) == bounded.MAX_CHECK_DEPTH
+
+
+@pytest.mark.parametrize(
+    ("make_class", "make_payload"),
+    [
+        # Citry's wrapper for each part that drops bad items stays on the
+        # stack while the item below it is checked.
+        pytest.param(_omit_tree_class, _omit_tree, id="OnErrorOmit"),
+        # So does Pydantic's own wrap function behind `Sequence[...]`.
+        pytest.param(_sequence_tree_class, _sequence_tree, id="Sequence"),
+    ],
+)
+def test_on_pypy_each_python_call_on_the_way_down_counts_toward_the_nesting_limit(
+    monkeypatch: pytest.MonkeyPatch,
+    make_class: Any,
+    make_payload: Any,
+) -> None:
+    # Two thirds of the small-stack limit in objects is within it when only
+    # the objects count, and past it when the calls between them count too.
+    # The CPython rule runs here with the small-stack limit, so the two
+    # checks differ only in what counts.
+    payload = make_payload(bounded.SMALL_STACK_CHECK_DEPTH * 2 // 3)
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", False)
+    monkeypatch.setattr(bounded, "MAX_CHECK_DEPTH", bounded.SMALL_STACK_CHECK_DEPTH)
+    counting_objects = validate_args(make_class(), payload)
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", True)
+    counting_calls = validate_args(make_class(), payload)
+
+    assert counting_objects.ok
+    assert counting_calls.fields == {"_args": bounded.TOO_DEEP_MESSAGE}
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_the_member_wrappers_of_a_recursive_union_count_toward_the_nesting_limit() -> None:
+    # Each member of a union whose members can each read the value has a
+    # Citry wrapper that stays on the stack. Twelve levels of filters are
+    # within the limit when only the unions and objects count.
+    class F(pydantic.BaseModel):
+        q: And | Or | Leaf
+
+    assert validate_args(F, {"q": _chain(12, 1)}).fields == {"_args": bounded.TOO_DEEP_MESSAGE}
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_the_wrappers_of_a_wrap_validator_count_toward_the_nesting_limit() -> None:
+    # A wrap validator may call its handler again, so its copy spends from
+    # the work budget, for the value and for the text the function may read,
+    # in two more wrappers that stay on the stack. With the object and the
+    # validator, each level counts four times.
+    class W(pydantic.BaseModel):
+        c: W | None = None
+
+        @pydantic.model_validator(mode="wrap")
+        @classmethod
+        def whole(cls, value: Any, handler: Any) -> Any:
+            return handler(value)
+
+    payload: dict[str, Any] = {}
+    for _ in range(bounded.SMALL_STACK_CHECK_DEPTH // 4):
+        payload = {"c": payload}
+
+    assert validate_args(W, payload).fields == {"_args": bounded.TOO_DEEP_MESSAGE}
+
+
+def _json_tree_class() -> type[pydantic.BaseModel]:
+    class JTree(pydantic.BaseModel):
+        children: list[JTree] = []
+        blob: pydantic.Json[JTree] | None = None
+
+    return JTree
+
+
+def test_on_pypy_a_recursive_class_inside_json_is_refused_in_event_data(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Inside `Json[...]` no wrapper counts the class's levels, and each JSON
+    # string starts a fresh parse, so strings nested in each other could
+    # use up PyPy's stack. On CPython the class is accepted as before.
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", False)
+    bounded.check_data_class("Probe", _json_tree_class())
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", True)
+
+    with pytest.raises(ValueError, match=r"holds a Json\[\.\.\.\] value with a recursive class"):
+        bounded.check_data_class("Probe", _json_tree_class())
+
+
+def test_on_pypy_a_recursive_class_inside_json_is_refused_in_a_writable_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tree_class = _json_tree_class()
+
+    class Forest(pydantic.BaseModel):
+        tree: tree_class = tree_class()  # type: ignore[valid-type]
+
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", False)
+    bounded.check_state_class("Probe", Forest, frozenset({"tree"}))
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", True)
+
+    with pytest.raises(ValueError, match=r"holds a Json\[\.\.\.\] value with a recursive class"):
+        bounded.check_state_class("Probe", Forest, frozenset({"tree"}))
+
+
+class JsonTuple(NamedTuple):
+    # A NamedTuple is a class too: its schema is `named-tuple`, not `model`.
+    kids: list[JsonTuple] = []
+    blob: pydantic.Json[JsonTuple] | None = None
+
+
+# A type that is no class at all and still holds itself inside Json[...] text.
+JsonPair = TypeAliasType("JsonPair", "tuple[list[JsonPair], pydantic.Json[JsonPair] | None]")
+# A recursive type with no Json[...] of its own: one JSON string still
+# nests it 200 levels on top of the levels checked outside the string.
+PlainPair = TypeAliasType("PlainPair", "tuple[list[PlainPair], int]")
+
+
+def _keep(value: Any, handler: Any) -> Any:
+    return handler(value)
+
+
+class CountedHolder(pydantic.BaseModel):
+    # The wrap validator counts this class's levels, but not those of the
+    # recursive type inside its JSON text, which can hold the class again.
+    pairs: pydantic.Json[HolderPair] | None = None  # type: ignore[name-defined]
+
+    @pydantic.model_validator(mode="wrap")
+    @classmethod
+    def _keep(cls, value: Any, handler: Any) -> Any:
+        return handler(value)
+
+
+HolderPair = TypeAliasType("HolderPair", "tuple[HolderPair | None, CountedHolder | None]")
+CountedHolder.model_rebuild()
+# The same, with the wrap validator where the recursive type refers to the class.
+WrappedRefPair = TypeAliasType(
+    "WrappedRefPair",
+    "tuple[WrappedRefPair | None, Annotated[PairBox, pydantic.WrapValidator(_keep)] | None]",
+)
+
+
+class PairBox(pydantic.BaseModel):
+    pairs: pydantic.Json[WrappedRefPair] | None = None
+
+
+PairBox.model_rebuild()
+# Two different recursive types, the second inside the first one's JSON text.
+OuterChain = TypeAliasType("OuterChain", "tuple[OuterChain | None, pydantic.Json[InnerChain] | None]")
+InnerChain = TypeAliasType("InnerChain", "tuple[InnerChain | None, int]")
+
+
+class PlainLeaf(pydantic.BaseModel):
+    name: str = ""
+
+
+# A recursive type outside Json[...], whose JSON text holds only a class that
+# cannot hold anything.
+LeafPair = TypeAliasType("LeafPair", "tuple[LeafPair | None, pydantic.Json[PlainLeaf] | None]")
+
+
+class WrappedJsonTree(pydantic.BaseModel):
+    # The wrap validator is the documented fix: Citry counts each level there.
+    children: list[WrappedJsonTree] = []
+    blob: pydantic.Json[WrappedJsonTree] | None = None
+
+    @pydantic.model_validator(mode="wrap")
+    @classmethod
+    def _keep(cls, value: Any, handler: Any) -> Any:
+        return handler(value)
+
+
+@pytest.mark.parametrize(
+    ("field_type", "reason"),
+    [
+        pytest.param(JsonTuple, "a recursive class", id="NamedTuple"),
+        pytest.param(JsonPair, "a recursive type", id="tuple alias"),
+        pytest.param(CountedHolder, "a recursive type", id="wrap validator elsewhere"),
+        pytest.param(pydantic.Json[OuterChain], "a recursive type", id="two types"),
+        pytest.param(PairBox, "a recursive type", id="wrap validator on the reference"),
+        pytest.param(pydantic.Json[PlainPair], "a recursive type", id="recursive type without Json"),
+    ],
+)
+def test_on_pypy_a_type_that_holds_itself_inside_json_is_refused(
+    monkeypatch: pytest.MonkeyPatch, field_type: Any, reason: str
+) -> None:
+    # Each JSON string starts a fresh parse, so strings nested in each other
+    # nest any type as deep as the data likes, a NamedTuple or a tuple as
+    # much as a model. CPython keeps accepting both.
+    data = pydantic.create_model("Data", x=(field_type, ...))
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", False)
+    bounded.check_data_class("Probe", data)
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", True)
+
+    with pytest.raises(ValueError, match=rf"holds a Json\[\.\.\.\] value with {reason}") as raised:
+        bounded.check_data_class("Probe", data)
+
+    # The wrap validator must go on the recursive type itself, so the fix names it.
+    assert re.search(r"Give \w+ a wrap validator of its own", str(raised.value))
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+@pytest.mark.parametrize(
+    ("field_type", "where"),
+    [
+        pytest.param(JsonTuple, "in the field 'blob' of JsonTuple", id="Json inside the class"),
+        pytest.param(pydantic.Json[list[JsonTuple]], "in that field", id="Json on the field"),
+        pytest.param(JsonPair, "in JsonPair", id="Json inside an alias"),
+        pytest.param(
+            _json_tree_class(), "in the field 'blob' of _json_tree_class.<locals>.JTree", id="Json in a model field"
+        ),
+        pytest.param(pydantic.Json[list[JsonTuple]] | int, "in that field", id="outermost Json above another"),
+    ],
+)
+def test_on_pypy_the_refusal_names_the_field_that_holds_the_json(field_type: Any, where: str) -> None:
+    # The plain type is a fix only where Json[...] is written, which may be
+    # a field of a class deeper inside the field the message names.
+    data = pydantic.create_model("Data", x=(field_type, ...))
+
+    with pytest.raises(ValueError, match=r"the field 'x' of the event data class") as raised:
+        bounded.check_data_class("Probe", data)
+
+    assert f"You can also replace Json[...] {where} with the type inside its brackets" in str(raised.value)
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+@pytest.mark.parametrize(
+    "field_type",
+    [
+        pytest.param(LeafPair, id="recursive type outside Json, Json of a class that cannot nest"),
+        pytest.param(pydantic.Json[Any], id="Json of Any"),
+        pytest.param(pydantic.Json[list[PlainLeaf]], id="Json of a type that is not recursive"),
+        # JsonValue reads JSON input as Any; only its Python part holds itself.
+        pytest.param(pydantic.Json[pydantic.JsonValue], id="Json of JsonValue"),
+    ],
+)
+def test_on_pypy_json_text_without_a_recursive_type_inside_is_accepted(field_type: Any) -> None:
+    # Only a type that can nest inside the text without limit is refused.
+    bounded.check_data_class("Probe", pydantic.create_model("Data", x=(field_type, ...)))
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_a_state_read_only_as_json_accepts_json_value() -> None:
+    # JsonValue reads JSON input as Any; only its Python part holds itself.
+    state = pydantic.create_model(
+        "StrictMeta", __config__=pydantic.ConfigDict(strict=True), meta=(pydantic.JsonValue | None, None)
+    )
+
+    bounded.check_state_class("Probe", state, frozenset({"meta"}))
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_a_state_read_only_as_json_refuses_a_recursive_alias() -> None:
+    # Nothing counts the levels of a JSON-only read, so Pydantic's JSON
+    # parser lets a recursive alias nest about 200 levels, and for a type
+    # such as Sequence[...] writing the State out calls Python at each
+    # level, which ends PyPy.
+    state = pydantic.create_model(
+        "StrictMeta", __config__=pydantic.ConfigDict(strict=True), meta=(PlainPair | None, None)
+    )
+
+    with pytest.raises(ValueError, match=r"a recursive type \(one that can hold itself\)") as raised:
+        bounded.check_state_class("Probe", state, frozenset({"meta"}))
+
+    # A lax State is counted by its Python check, so the message offers it.
+    assert "You can also remove a strict model setting, or " in str(raised.value)
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_the_refusal_of_a_recursive_alias_offers_json_any_for_free_form_json() -> None:
+    data = pydantic.create_model("Data", x=(pydantic.Json[PlainPair], ...))
+
+    with pytest.raises(ValueError, match=r"Give PlainPair a wrap validator of its own") as raised:
+        bounded.check_data_class("Probe", data)
+
+    assert "For free-form JSON, Json[Any] works too." in str(raised.value)
+
+
+def test_on_cpython_a_state_read_only_as_json_keeps_accepting_a_type_that_loops_through_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The rule for any type that loops through Json[...] belongs to the PyPy
+    # rules; CPython refuses only a class there, as before.
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", False)
+
+    class StrictPairs(pydantic.BaseModel):
+        model_config = pydantic.ConfigDict(strict=True)
+        pairs: JsonPair | None = None
+
+    bounded.check_state_class("Probe", StrictPairs, frozenset({"pairs"}))
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_a_recursive_class_with_a_wrap_validator_inside_json_is_accepted_and_counted() -> None:
+    data = pydantic.create_model("Data", x=(pydantic.Json[WrappedJsonTree], ...))
+    bounded.check_data_class("Probe", data)
+    shallow = {"children": [{"blob": json.dumps({"children": [{}]})}]}
+    # The levels inside the inner JSON string count as well as those outside it.
+    chain: dict[str, Any] = {}
+    for _ in range(bounded.SMALL_STACK_CHECK_DEPTH):
+        chain = {"children": [chain]}
+    deep = {"children": [{"blob": json.dumps(chain)}]}
+
+    assert validate_args(data, {"x": json.dumps(shallow)}).ok
+    assert validate_args(data, {"x": json.dumps(deep)}).fields == {"_args": bounded.TOO_DEEP_MESSAGE}
+
+
+def test_on_pypy_a_recursive_class_inside_json_found_at_the_first_call_is_refused(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    # Registration does not read a Pydantic class inside a plain dataclass,
+    # so the check at the first call must apply the same rule.
+    def holder() -> type:
+        tree_class = _json_tree_class()
+        return dataclasses.make_dataclass("TreeHolder", [("inner", tree_class)])
+
+    payload = {"inner": {"children": [{}]}}
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", False)
+    assert validate_args(holder(), payload).ok
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", True)
+
+    with caplog.at_level(logging.ERROR, logger="citry"):
+        result = validate_args(holder(), payload)
+
+    assert result.fields == {"inner": bounded.NOT_CHECKABLE_MESSAGE}
+    assert "holds a Json[...] value with a recursive class" in caplog.text
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_a_state_finished_after_registration_with_a_recursive_class_inside_json_is_refused(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class LateForest(pydantic.BaseModel):
+        tree: LateJsonTree | None = None  # type: ignore[name-defined] # noqa: F821
+        _model = ("tree",)
+
+    class Panel(Component):
+        citry = _citry()
+        State = LateForest
+        template = """
+          <p></p>
+        """
+
+    # Registration could not read the State, so its first write runs the check.
+    LateForest.model_rebuild(_types_namespace={"LateJsonTree": _json_tree_class()})
+
+    with (
+        caplog.at_level(logging.ERROR, logger="citry"),
+        bounded.request_work(),
+        pytest.raises(StateUpdateError) as caught,
+    ):
+        apply_state_updates(LateForest(), {"tree": {}}, model_fields=("tree",))
+
+    assert caught.value.fields == {"_state": bounded.NOT_CHECKABLE_MESSAGE}
+    assert "holds a Json[...] value with a recursive class" in caplog.text
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_data_within_the_nesting_limit_is_accepted() -> None:
+    # Counting each call must leave the count where it was after each part,
+    # or a tree with many branches would add up its branches.
+    tree_class = _omit_tree_class()
+    wide = {"children": [[_omit_tree(3)] * 20] * 20}
+
+    result = validate_args(tree_class, wide)
+
+    assert result.ok
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_a_state_write_counts_each_python_call_toward_the_nesting_limit() -> None:
+    tree_class = _omit_tree_class()
+
+    class Forest(pydantic.BaseModel):
+        tree: tree_class = tree_class()  # type: ignore[valid-type]
+        _model = ("tree",)
+
+    payload = _omit_tree(bounded.SMALL_STACK_CHECK_DEPTH * 2 // 3)
+    with bounded.request_work(), pytest.raises(StateUpdateError) as caught:
+        apply_state_updates(Forest(), {"tree": payload}, model_fields=("tree",))
+
+    assert caught.value.fields == {"_state": bounded.TOO_DEEP_MESSAGE}
+
+
+def _write_unchanged(value: Any, handler: Any) -> Any:
+    return handler(value)
+
+
+SerializedNest = TypeAliasType(
+    "SerializedNest", "Annotated[list[SerializedNest | None], pydantic.WrapSerializer(_write_unchanged)]"
+)
+UnserializedNest = TypeAliasType("UnserializedNest", "list[UnserializedNest | None]")
+# functools.partial hides the app's function behind a standard library one.
+PartialSerializedNest = TypeAliasType(
+    "PartialSerializedNest",
+    "Annotated[list[PartialSerializedNest | None], pydantic.WrapSerializer(functools.partial(_write_unchanged))]",
+)
+# The serializer sits on the reference to the alias, not on its definition.
+SerializedReference = TypeAliasType(
+    "SerializedReference", "list[Annotated[SerializedReference, pydantic.WrapSerializer(_write_unchanged)] | None]"
+)
+SequenceNest = TypeAliasType("SequenceNest", "Sequence[SequenceNest | None]")
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+@pytest.mark.parametrize(
+    ("field_type", "refused"),
+    [
+        pytest.param(SerializedNest, True, id="serializer"),
+        pytest.param(SerializedReference, True, id="serializer on the reference"),
+        pytest.param(PartialSerializedNest, True, id="serializer in functools.partial"),
+        pytest.param(UnserializedNest, False, id="plain list"),
+    ],
+)
+def test_on_pypy_a_state_write_counts_each_serializer_function_toward_the_nesting_limit(
+    field_type: Any, *, refused: bool
+) -> None:
+    # Writing the State out calls the serializer at every level, which
+    # stays on PyPy's stack, so the read counts each level that has one; a
+    # plain list is written out without calling Python and is not counted.
+    class NestState(pydantic.BaseModel):
+        tree: field_type | None = None  # type: ignore[valid-type]
+        _model = ("tree",)
+
+    payload: Any = []
+    for _ in range(bounded.SMALL_STACK_CHECK_DEPTH + 5):
+        payload = [payload]
+
+    with bounded.request_work():
+        if not refused:
+            apply_state_updates(NestState(), {"tree": payload}, model_fields=("tree",))
+            return
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(NestState(), {"tree": payload}, model_fields=("tree",))
+
+    assert caught.value.fields == {"_state": bounded.TOO_DEEP_MESSAGE}
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_a_state_write_counts_pydantics_own_sequence_serializer_once() -> None:
+    # Pydantic's serializer for Sequence[...] sits on a node whose own wrap
+    # function is counted already, so a level counts once, not twice.
+    class SequenceState(pydantic.BaseModel):
+        tree: SequenceNest | None = None
+        _model = ("tree",)
+
+    payload: Any = []
+    for _ in range(bounded.SMALL_STACK_CHECK_DEPTH * 2 // 3):
+        payload = [payload]
+
+    with bounded.request_work():
+        apply_state_updates(SequenceState(), {"tree": payload}, model_fields=("tree",))
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_event_data_counts_serializer_functions_too() -> None:
+    # A handler may store the checked data in State as it is, and Citry then
+    # writes it out through the same serializer at every level.
+    data = pydantic.create_model("Data", tree=(SerializedNest | None, None))
+    payload: Any = []
+    for _ in range(bounded.SMALL_STACK_CHECK_DEPTH + 5):
+        payload = [payload]
+
+    assert validate_args(data, {"tree": payload}).fields == {"_args": bounded.TOO_DEEP_MESSAGE}
+
+
+def _return_unchanged(value: Any) -> Any:
+    return value
+
+
+# The check reads the value as Any; writing it out walks the return type,
+# a recursive alias with a serializer at each level.
+ReturnsSerializedNest = TypeAliasType(
+    "ReturnsSerializedNest",
+    "Annotated[Any, pydantic.PlainSerializer(_return_unchanged, return_type=SerializedNest | None)]",
+)
+# The loop runs only through the serializer's own return type.
+ReturnsItself = TypeAliasType(
+    "ReturnsItself",
+    "Annotated[Any, pydantic.PlainSerializer(_return_unchanged, return_type=list[ReturnsItself | None])]",
+)
+ReturnsUnserializedNest = TypeAliasType(
+    "ReturnsUnserializedNest",
+    "Annotated[Any, pydantic.PlainSerializer(_return_unchanged, return_type=UnserializedNest | None)]",
+)
+UnreturnedSerializer = TypeAliasType(
+    "UnreturnedSerializer", "Annotated[Any, pydantic.PlainSerializer(_return_unchanged)]"
+)
+# Pydantic gives a PlainValidator a serializer whose return type is the type it sits on.
+PlainValidatedNest = TypeAliasType(
+    "PlainValidatedNest", "Annotated[list[PlainValidatedNest | None], pydantic.PlainValidator(_return_unchanged)]"
+)
+
+
+@pydantic.dataclasses.dataclass
+class ReturnsNestNode:
+    kids: Any = None
+
+    @pydantic.field_serializer("kids", mode="plain", return_type=SerializedNest | None)
+    def _write_kids(self, value: Any) -> Any:
+        return value
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+@pytest.mark.parametrize(
+    ("field_type", "loop_type"),
+    [
+        pytest.param(ReturnsSerializedNest, "SerializedNest", id="alias with a PlainSerializer"),
+        pytest.param(ReturnsItself, "ReturnsItself", id="loop through the return type"),
+        pytest.param(ReturnsNestNode, "SerializedNest", id="field_serializer on a nested dataclass"),
+    ],
+)
+def test_on_pypy_a_serializer_returning_a_recursive_type_with_a_serializer_is_refused(
+    field_type: Any, loop_type: str
+) -> None:
+    # Writing the State out walks the return type, which the check never
+    # reads, so nothing counts the serializer calls at its levels.
+    state = pydantic.create_model("ReturnState", tree=(field_type, None))
+    data = pydantic.create_model("ReturnData", tree=(field_type, None))
+    refusal = f"has a serializer whose return type leads into the recursive type {loop_type}, "
+
+    # Every State field counts, also one only the server writes: a handler
+    # may store event data there.
+    with pytest.raises(ValueError, match=re.escape(f"the field 'tree' of the State ReturnState {refusal}")):
+        bounded.check_state_class("Probe", state, frozenset())
+    # A handler may store the data in State as it is.
+    with pytest.raises(ValueError, match=re.escape(f"the field 'tree' of the event data class ReturnData {refusal}")):
+        bounded.check_data_class("Probe", data)
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+def test_on_pypy_a_plain_validator_on_a_recursive_type_is_refused() -> None:
+    # Pydantic writes such a value out through its own Python function at
+    # every level.
+    state = pydantic.create_model("ValidatedState", tree=(PlainValidatedNest | None, None))
+
+    with pytest.raises(ValueError, match="writes out through the recursive type PlainValidatedNest") as raised:
+        bounded.check_state_class("Probe", state, frozenset({"tree"}))
+
+    assert "has a PlainValidator whose value Pydantic writes out" in str(raised.value)
+    assert "Use an AfterValidator or a WrapValidator in its place." in str(raised.value)
+
+
+class SerializedLeaf(pydantic.BaseModel):
+    when: datetime.date = datetime.date(2000, 1, 1)
+
+    @pydantic.field_serializer("when")
+    def _write_when(self, value: datetime.date) -> str:
+        return value.isoformat()
+
+
+# SerializedLeaf is used twice, so Pydantic makes it a definition, but it cannot hold itself.
+ReturnsLeafPair = TypeAliasType(
+    "ReturnsLeafPair",
+    "Annotated[Any, pydantic.PlainSerializer(_return_unchanged, return_type=tuple[SerializedLeaf, SerializedLeaf])]",
+)
+
+
+@pytest.mark.usefixtures("pypy_stack_rules")
+@pytest.mark.parametrize(
+    "field_type",
+    [
+        pytest.param(ReturnsLeafPair, id="return type with a serializer that does not recurse"),
+        pytest.param(UnreturnedSerializer, id="serializer without a return type"),
+        pytest.param(ReturnsUnserializedNest, id="return type without a serializer"),
+    ],
+)
+def test_on_pypy_a_serializer_return_type_without_a_serialized_loop_is_accepted(field_type: Any) -> None:
+    # Pydantic writes these out without calling Python at each level.
+    bounded.check_state_class("Probe", pydantic.create_model("ReturnState", tree=(field_type, None)), frozenset())
+    bounded.check_data_class("Probe", pydantic.create_model("ReturnData", tree=(field_type, None)))
+
+
+def test_on_cpython_a_serializer_returning_a_recursive_type_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    # CPython raises RecursionError on a write-out that nests too deeply.
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", False)
+    state = pydantic.create_model("ReturnState", tree=(ReturnsSerializedNest, None))
+
+    bounded.check_state_class("Probe", state, frozenset({"tree"}))
 
 
 @pydantic.dataclasses.dataclass
@@ -784,7 +1436,7 @@ def test_a_check_runs_on_a_check_thread_with_the_full_limit_and_the_callers_cont
 
     inner = bounded.run_on_check_thread(check)
 
-    assert ran_on == [(inner, True, bounded.MAX_CHECK_DEPTH, "caller")]
+    assert ran_on == [(inner, True, CHECK_LIMIT, "caller")]
     assert inner != threading.get_ident()
     assert seen.get() == "caller"
     assert not bounded.on_check_thread()
@@ -1161,6 +1813,7 @@ def test_a_check_inside_a_validation_counts_its_cpu_time_on_the_check_thread() -
 # --- recursive unions and the work budget -------------------------------------------
 
 
+@pytest.mark.usefixtures("pypy_deep_checks")
 def test_a_valid_filter_chain_fourteen_levels_deep_is_accepted() -> None:
     result = validate_args(Query, {"q": _chain(14, 1)})
 
@@ -1242,6 +1895,7 @@ def test_a_recursive_union_that_reads_each_value_with_one_member_spends_nothing(
     assert result.value == Blob.model_validate(payload)
 
 
+@pytest.mark.usefixtures("pypy_deep_checks")
 def test_the_calls_of_one_request_share_one_work_budget() -> None:
     payload = {"q": _chain(14, 1)}
     results = []
@@ -1252,6 +1906,7 @@ def test_the_calls_of_one_request_share_one_work_budget() -> None:
     assert results[-1].fields == {"_args": bounded.TOO_MUCH_WORK_MESSAGE}
 
 
+@pytest.mark.usefixtures("pypy_deep_checks")
 def test_a_plain_dataclass_recursive_union_too_deep_to_check_is_refused() -> None:
     @dataclasses.dataclass
     class DAnd:
@@ -1881,10 +2536,12 @@ class Ring(pydantic.BaseModel):
 Ring.model_rebuild()
 
 
-def test_a_strict_recursive_model_inside_a_json_field_reads_its_json() -> None:
+def test_a_strict_recursive_model_inside_a_json_field_reads_its_json(monkeypatch: pytest.MonkeyPatch) -> None:
     # A recursive model is a definition the copy reaches from inside and from
     # outside Json[...]; inside, it must get no wrappers, or the strict model
-    # would see a Python string where JSON gives a date.
+    # would see a Python string where JSON gives a date. PyPy refuses such a
+    # class (see the PyPy tests), so this runs under the CPython rules.
+    monkeypatch.setattr(bounded, "STACK_SET_BY_RECURSION_LIMIT", False)
     data = pydantic.create_model("Data", f=(pydantic.Json[Ring], ...))
     payload = {"f": json.dumps({"day": "2020-01-02", "kids": [{"day": "2020-01-03"}]})}
 
@@ -2211,6 +2868,7 @@ def test_citry_own_messages_count_toward_the_error_limit() -> None:
 # --- the request's work budget -------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("pypy_deep_checks")
 def test_a_task_started_during_a_request_gets_its_own_budget_after_the_request_ends() -> None:
     async def later() -> bool:
         await asyncio.sleep(0)
@@ -2954,6 +3612,7 @@ def _padded_chain(depth: int, size: int) -> dict[str, Any]:
     return value
 
 
+@pytest.mark.usefixtures("pypy_deep_checks")
 def test_a_deep_union_over_a_large_leaf_spends_the_budget() -> None:
     data = pydantic.create_model("Data", q=(PadA | PadB, ...))
 
@@ -2972,6 +3631,7 @@ def test_the_same_shallow_tree_with_a_large_leaf_is_accepted() -> None:
     assert result.value == data.model_validate(payload)
 
 
+@pytest.mark.usefixtures("pypy_deep_checks")
 def test_a_wrap_validator_that_calls_its_handler_twice_spends_for_each_call() -> None:
     class TwicePad(pydantic.BaseModel):
         kid: TwicePad | None = None
@@ -3526,6 +4186,7 @@ def test_a_shallow_tree_with_a_large_leaf_of_small_objects_is_accepted() -> None
     assert validate_args(filter_class, _filter_payload(4, [{"x": 1}] * 60_000)).ok
 
 
+@pytest.mark.usefixtures("pypy_deep_checks")
 @pytest.mark.parametrize(
     ("value_type", "leaf", "depth"),
     [
@@ -3542,6 +4203,7 @@ def test_a_deep_union_over_text_that_its_check_parses_spends_the_budget(
     assert result.fields == {"_args": bounded.TOO_MUCH_WORK_MESSAGE}
 
 
+@pytest.mark.usefixtures("pypy_deep_checks")
 @pytest.mark.parametrize(
     ("value_type", "leaf"),
     [
@@ -4607,8 +5269,10 @@ class Tree(Component):
 
 
 # As deep as the nesting limit accepts: the State, then one level per node.
+# PyPy applies the small-stack limit (see `bounded.STACK_SET_BY_RECURSION_LIMIT`).
+limit = bounded.SMALL_STACK_CHECK_DEPTH if bounded.STACK_SET_BY_RECURSION_LIMIT else bounded.MAX_CHECK_DEPTH
 value = None
-for _ in range(bounded.MAX_CHECK_DEPTH - 1):
+for _ in range(limit - 1):
     value = {"c": value}
 answers = {}
 
@@ -4689,8 +5353,8 @@ def test_each_class_kind_counts_one_level_per_object(data_cls: type) -> None:
     # Pydantic dataclass sees only one level at a time. Each object still
     # counts one level, so a chain of any of these class kinds is accepted
     # at the limit and refused one level past it.
-    accepted = validate_args(data_cls, _chain_of_objects(bounded.MAX_CHECK_DEPTH))
-    refused = validate_args(data_cls, _chain_of_objects(bounded.MAX_CHECK_DEPTH + 1))
+    accepted = validate_args(data_cls, _chain_of_objects(CHECK_LIMIT))
+    refused = validate_args(data_cls, _chain_of_objects(CHECK_LIMIT + 1))
 
     assert accepted.ok
     assert refused.fields == {"_args": bounded.TOO_DEEP_MESSAGE}

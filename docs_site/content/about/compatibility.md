@@ -103,6 +103,21 @@ change how a page renders, and Citry still refuses a `Secret` in
 CPython. Issue [#434](https://github.com/citry-dev/citry/issues/434)
 tracks giving PyPy the same answers.
 
+On PyPy, Events refuses event data that nests more than 32 levels,
+where CPython allows 64 (32 in Pyodide), and counts more parts of a
+schema as a level. Defining a component on PyPy also raises
+`ValueError` for some event data and State classes that CPython
+accepts: those with a recursive type inside `Json[...]`, such as a
+model that can hold itself (a class that Citry first meets at a call
+gets a 422 for that call instead), a State checked only as JSON
+text whose writable field holds a recursive list alias or other
+recursive type, and a serializer whose return type leads into a
+recursive type with a serializer of its own, or a `PlainValidator` on a
+level of a recursive type. These rules keep deeply
+nested data from ending the server process in the cases measured; see
+[Event data on PyPy](/security/#event-data-on-pypy). Citry applies
+them on every Python implementation other than CPython.
+
 If you turn off the [expression sandbox](/security/#turning-the-sandbox-off)
 with `Citry(sandbox_expressions=False)`, template expressions on PyPy can
 also call any Python builtin. A missing variable that shares a builtin's
