@@ -6,16 +6,22 @@ which function checks it and which docs section states the rule. It cites
 code as `path:Symbol` (`citry/attrs.py:validate_html_attr_name`) and a
 Markdown section as `path#anchor` (`docs/security.md#authorize-every-event`),
 so a reference keeps working while lines move and breaks only when the thing
-it names is renamed, moved, or deleted. This check finds those breaks:
+it names is renamed, moved, or deleted. This check finds those breaks. For
+every code span that is a file path (with a `/` in it, or a file at the
+repository root), alone or followed by `:Symbol` or `#anchor`, it checks
+that:
 
-- every cited file exists, including a path written alone;
+- the file exists;
 - the symbol is defined in a code file. Python is read with `ast`.
   JavaScript, TypeScript, Rust, and Pest are read with patterns, after
   `_mask` blanks out their comments and strings, so a name in a comment or
-  a brace in a string does not count;
+  a brace in a string does not count. A dotted name must be defined
+  directly inside the one before it;
 - the anchor names a heading in the Markdown file: the heading's own
-  `{ #id }` when it sets one, otherwise GitHub's slug of its text;
-- no reference cites a line number, so references cannot drift again.
+  `{ #id }` when it sets one, otherwise GitHub's slug of its text.
+
+It also fails on any reference that cites a line number, so references
+cannot drift again.
 
 The short path forms (`citry/` for `packages/py/citry/citry/` and the
 others) are read from the list in the doc itself, so the doc and this check
@@ -24,6 +30,7 @@ that the row still describes it; the Mechanism 7 security pass checks that.
 """
 
 import ast
+import bisect
 import re
 import unicodedata
 from collections.abc import Callable, Iterator
@@ -34,7 +41,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 DOC = Path("docs/design/trust_boundaries.md")
 
-_CODE_SPAN = re.compile(r"`([^`\n]+)`")
+# A CommonMark code span: a run of backticks, then text, then a run of the
+# same length. It may wrap onto the next line but not cross a blank line.
+_CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`)((?:(?!\n[ \t]*\n).)+?)(?<!`)\1(?!`)", re.DOTALL)
+_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 
 # The doc's list of short forms, one item per line: - `citry/` is `packages/py/citry/citry/`
 _SHORT_FORM = re.compile(r"^- `([\w.-]+/)` is `([\w./-]+/)`$", re.MULTILINE)
@@ -43,12 +53,17 @@ _SHORT_FORM = re.compile(r"^- `([\w.-]+/)` is `([\w./-]+/)`$", re.MULTILINE)
 # path written alone.
 _REFERENCE = re.compile(r"^(?P<path>[\w.-]+(?:/[\w.-]+)*\.(?P<ext>[A-Za-z]+))(?:(?P<sep>[:#])(?P<target>.*))?$")
 
-# A line number in a code span: `citry/attrs.py:140`, `attrs.py:140-153`,
-# or `:140` on its own for the file named earlier.
-_LINE_NUMBER_SPAN = re.compile(r"^(?:[\w./-]*\.[A-Za-z]+)?:\d+(?:-\d+)?$")
-
-# A line number outside a code span: `attrs.py:140`, or a GitHub `#L140` link.
-_LINE_NUMBER_TEXT = re.compile(r"[\w-]\.(?:py|js|ts|rs|pest|md|ya?ml)(?::\d+|#L\d+)")
+# Line numbers inside a code span: `attrs.py:140`, `:140-153` (the file
+# named earlier), `attrs.py:L140`, `attrs.py#L140`, `attrs.py, line 140`.
+_LINE_NUMBER_SPAN = re.compile(
+    r"^(?:[\w./-]*\.[A-Za-z]+)?(?::L?\d+(?:\s*-\s*L?\d+)?|#L\d+(?:-L?\d+)?)$"
+    r"|^[\w./-]+\.[A-Za-z]+,?\s+\(?lines?\s+\d"
+)
+_FILE_EXTENSIONS = r"(?:py|pyi|js|mjs|cjs|ts|tsx|rs|pest|md|ya?ml|toml|json|css|html)"
+# Line numbers outside a code span: attrs.py:140, or a GitHub #L140 link.
+_LINE_NUMBER_TEXT = re.compile(rf"[\w./-]*[\w-]\.{_FILE_EXTENSIONS}(?::\d+|#L\d+)\b")
+# A path in a code span followed by :140, "line 140", or "(lines 140-153)".
+_LINE_NUMBER_AFTER_SPAN = re.compile(r"(?<!`)(`+)[^`\n]*\.[A-Za-z]+\1(?!`)\s*(?::\d+|,?\s*\(?lines?\s+\d+)")
 
 # One name in a symbol; JavaScript allows `$` in names.
 _NAME = r"[A-Za-z_$][\w$]*"
@@ -56,7 +71,7 @@ _DOTTED_SYMBOL = re.compile(rf"^{_NAME}(?:\.{_NAME})*$")
 _RUST_SYMBOL = re.compile(r"^[A-Za-z_]\w*(?:::[A-Za-z_]\w*)?$")
 _PEST_SYMBOL = re.compile(r"^[A-Za-z_]\w*$")
 
-_FIX = "find where it moved and update the row"
+_FIX = "find where it moved, or fix the spelling, and update the row"
 
 
 def check(root: Path = REPO_ROOT) -> list[str]:
@@ -71,20 +86,64 @@ def check(root: Path = REPO_ROOT) -> list[str]:
         # what is wrong once instead of reporting each reference.
         return [f'{DOC}: found no short path forms (lines such as "- `citry/` is `packages/py/citry/citry/`")']
 
+    # Backticks in a fenced block are code, not span delimiters, so blank
+    # the block before pairing them; offsets stay the same.
+    prose = _blank_fenced_blocks(text)
+    line_starts = [0, *(match.end() for match in re.finditer(r"\n", prose))]
+
+    def where(offset: int) -> str:
+        return f"{DOC}:{bisect.bisect_right(line_starts, offset)}"
+
     problems: list[str] = []
     files = _SourceFiles(root)
-    for number, line in enumerate(text.splitlines(), start=1):
-        where = f"{DOC}:{number}"
-        problems.extend(
-            f"{where}: `{match.group(0)}` outside a code span cites a line number; "
-            "cite the function, class, or heading instead"
-            for match in _LINE_NUMBER_TEXT.finditer(_CODE_SPAN.sub("", line))
-        )
-        for span in _CODE_SPAN.findall(line):
-            problem = _check_span(span, short_forms, files)
-            if problem:
-                problems.append(f"{where}: `{span}`: {problem}")
+    spans = list(_CODE_SPAN.finditer(prose))
+    outside = list(prose)
+    for span in spans:
+        outside[span.start(2) : span.end(2)] = re.sub(r"[^\n]", " ", span.group(2))
+    line_numbers = [*_LINE_NUMBER_TEXT.finditer("".join(outside)), *_LINE_NUMBER_AFTER_SPAN.finditer(prose)]
+    problems.extend(
+        f"{where(match.start())}: {_quote(match.group(0))} cites a line number; "
+        "cite the function, class, or heading instead"
+        for match in sorted(line_numbers, key=lambda match: match.start())
+    )
+    for span in spans:
+        raw = span.group(2)
+        # CommonMark reads a line break in a span as a space, and drops one
+        # space at each end when both are there.
+        content = raw.replace("\n", " ")
+        if content.startswith(" ") and content.endswith(" ") and content.strip():
+            content = content[1:-1]
+        if "\n" in raw and _REFERENCE.match(raw.split()[0]) and re.search(r"[:#]", raw.split()[0]):
+            problems.append(f"{where(span.start())}: `{content}`: keep a reference on one line so it can be read")
+            continue
+        problem = _check_span(content, short_forms, files)
+        if problem:
+            problems.append(f"{where(span.start())}: `{content}`: {problem}")
     return problems
+
+
+def _quote(text: str) -> str:
+    """Wrap text in a code span, with a longer backtick run when the text holds backticks."""
+    return f"`` {text} ``" if "`" in text else f"`{text}`"
+
+
+def _blank_fenced_blocks(text: str) -> str:
+    lines = text.split("\n")
+    fence: str | None = None
+    for index, line in enumerate(lines):
+        match = _FENCE.match(line)
+        if fence is None and match:
+            fence = match.group(1)
+        elif fence is not None:
+            if (
+                match
+                and match.group(1)[0] == fence[0]
+                and len(match.group(1)) >= len(fence)
+                and not match.group(2).strip()
+            ):
+                fence = None
+            lines[index] = " " * len(line)
+    return "\n".join(lines)
 
 
 def _check_span(span: str, short_forms: dict[str, str], files: "_SourceFiles") -> str | None:
@@ -98,14 +157,14 @@ def _check_span(span: str, short_forms: dict[str, str], files: "_SourceFiles") -
     if match is None:
         return None
     path, ext, sep, target = match.group("path", "ext", "sep", "target")
-    if "/" not in path:
-        # A bare file name such as `vue.md` is prose; one followed by a
-        # symbol or anchor is a reference that does not say which file.
+    real = _expand(path, short_forms)
+    if "/" not in path and not files.exists(real):
+        # A bare file name such as `vue.md` is prose unless the file sits
+        # at the repository root; followed by a symbol or an anchor it is a
+        # reference that does not say which file it means.
         if sep is None:
             return None
         return "write the file's path from the repository root, or with a short form such as `citry/`"
-
-    real = _expand(path, short_forms)
     if not files.exists(real):
         read_as = f" (read as {real})" if real != path else ""
         return f"{path}{read_as} does not exist; find where the file moved and update the row"
@@ -148,24 +207,24 @@ class _SourceFiles:
         return self._texts[relative]
 
 
-def _within(region: tuple[int, int], position: int) -> bool:
-    return region[0] < position < region[1]
-
-
 def _not_defined(name: str, owner: str, path: str) -> str:
     where = f"`{owner}` in {path}" if owner else path
-    return f"`{name}` is no longer defined in {where}; {_FIX}"
+    return f"`{name}` is not defined in {where}; {_FIX}"
+
+
+def _not_a_symbol(symbol: str, example: str) -> str:
+    return f"`{symbol}` is not a symbol name; write it as {example}"
 
 
 # ---------------------------------------------------------------------------
 # Markdown anchors
 # ---------------------------------------------------------------------------
 
-_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 _ATX_HEADING = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]+(.*?))?[ \t]*$")
 # Python-Markdown's attr_list syntax, which the docs site uses to keep an
 # anchor stable when a heading's text changes: ## Short title { #old-anchor }
-_OWN_ID = re.compile(r"[ \t]*\{:?[ \t]*#([\w-]+)[^}]*\}$")
+_ATTRIBUTE_LIST = re.compile(r"[ \t]*\{:?[ \t]*([^{}]*?)[ \t]*\}$")
+_HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 
 
 def _check_anchor(path: str, source: str, anchor: str) -> str | None:
@@ -191,27 +250,18 @@ def _markdown_anchors(source: str) -> tuple[frozenset[str], dict[str, str]]:
     anchors: set[str] = set()
     own_id_for_slug: dict[str, str] = {}
     counts: dict[str, int] = {}
-    fence: str | None = None
-    for line in _without_front_matter(source.splitlines()):
-        # A `#` line inside a fenced code block is code, not a heading.
-        fence_match = _FENCE.match(line)
-        if fence_match:
-            marker, rest = fence_match.groups()
-            if fence is None:
-                fence = marker
-            elif marker[0] == fence[0] and len(marker) >= len(fence) and not rest.strip():
-                fence = None
-            continue
-        if fence is not None:
-            continue
+    # A heading in an HTML comment or a fenced block is not shown, so it has
+    # no anchor; blanking keeps the other lines where they were.
+    visible = _blank_fenced_blocks(_HTML_COMMENT.sub(lambda match: re.sub(r"[^\n]", " ", match.group(0)), source))
+    for line in _without_front_matter(visible.split("\n")):
         heading = _ATX_HEADING.match(line)
         if heading is None:
             continue
         content = re.sub(r"[ \t]+#+$", "", heading.group(2) or "")
-        own_id = _OWN_ID.search(content)
-        if own_id:
-            anchors.add(own_id.group(1))
-            own_id_for_slug[_github_slug(content)] = own_id.group(1)
+        own_id = _own_id(content)
+        if own_id is not None:
+            anchors.add(own_id)
+            own_id_for_slug[_github_slug(content)] = own_id
             continue
         # GitHub numbers a repeated slug: `limits`, `limits-1`, `limits-2`.
         slug = _github_slug(content)
@@ -219,6 +269,20 @@ def _markdown_anchors(source: str) -> tuple[frozenset[str], dict[str, str]]:
         counts[slug] = seen + 1
         anchors.add(slug if seen == 0 else f"{slug}-{seen}")
     return frozenset(anchors), own_id_for_slug
+
+
+def _own_id(heading: str) -> str | None:
+    """Return the id an attr_list at the end of a heading sets (`{ #id }`, `{: .note #id }`), if any."""
+    attributes = _ATTRIBUTE_LIST.search(heading)
+    if attributes is None:
+        return None
+    tokens = attributes.group(1).split()
+    # Every token of an attribute list is `.class`, `#id`, or `key=value`;
+    # anything else means the braces are part of the heading's text.
+    if not tokens or not all(token[0] in ".#" or "=" in token for token in tokens):
+        return None
+    ids = [token[1:] for token in tokens if token.startswith("#") and len(token) > 1]
+    return ids[-1] if ids else None
 
 
 def _without_front_matter(lines: list[str]) -> list[str]:
@@ -231,8 +295,8 @@ def _without_front_matter(lines: list[str]) -> list[str]:
 
 def _github_slug(heading: str) -> str:
     """Return the anchor GitHub gives a heading: its rendered text, lowercased, with punctuation dropped."""
-    # Keep the text of code spans, links, and images; drop HTML tags and
-    # emphasis markers, which GitHub does not show as text.
+    # Keep the text of code spans and links; drop HTML tags and emphasis
+    # markers, which GitHub does not show as text.
     codes: list[str] = []
 
     def hold_code(match: re.Match[str]) -> str:
@@ -240,7 +304,7 @@ def _github_slug(heading: str) -> str:
         return f"\x00{len(codes) - 1}\x00"
 
     text = re.sub(r"`+([^`]*?)`+", hold_code, heading)
-    text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"!?\[([^\]]*)\](?:\([^)]*\)|\[[^\]]*\])", r"\1", text)
     text = re.sub(r"<[^>]+>", "", text)
     text = re.sub(r"(\*\*|__)(.+?)\1", r"\2", text)
     text = re.sub(r"(?<!\w)[*_](.+?)[*_](?!\w)", r"\1", text)
@@ -262,7 +326,7 @@ _TYPE_ALIAS: type | None = getattr(ast, "TypeAlias", None)
 
 def _check_python(path: str, source: str, symbol: str) -> str | None:
     if not _DOTTED_SYMBOL.match(symbol):
-        return f"write the symbol as dotted names, such as `{path}:Class.method`"
+        return _not_a_symbol(symbol, f"dotted names, such as `{path}:Class.method`")
     try:
         body: list[ast.stmt] = _parse_python(source).body
     except SyntaxError as error:
@@ -277,7 +341,8 @@ def _check_python(path: str, source: str, symbol: str) -> str | None:
             return _not_defined(name, ".".join(names[:index]), path)
         if not isinstance(found, _PythonDefinition):
             if index + 1 < len(names):
-                return f"`{'.'.join(names[: index + 1])}` in {path} is a value, so it has no `{names[index + 1]}`"
+                owner = ".".join(names[: index + 1])
+                return f"`{owner}` in {path} is a value, not a function or class; cite `{path}:{owner}` itself"
             return None
         body = found.body
         allow_assignment = isinstance(found, ast.ClassDef)
@@ -312,7 +377,7 @@ def _python_member(body: list[ast.stmt], name: str, *, allow_assignment: bool) -
 def _assigned_names(statement: ast.stmt) -> list[str]:
     targets: list[ast.expr]
     if isinstance(statement, ast.Assign):
-        targets = statement.targets
+        targets = list(statement.targets)
     elif isinstance(statement, ast.AnnAssign):
         targets = [statement.target]
     elif _TYPE_ALIAS is not None and isinstance(statement, _TYPE_ALIAS):
@@ -320,9 +385,15 @@ def _assigned_names(statement: ast.stmt) -> list[str]:
     else:
         return []
     names: list[str] = []
-    for target in targets:
-        elements = target.elts if isinstance(target, ast.Tuple | ast.List) else [target]
-        names.extend(element.id for element in elements if isinstance(element, ast.Name))
+    while targets:
+        # Unpacking can nest: `a, (b, c) = ...` assigns all three.
+        target = targets.pop()
+        if isinstance(target, ast.Tuple | ast.List):
+            targets.extend(target.elts)
+        elif isinstance(target, ast.Starred):
+            targets.append(target.value)
+        elif isinstance(target, ast.Name):
+            names.append(target.id)
     return names
 
 
@@ -338,41 +409,98 @@ def _nested_blocks(statement: ast.stmt) -> Iterator[list[ast.stmt]]:
 
 
 # ---------------------------------------------------------------------------
+# Brackets in masked source
+# ---------------------------------------------------------------------------
+
+
+class _Brackets:
+    """
+    Where each `{`, `(` and `[` in masked source opens and closes.
+
+    Built once per file, so the checks below can ask which block holds a
+    position without counting braces from the start of the file each time.
+    """
+
+    def __init__(self, masked: str) -> None:
+        self.text = masked
+        self.positions = [match.start() for match in re.finditer(r"[{}()\[\]]", masked)]
+        self.close: dict[int, int] = {}
+        self.open_of: dict[int, int] = {}
+        # For each bracket, the index of the open bracket around it (-1 at
+        # the top), so walking outward from a position is a chain of lookups.
+        self.parent: list[int] = []
+        stack: list[int] = []
+        for index, position in enumerate(self.positions):
+            if masked[position] in "{([":
+                self.parent.append(stack[-1] if stack else -1)
+                stack.append(index)
+            else:
+                if stack:
+                    opening = self.positions[stack.pop()]
+                    self.close[opening] = position
+                    self.open_of[position] = opening
+                self.parent.append(stack[-1] if stack else -1)
+
+    def enclosing(self, position: int) -> Iterator[int]:
+        """Yield the open brackets around `position`, innermost first."""
+        index = bisect.bisect_left(self.positions, position) - 1
+        if index >= 0 and self.text[self.positions[index]] not in "{([":
+            index = self.parent[index]
+        while index >= 0:
+            yield self.positions[index]
+            index = self.parent[index]
+
+    def innermost(self, position: int) -> int:
+        return next(self.enclosing(position), -1)
+
+    def closing(self, opening: int) -> int:
+        return self.close.get(opening, len(self.text))
+
+
+@cache
+def _brackets(masked: str) -> _Brackets:
+    return _Brackets(masked)
+
+
+# ---------------------------------------------------------------------------
 # JavaScript and TypeScript
 # ---------------------------------------------------------------------------
 
 
 def _check_javascript(path: str, source: str, symbol: str) -> str | None:
     if not _DOTTED_SYMBOL.match(symbol):
-        return f"write the symbol as dotted names, such as `{path}:object.method`"
+        return _not_a_symbol(symbol, f"dotted names, such as `{path}:object.method`")
     masked = _mask(source, "js")
-    # The first name may be defined at any depth: client.js wraps all of its
-    # code in one anonymous function, so nothing in it is at the top level.
-    regions = [(-1, len(masked))]
+    brackets = _brackets(masked)
     names = symbol.split(".")
+    parent_bodies: list[int] = []
     for index, name in enumerate(names):
-        definitions = [
-            (start, end)
-            for start, end in _javascript_definitions(masked, name)
-            if any(_within(region, start) for region in regions)
-        ]
-        if not definitions:
+        candidates = _javascript_definitions(masked, name)
+        # The first name must sit outside every named definition: at the top
+        # of the file, or in the anonymous function that wraps client.js, so
+        # a local of the same name inside some function does not count. Each
+        # later name must sit in the body of the one before it, with only
+        # control blocks and anonymous callbacks in between.
+        owners = parent_bodies if index else [-1]
+        found = [(start, end) for start, end in candidates if _javascript_owner_body(brackets, start) in owners]
+        if not found:
             return _not_defined(name, ".".join(names[:index]), path)
-        # Each later name must be defined inside the body of the one before.
-        regions = [block for _, end in definitions if (block := _block_after(masked, end))]
-        if not regions and index + 1 < len(names):
-            return f"`{'.'.join(names[: index + 1])}` in {path} has no body, so it has no `{names[index + 1]}`"
+        parent_bodies = [body for _, end in found if (body := _block_after(brackets, end)) is not None]
+        if not parent_bodies and index + 1 < len(names):
+            owner = ".".join(names[: index + 1])
+            return f"`{owner}` in {path} has no body to hold `{names[index + 1]}`; cite `{path}:{owner}` itself"
     return None
 
 
 # The ways a JavaScript or TypeScript name is defined, as a test of the text
 # just before the name and a test of the text from the name's end. The name
 # itself is found first with a plain word search, which keeps this fast.
-_JS_MODIFIERS = r"(?:(?:async|static|get|set|public|private|protected|readonly|override)\s+)*"
+_JS_MODIFIERS = r"(?:(?:async|static|get|set|public|private|protected|readonly|override|declare|abstract)\s+)*"
 _JS_DEFINITION_FORMS = (
     # function name(  /  function* name<T>(
     (re.compile(r"\bfunction\b\s*\*?\s*\Z"), re.compile(r"\s*[<(]")),
-    (re.compile(r"\bclass\s+\Z"), re.compile(r"")),
+    (re.compile(r"\b(?:class|interface|enum|namespace)\s+\Z"), re.compile(r"")),
+    (re.compile(r"\btype\s+\Z"), re.compile(r"\s*(?:<[^<>]*>)?\s*=")),
     # const name =  /  let name: Type =
     (re.compile(r"\b(?:const|let|var)\s+\Z"), re.compile(r"\s*[=:]")),
     # A method in a class or object: name(params) {  /  async name<T>(params): Type {
@@ -380,15 +508,25 @@ _JS_DEFINITION_FORMS = (
         re.compile(rf"(?:^|[\s,{{;]){_JS_MODIFIERS}\*?\s*\Z", re.MULTILINE),
         re.compile(r"\s*(?:<[^<>]*>)?\s*\([^()]*(?:\([^()]*\)[^()]*)*\)\s*(?::[^{;=]*)?\{"),
     ),
+    # A class field: name = value  /  readonly name: Type = value
+    (
+        re.compile(rf"(?:^|[;{{])\s*{_JS_MODIFIERS}\Z", re.MULTILINE),
+        re.compile(r"\s*[?!]?\s*(?::[^=;{}()]*)?=(?![=>])"),
+    ),
     # An object property: name: value
     (re.compile(r"(?:^|[{,])\s*\Z", re.MULTILINE), re.compile(r"\s*:(?!:)")),
     # "name": value  /  Object.defineProperty(target, "name", ...)
-    (re.compile(r"(?:^|[{,])\s*([\"'])\Z", re.MULTILINE), re.compile(r"[\"']\s*:(?!:)")),
-    (re.compile(r"\bObject\.defineProperty\(\s*[\w$.]+\s*,\s*[\"']\Z"), re.compile(r"[\"']")),
+    (re.compile(r"(?:^|[{,])\s*[\"']\Z", re.MULTILINE), re.compile(r"[\"']\s*:(?!:)")),
 )
+# Object.defineProperty(target, "name", ...): the one form whose name sits
+# inside the parentheses of a call.
+_JS_DEFINE_PROPERTY = (re.compile(r"\bObject\.defineProperty\(\s*[\w$.]+\s*,\s*[\"']\Z"), re.compile(r"[\"']"))
 # Far enough back to hold a definition's keywords, and a defineProperty
 # call split over lines.
 _JS_LOOKBACK = 200
+# A block that one of these opens belongs to the code around it, not to a
+# definition of its own.
+_JS_CONTROL_KEYWORDS = frozenset({"if", "for", "while", "switch", "catch", "with", "else", "try", "finally", "do"})
 
 
 @cache
@@ -400,43 +538,122 @@ def _javascript_definitions(masked: str, name: str) -> list[tuple[int, int]]:
     (after its closing quote, for a quoted name), where its parameters or
     value begin.
     """
+    brackets = _brackets(masked)
     found: list[tuple[int, int]] = []
     for word in re.finditer(rf"(?<![\w$]){re.escape(name)}(?![\w$])", masked):
+        # A definition sits in a block or at the top, never inside the
+        # parentheses of a call or a parameter list.
+        opening = brackets.innermost(word.start())
+        forms = _JS_DEFINITION_FORMS if opening == -1 or masked[opening] == "{" else (_JS_DEFINE_PROPERTY,)
         before = masked[max(0, word.start() - _JS_LOOKBACK) : word.start()]
-        for prefix, suffix in _JS_DEFINITION_FORMS:
+        for prefix, suffix in forms:
             after = suffix.match(masked, word.end())
             if after and prefix.search(before):
-                # A quoted name ends after its closing quote.
                 quoted = after.group(0)[:1] in ("'", '"')
-                end = word.end() + 1 if quoted else word.end()
-                found.append((word.start(), end))
+                found.append((word.start(), word.end() + 1 if quoted else word.end()))
                 break
     return found
 
 
-def _block_after(masked: str, position: int) -> tuple[int, int] | None:
+def _javascript_named_block(brackets: _Brackets, opening: int) -> bool:
     """
-    Return the `{ ... }` body of the definition whose name ends at `position`.
+    Say whether a `{` opens the body of a named definition.
+
+    A control block (`if (x) {`, `else {`) and an anonymous function or
+    object (`function (x) {`, a callback such as `items.map((x) => {`)
+    return False: a definition inside one belongs to the named definition
+    around it.
+    """
+    masked = brackets.text
+    head = _javascript_text_before(masked, opening)
+    # `head` starts here in `masked`; it only loses trailing spaces.
+    base = max(0, opening - _JS_LOOKBACK)
+    if not head or head[-1] in ";{}" or _last_name(head) in _JS_CONTROL_KEYWORDS:
+        return False  # a bare block, or one after `else`, `try`, `finally`, or `do`
+    # A parameter or condition list, with an optional TypeScript return
+    # annotation: `if (x) {`, `name(x) {`, `function name(x) {`, `function (x) {`.
+    signature = re.search(r"\)\s*(?::[^{};=()]*)?$", head)
+    if signature:
+        list_open = brackets.open_of.get(base + signature.start(), -1)
+        before_list = re.sub(r"<[^<>]*>$", "", _javascript_text_before(masked, list_open)).rstrip()
+        called = _last_name(before_list)
+        if called in _JS_CONTROL_KEYWORDS:
+            return False
+        if called == "function":
+            # `const name = function (x) {` is named by what it is assigned to.
+            return _javascript_assigned(re.sub(r"(?:\basync\s+)?function$", "", before_list))
+        return called is not None
+    if head.endswith("=>"):
+        # An arrow function: named only when assigned, as in `const name = (x) => {`.
+        params = head[:-2].rstrip()
+        if params.endswith(")"):
+            params = _javascript_text_before(masked, brackets.open_of.get(base + len(params) - 1, -1))
+        else:
+            params = re.sub(rf"{_NAME}$", "", params)
+        return _javascript_assigned(re.sub(r"\basync$", "", params.rstrip()).rstrip())
+    if re.search(rf"\b(?:class|interface|enum|namespace)\s+{_NAME}[^{{}};]*$", head):
+        return True
+    if head[-1] in "(,":
+        # An object passed to a call, as in `const name = Object.freeze({`.
+        call_open = brackets.innermost(opening)
+        callee = re.sub(r"(?:\bnew\s+)?[\w$.]+$", "", _javascript_text_before(masked, call_open)).rstrip()
+        return _javascript_assigned(callee)
+    return _javascript_assigned(head)
+
+
+def _javascript_text_before(masked: str, position: int) -> str:
+    return masked[max(0, position - _JS_LOOKBACK) : max(position, 0)].rstrip()
+
+
+def _last_name(text: str) -> str | None:
+    word = re.search(rf"(?<![\w$.])({_NAME})$", text)
+    return word.group(1) if word else None
+
+
+def _javascript_assigned(text: str) -> bool:
+    """Say whether `text` ends where a value is given a name: `const name =`, `name:`, or `name =`."""
+    return (
+        re.search(
+            rf"(?:\b(?:const|let|var)\s+{_NAME}\s*(?::[^=;{{}}]*)?=|(?:^|[{{,;])\s*[\"']?{_NAME}[\"']?\s*[:=])$",
+            text,
+            re.MULTILINE,
+        )
+        is not None
+    )
+
+
+def _javascript_owner_body(brackets: _Brackets, position: int) -> int:
+    """Return the `{` of the nearest named definition's body around `position`, or -1 at the top level."""
+    for opening in brackets.enclosing(position):
+        if brackets.text[opening] == "{" and _javascript_named_block(brackets, opening):
+            return opening
+    return -1
+
+
+def _block_after(brackets: _Brackets, position: int) -> int | None:
+    """
+    Return the `{` that opens the body of the definition whose name ends at `position`.
 
     Skips what can come between a name and its body: TypeScript type
     parameters, `=` or `:`, `async`, and one parameter list, so the
     destructured parameter in `({a}) => {` is not read as the body. A body
     that a call wraps, as in `Object.freeze({`, is the first brace.
     """
+    masked = brackets.text
     index = _skip_space(masked, position)
     if masked.startswith("<", index):
-        index = _skip_space(masked, _matching(masked, index, "<", ">") + 1)
+        index = _skip_space(masked, _matching_angle(masked, index) + 1)
     if masked.startswith(("=", ":"), index) and not masked.startswith("=>", index):
         index = _skip_space(masked, index + 1)
         if re.match(r"async\b", masked[index : index + 6]):
             index = _skip_space(masked, index + len("async"))
     if masked.startswith("(", index):
-        index = _matching(masked, index, "(", ")") + 1
+        index = brackets.closing(index) + 1
     opening = masked.find("{", index)
     statement_end = masked.find(";", index)
     if opening == -1 or -1 < statement_end < opening:
         return None
-    return opening, _matching(masked, opening, "{", "}")
+    return opening
 
 
 # ---------------------------------------------------------------------------
@@ -452,8 +669,9 @@ _RUST_BLOCK_START = re.compile(
 
 def _check_rust(path: str, source: str, symbol: str) -> str | None:
     if not _RUST_SYMBOL.match(symbol):
-        return f"write the symbol as `name` or `Type::method`, such as `{path}:Writer::element`"
+        return _not_a_symbol(symbol, f"`name` or `Type::method`, such as `{path}:Writer::element`")
     masked = _mask(source, "rust")
+    brackets = _brackets(masked)
     blocks = _rust_blocks(masked)
     if "::" not in symbol:
         item = re.compile(
@@ -461,37 +679,65 @@ def _check_rust(path: str, source: str, symbol: str) -> str | None:
             rf"|\bmacro_rules!\s*{re.escape(symbol)}\b"
         )
         positions = [match.start() for match in item.finditer(masked)]
-        # A method needs its type in the reference, so a match inside an
-        # `impl` or `trait` block does not count as a free item.
-        if any(not any(_within(block, position) for _, block in blocks) for position in positions):
+        # A free item sits at the top of the file or in a `mod` block; one
+        # in an `impl` or `trait` block needs its type, and one inside a
+        # function is local to it.
+        if any(all(_rust_opens_mod(masked, opening) for opening in brackets.enclosing(at)) for at in positions):
             return None
+        impl_openings = {opening for _, (opening, _) in blocks}
+        if any(opening in impl_openings for at in positions for opening in brackets.enclosing(at)):
+            return f"`{symbol}` in {path} is defined in an `impl` or `trait` block; cite it as `Type::{symbol}`"
         if positions:
-            return f"`{symbol}` in {path} is defined inside an `impl` or `trait` block; cite it as `Type::{symbol}`"
+            return f"`{symbol}` in {path} is defined inside another item; cite the item that holds it"
         return _not_defined(symbol, "", path)
     type_name, member = symbol.split("::")
-    owned = [block for owner, block in blocks if owner == type_name]
+    owned = [opening for owner, (opening, _) in blocks if owner == type_name]
     if not owned:
         return f"{path} has no `impl` or `trait` block for `{type_name}`; {_FIX}"
     member_item = re.compile(rf"\b(?:fn|const|type)\s+{re.escape(member)}\b")
-    if any(member_item.search(masked, start, end) for start, end in owned):
-        return None
-    return f"`{member}` is no longer defined in an `impl` or `trait` block for `{type_name}` in {path}; {_FIX}"
+    for opening in owned:
+        for match in member_item.finditer(masked, opening, brackets.closing(opening)):
+            # Directly in the block, not in a function nested in a method.
+            if brackets.innermost(match.start()) == opening:
+                return None
+    return f"`{member}` is not defined in an `impl` or `trait` block for `{type_name}` in {path}; {_FIX}"
+
+
+def _rust_opens_mod(masked: str, opening: int) -> bool:
+    return re.search(r"\bmod\s+\w+\s*$", masked[max(0, opening - 100) : opening]) is not None
 
 
 @cache
 def _rust_blocks(masked: str) -> list[tuple[str, tuple[int, int]]]:
     """Return the type each `impl` or `trait` block belongs to, with the block's extent."""
+    brackets = _brackets(masked)
     blocks: list[tuple[str, tuple[int, int]]] = []
     for match in _RUST_BLOCK_START.finditer(masked):
-        opening = masked.find("{", match.end())
-        statement_end = masked.find(";", match.end())
-        if opening == -1 or -1 < statement_end < opening:
+        opening = _rust_block_opening(masked, match.end())
+        if opening is None:
             continue
         header = masked[match.end() : opening]
         owner = _rust_trait_name(header) if match.group("kind") == "trait" else _rust_self_type(header)
         if owner:
-            blocks.append((owner, (opening, _matching(masked, opening, "{", "}"))))
+            blocks.append((owner, (opening, brackets.closing(opening))))
     return blocks
+
+
+def _rust_block_opening(masked: str, start: int) -> int | None:
+    """Return the `{` that opens an item's block, or None for an item that ends with `;` first."""
+    # Outside `(` and `[`, so the `;` in `impl From<[u8; 16]> for Id` does not end the header.
+    depth = 0
+    for index in range(start, len(masked)):
+        char = masked[index]
+        if char in "([":
+            depth += 1
+        elif char in ")]":
+            depth -= 1
+        elif depth == 0 and char == "{":
+            return index
+        elif depth == 0 and char == ";":
+            return None
+    return None
 
 
 def _rust_trait_name(header: str) -> str | None:
@@ -501,9 +747,10 @@ def _rust_trait_name(header: str) -> str | None:
 
 def _rust_self_type(header: str) -> str | None:
     """Return the type an `impl` block is for: `Writer` in `impl<'a> Writer<'a>` and in `impl Display for Writer`."""
-    text = header.strip()
+    # The `>` of `->` in a bound such as `F: Fn() -> u8` is not a bracket.
+    text = header.replace("->", "  ").strip()
     if text.startswith("<"):
-        text = text[_matching(text, 0, "<", ">") + 1 :]
+        text = text[_matching_angle(text, 0) + 1 :]
     text = re.split(r"\bwhere\b", text, maxsplit=1)[0]
     # `for` outside angle brackets separates the trait from the type.
     depth = 0
@@ -522,11 +769,11 @@ def _rust_self_type(header: str) -> str | None:
 
 def _check_pest(path: str, source: str, symbol: str) -> str | None:
     if not _PEST_SYMBOL.match(symbol):
-        return f"name one grammar rule, such as `{path}:html_attribute`"
+        return _not_a_symbol(symbol, f"one grammar rule, such as `{path}:html_attribute`")
     rule = re.compile(rf"^[ \t]*{re.escape(symbol)}\s*=\s*[_@$!]?\s*\{{", re.MULTILINE)
     if rule.search(_mask(source, "pest")):
         return None
-    return f"rule `{symbol}` is no longer defined in {path}; {_FIX}"
+    return f"rule `{symbol}` is not defined in {path}; {_FIX}"
 
 
 _SYMBOL_CHECKERS: dict[str, Callable[[str, str, str], str | None]] = {
@@ -595,8 +842,12 @@ def _mask(source: str, language: str) -> str:
             end = length if close == -1 else close + 1 + hashes
         elif char == "'" and language == "rust":
             literal = _RUST_CHAR.match(source, index)
-            # Without a closing quote it is a lifetime, such as 'a.
-            end = literal.end() if literal else index + 1
+            if literal is None:
+                # A lifetime such as 'a: keep it, since an `impl` header
+                # needs it to tell `&'a Type` from a type named `a`.
+                index += 1
+                continue
+            end = literal.end()
         elif char in "'\"":
             end = _string_end(source, index, multiline=language == "rust")
             if language == "js" and re.fullmatch(_NAME, source[index + 1 : end - 1]):
@@ -694,6 +945,7 @@ def _starts_regex(source: str, index: int) -> bool:
 
 
 def _regex_end(source: str, start: int) -> int:
+    """Return the index just past a regular expression, or just past the `/` when it was a division after all."""
     index = start + 1
     in_class = False
     while index < len(source):
@@ -702,7 +954,9 @@ def _regex_end(source: str, start: int) -> int:
             index += 2
             continue
         if char == "\n":
-            return index  # a regex never spans lines, so this was not one
+            # A regex never spans lines, so this `/` was not one; blank only
+            # the `/` rather than the code after it.
+            return start + 1
         if char == "[":
             in_class = True
         elif char == "]":
@@ -710,7 +964,7 @@ def _regex_end(source: str, start: int) -> int:
         elif char == "/" and not in_class:
             return index + 1
         index += 1
-    return len(source)
+    return start + 1
 
 
 def _skip_space(text: str, index: int) -> int:
@@ -719,14 +973,14 @@ def _skip_space(text: str, index: int) -> int:
     return index
 
 
-def _matching(text: str, opening: int, open_char: str, close_char: str) -> int:
-    """Return the index of the character that closes the one at `opening`, or the text's end."""
+def _matching_angle(text: str, opening: int) -> int:
+    """Return the index of the `>` that closes the `<` at `opening`, or the text's end."""
     depth = 0
     for index in range(opening, len(text)):
         char = text[index]
-        if char == open_char:
+        if char == "<":
             depth += 1
-        elif char == close_char:
+        elif char == ">" and text[index - 1] != "=":
             depth -= 1
             if depth == 0:
                 return index
