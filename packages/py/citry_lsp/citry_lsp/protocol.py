@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import importlib.metadata
 from dataclasses import asdict, dataclass
 from typing import Literal
 
 from citry_core.template_formatter import python_expression_provider
 
-SERVER_VERSION = "1.0.0"
+# The installed distribution's version, so the server never reports a
+# version other than the one pyproject.toml released.
+SERVER_VERSION = importlib.metadata.version("citry-lsp")
 PROTOCOL_VERSION = 1
 CATALOG_SCHEMA_VERSION = 1
 MINIMUM_CITRY_VERSION = (1, 0, 0)
