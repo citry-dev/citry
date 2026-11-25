@@ -2182,10 +2182,12 @@ break a user's setup. List each one in the changelog:
 
 A minor or patch release may refuse input that earlier releases
 accepted when that is needed to fix a security problem, and its
-changelog says so. When the hole is in a released version, do not open a
-public pull request, and keep the changelog line in the private fix
-until the advisory is published. Follow Mechanism 7 in
-[`CLAUDE.md`](../CLAUDE.md) and [`SECURITY.md`](../SECURITY.md).
+changelog says so. When the hole is in a released version, build the fix
+and its changelog line in the private fork, and make them public only
+when they land for the release, as
+[Releasing advisory fixes](#releasing-advisory-fixes) describes. Follow
+Mechanism 7 in [`CLAUDE.md`](../CLAUDE.md) and
+[`SECURITY.md`](../SECURITY.md).
 
 Any other change that has to break covered behavior in a minor or patch
 release is the maintainer's decision. Ask the maintainer before you open
@@ -2640,38 +2642,60 @@ security advisory. GitHub builds such a fix in a temporary private fork of the
 repository, and the fork causes two problems for a release.
 
 **The fix has never run in CI.** GitHub Actions does not run in a temporary
-private fork, so a fix reaches `main` without a single CI run. For 0.7.0, the
-failures on Windows, Python 3.11, and Python 3.15 first appeared on `main`
-during the release. No code enforces the wait in step 4 of the list below. It
-is a rule for whoever runs the release.
+private fork, so nothing has tested the fix when it first reaches the public
+repository. After a push straight to `main` for 0.7.0, the failures on Windows,
+Python 3.11, and Python 3.15 first appeared on `main` during the release. A
+pull request catches failures in its own checks, but it runs only some of the
+Python tests, so step 4 of the list below applies to both routes. No code
+enforces that wait. It is a rule for whoever runs the release.
 
 **The fork's pull request cannot be merged.** GitHub offers no way to merge it,
-from the web page or through the API, so the fixes reach `main` another way.
-Every change a person makes reaches `main` through a pull request (see
-[How changes reach `main`](#how-changes-reach-main)), except this one.
+from the web page or through the API, so the fixes reach `main` through a
+public pull request of their own, or through a push straight to `main`.
 
-Land the fixes and publish the advisories in this order, as for 0.7.0:
+Land the fixes and publish the advisories in this order:
 
-1. In the private forks, put the fixes in one chain of commits, so `main` can
-   move to the last one in a single fast-forward. Each advisory's branch
-   merges the branches before it, so the last branch contains every fix.
-2. Move `main` to the last commit of that chain with a fast-forward, so every
-   commit keeps its hash and no merge commit is added. The rulesets in
-   [Main branch and release permissions](#main-branch-and-release-permissions)
-   block a direct push to `main`. For 0.7.0 the maintainer set **Require
-   checks for main** and **Require pull requests for main** to Disabled,
-   pushed, and set both back to Active straight away. Check afterwards that
-   their bypass lists match what that section describes.
+1. In the private forks, put the fixes in one chain of commits. Each
+   advisory's branch merges the branches before it, so the last branch
+   contains every fix. Merge current `main` into the chain too, so `main` is
+   an ancestor of its last commit: a fast-forward needs that, and the
+   rulesets require a pull request's branch to be up to date. If `main` moves
+   before the fixes land, merge it into the chain again (a merge keeps the fix
+   commits' hashes) and hold other merges to `main` until the fixes are in.
+2. Bring the chain to `main` by one of two routes. Both keep every fix
+   commit's hash, and both make the fixes public before the advisories are
+   published. The fix is public from the moment you push it, so push only
+   when you can land it as soon as its checks pass.
+   - **Through a pull request (preferred).** Push the chain's last commit to
+     a new branch in the public repository, open a pull request against
+     `main`, and merge it with a merge commit, not a squash or a rebase,
+     which would give the fix commits new hashes. This needs no change to
+     the rulesets in
+     [Main branch and release permissions](#main-branch-and-release-permissions),
+     and the pull request's CI runs before `main` moves. This is the one
+     public pull request for a hole in a released version. Describe the
+     fixes as tightening the code and put the details only in the
+     advisories, which are still private. 1.3.0 took this route
+     ([#881](https://github.com/citry-dev/citry/pull/881)).
+   - **Through a fast-forward push.** Move `main` to the chain's last commit
+     with a fast-forward, so no merge commit is added. The rulesets block a
+     direct push to `main`, so the maintainer sets **Require checks for
+     main** and **Require pull requests for main** to Disabled, pushes, and
+     sets both back to Active straight away, then checks that their bypass
+     lists still match
+     [Main branch and release permissions](#main-branch-and-release-permissions). No CI runs before `main`
+     moves. 0.7.0 took this route.
 3. Close each advisory's fork pull request. GitHub does not publish an
    advisory while its fork pull request is open, so close these before you
    publish the advisories (step 7).
-4. Wait for the runs that push started on `main` to pass: **Check**,
-   **Python tests**, **Rust tests**, and the example and docs runs that apply.
-   A push to `main` that changes the paths in
+4. Wait for the runs that the merge or push started on `main` to pass:
+   **Check**, **Python tests**, **Rust tests**, and the example and docs runs
+   that apply. A push to `main` that changes the paths in
    [`py--tests.yml`](../.github/workflows/py--tests.yml) runs the Python tests
    on every supported system and Python version, where a pull request runs
-   fewer. Do not merge anything else until the runs finish, because a newer
-   push cancels the older push's Python tests (see
+   fewer, so this wait applies to the pull request route too. Do not merge
+   anything else until the runs finish, because a newer push cancels the
+   older push's Python tests (see
    [Cancelling stale runs and targeted diagnostics](#cancelling-stale-runs-and-targeted-diagnostics)).
 5. Fix any failure with an ordinary pull request, and wait again on the new
    tip of `main`.
@@ -2931,9 +2955,10 @@ Create a branch from current `origin/main`, commit the work there, push it,
 and open a pull request against `main`. The required checks must pass against
 an up-to-date base before the pull request merges, as described in
 [Main branch and release permissions](#main-branch-and-release-permissions).
-Releases start from `main` after the pull request merges. A fix built in a
-private security advisory is the one change a person makes that does not go
-through a pull request, because GitHub cannot merge its pull request (see
+Releases start from `main` after the pull request merges. GitHub cannot merge
+the pull request of a private security advisory's fork, so a fix built there
+reaches `main` through a public pull request of its own or, by exception,
+through a fast-forward push (see
 [Releasing advisory fixes](#releasing-advisory-fixes)).
 
 For audits of older work, the `origin/review` branch and the
