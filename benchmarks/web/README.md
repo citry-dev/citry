@@ -179,6 +179,7 @@ Profiles live in [`profiles/`](profiles/). Pass the file name without
 | `release-0.6.0` | the fourteen cohort apps | 14, 140, 1,400 | The `cohort` settings plus the 1,400-output board the docs page shows; run once for the Citry 0.6.0 release |
 | `release-0.7.0-citry` | Citry, Jinja + HTMX + Alpine | 14, 140, 1,400 | The `release-0.6.0` settings with Citry from wheels built before the Citry 0.7.0 release; Jinja + HTMX + Alpine runs again to check that the machine still gives the same times |
 | `release-1.0.0-citry` | Citry, Jinja + HTMX + Alpine | 14, 140, 1,400 | The `release-0.6.0` settings for two apps: Citry at the release its lockfile pins (1.0.0 for the docs page), and Jinja + HTMX + Alpine, which runs again to check that the machine still gives the same times |
+| `release-rusty-templates` | Citry, Django Rusty Templates + HTMX + Alpine, Jinja + HTMX + Alpine | 14, 140, 1,400 | The `release-0.6.0` settings for three apps: Django Rusty Templates at the commit its app pins, and Citry and Jinja + HTMX + Alpine, which run again to check that the machine still gives the same times |
 | `citry-local-wheels` | Citry | 14, 140, 1,400 | Citry from wheels you build; for testing before a release |
 | `nuxt-csr` | Nuxt CSR control | 14, 140 | The client-rendered control on its own |
 | `nuxt-ssr-csr` | Nuxt, Nuxt CSR control | 140, 1,400 | Server-rendered and client-rendered Nuxt side by side |

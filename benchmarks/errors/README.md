@@ -199,7 +199,10 @@ Before the app runs, Citry reports 56 of the 61 mistakes that apply to
 it. The other eleven frameworks' columns are kept from the run in
 [`results/2026-10-21/`](results/2026-10-21/), whose Citry column
 measured Citry built from this repository before the 0.7.0 release
-(54 of 61).
+(54 of 61). The Rusty column was measured with Django Rusty Templates
+commit `0725f87`. Running it again at the current pin, commit `6d10c20`,
+gave the same result in all 63 cells, so the report was not rewritten;
+the next published report will name the new commit.
 
 Each report starts by naming what the run scored: the commit it started
 from and the git tree of the benchmark's inputs, which are `cases/`,
@@ -468,17 +471,18 @@ Rusty's cells match Django's except four:
   subtitle's gettext placeholder from a dictionary, so the misnamed
   argument raises a `KeyError`; Django's tag prints the name as empty
   text.
-- **m05 and m35:** n/a. The version this benchmark pins has no
-  `{% extends %}` or `{% block %}`, so the card writes its own footer
-  link, and the page has no footer to misspell or leave out. For the
-  same reason the page fills nothing in the card, so m36 and m37 are n/a
-  in both apps.
+- **m05 and m35:** n/a. The Rusty card writes its own footer link
+  instead of extending a base card with `{% extends %}` and
+  `{% block %}`, which work at the pinned commit, so the page has no
+  footer to misspell or leave out. The page fills nothing in the card,
+  so m36 and m37 are n/a here, as they are in the Django app, where a
+  block takes no arguments.
 
 Two cases are written differently but end as Django's do. With no
 `{% translate %}` tag, the view translates the heading with Django's
-`gettext`, so a misspelled message id (m15) is missed. With no
-`{% extends %}`, the m47 case misspells the page template's path in the
-view, which fails at runtime.
+`gettext`, so a misspelled message id (m15) is missed. Because the
+Rusty app's templates use no `{% extends %}`, the m47 case misspells the
+page template's path in the view, which fails at runtime.
 
 django-components' cells differ from Django's in these places
 ([`frameworks/django-components/`](frameworks/django-components/) holds
