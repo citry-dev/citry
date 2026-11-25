@@ -15,8 +15,8 @@ decodes its request into the one call-envelope shape (design
 The per-call pipeline, in the normative order (design 6.1's responsibilities
 table): structural envelope validation -> component and event resolution (the
 per-event URL is authoritative) -> the transport's CSRF check -> state-token
-verification and two-way binding updates -> args validation -> the
-``on_event`` emit hook (veto) -> the ``_context`` hook -> guards -> the
+verification and two-way binding updates -> the ``on_event`` emit hook
+(veto) -> the ``_context`` hook -> guards -> args validation -> the
 handler with by-name injection -> return coercion and wire encoding -> the
 ``on_event_result`` emit hook -> the state re-sign -> the send_sequence echo.
 Uncaught exceptions become a generic 500 through ``on_event_error``;
@@ -289,7 +289,11 @@ class CallEvent:
             names removed (the ``_csrf_field_names`` key of
             ``extensions_defaults["events"]``).
             Guards read this when they need payload values, because one guard
-            covers handlers with different schemas.
+            covers handlers with different schemas. A guard runs before
+            Citry checks the args against the handler's ``data`` class, so
+            a key may be missing, have another type, or be longer or more
+            deeply nested than the class allows. Read it with ``.get()``,
+            check the type, and keep the guard's work on it small.
 
     """
 
@@ -309,12 +313,14 @@ class OnEventContext:
     """
     Context of the ``on_event`` emit hook, fired before every handler run.
 
-    Fires after token verification and args validation, before ``_context``
-    and guards (design 3.7), with ``result="first"``: an extension that
+    Fires after token verification, before ``_context``, guards, and args
+    validation (design 3.7), with ``result="first"``: an extension that
     returns a non-``None`` value answers the call in the handler's place
     (the value is coerced exactly like a handler return value), and raising
     [`EventError`][citry.ext.events.EventError] denies the call.
-    This is where rate limiting plugs in.
+    This is where rate limiting plugs in. ``events.event.args`` is not
+    checked against the handler's ``data`` class yet, and when an extension
+    answers the call, Citry skips that check.
 
     Attributes:
         citry: The engine the call dispatches against.
@@ -1164,7 +1170,8 @@ class EventsDispatcher:
                     if too_large is not None:
                         return build_error_result(build_error(422, "invalid_args", too_large), send_sequence)
 
-        # Args validation against the handler's data schema (design 3.3, WP9).
+        # The call's args as the guards and the handler see them (design 3.3,
+        # WP9). The data class checks them later, after the guards.
         args = call.get("args") or {}
         # The browser marks args it collected from a form: their values are
         # the form's text, so they bind to numbers and booleans exactly as a
@@ -1173,43 +1180,20 @@ class EventsDispatcher:
             args = StringArgs(args)
         # A form may hold the host's CSRF hidden field, which the browser and
         # a no-JS post both send as one more field; drop it first so the call
-        # is not rejected for a field the data class never asked for. The
-        # drop keeps the args' class, so the form conversion above survives.
-        validation = None
+        # is not rejected for a field the data class never asked for, and so
+        # guards never see it in `self.event.args`. The drop keeps the args'
+        # class, so the form conversion above survives.
         try:
             args = _without_csrf_fields(args, handler.data_schema, csrf_field_names(ctx.citry))
-            if handler.data_schema is not None:
-                validation = validate_args(handler.data_schema, args)
         except EventError as err:
             return build_error_result(wire_error(err), send_sequence)
-        except Exception as err:  # noqa: BLE001 - a crash while checking args answers this call only
-            # The data class's own code (a `__post_init__`, a validator, a
-            # class Citry cannot read) may raise anything. Without this, the
-            # exception would leave the dispatcher and end the whole
-            # request, losing the results of the calls that already ran.
+        except Exception as err:  # noqa: BLE001 - a crash while reading the data class answers this call only
+            # Reading the data class's declared fields runs the class's own
+            # code, which may raise anything; the exception must not leave
+            # the dispatcher and end the whole request.
             return self._unexpected_error(
                 ctx, err, comp_cls=comp_cls, handler=handler, send_sequence=send_sequence, checking_args=True
             )
-        data_value: Any = None
-        if validation is not None:
-            if not validation.ok:
-                message = f"The args for event {event_name!r} on component {comp_cls.__name__!r} did not validate."
-                # Validation listed only the first undeclared keys and the
-                # first item errors of each list or dict; the message
-                # counts the rest.
-                message += unlisted_fields_note(validation.unlisted_fields)
-                return build_error_result(build_error(422, "invalid_args", message, validation.fields), send_sequence)
-            data_value = validation.value
-        elif args:
-            # A handler that declares no data takes no input; extra keys are
-            # a 422 here exactly as they are on a schema (design 3.3).
-            message = f"The args for event {event_name!r} on component {comp_cls.__name__!r} did not validate."
-            extra = dict.fromkeys(sorted(str(key) for key in args), "Unexpected field: not declared on the schema.")
-            # Every key here is undeclared, so the request decides how many
-            # there are: list the first few and count the rest.
-            extra, unlisted = limit_unexpected_fields(extra, extra.keys())
-            message += unlisted_fields_note(unlisted)
-            return build_error_result(build_error(422, "invalid_args", message, extra), send_sequence)
 
         # The per-call events instance: the woven config class (the
         # component's Events class as the extension manager rebuilt it on the
@@ -1219,7 +1203,12 @@ class EventsDispatcher:
         events_cls = getattr(comp_cls, "Events")  # noqa: B009 - the woven config class, always present
         events = events_cls(None)
         event_request = request if request is not None else EventRequest(headers=ctx.headers, native=ctx.host_request)
-        call_event = CallEvent(name=event_name, instance_id=instance_id, transport=ctx.transport, args=args)
+        # The guards run before the data check and receive their own copy of
+        # the args, so a guard that changes `self.event.args` cannot change
+        # what the data class checks. The copy keeps the args' class.
+        call_event = CallEvent(
+            name=event_name, instance_id=instance_id, transport=ctx.transport, args=type(args)(args)
+        )
         events.state = state
         events.context = None
         events.request = event_request
@@ -1248,6 +1237,57 @@ class EventsDispatcher:
             return self._unexpected_error(
                 ctx, err, comp_cls=comp_cls, handler=handler, events=events, send_sequence=send_sequence
             )
+
+        # Args validation against the handler's data schema (design 3.3, WP9).
+        # It runs after the guards, so a caller they refuse gets their error
+        # and the server does not check a large payload it will not use. An
+        # on_event answer is used in the handler's place, and only the
+        # handler reads the checked data, so the check is skipped then.
+        data_value: Any = None
+        if answered is _NOT_ANSWERED:
+            validation = None
+            try:
+                if handler.data_schema is not None:
+                    validation = validate_args(handler.data_schema, args)
+            except EventError as err:
+                return build_error_result(wire_error(err), send_sequence)
+            except Exception as err:  # noqa: BLE001 - a crash while checking args answers this call only
+                # The data class's own code (a `__post_init__`, a validator, a
+                # class Citry cannot read) may raise anything. Without this, the
+                # exception would leave the dispatcher and end the whole
+                # request, losing the results of the calls that already ran.
+                return self._unexpected_error(
+                    ctx,
+                    err,
+                    comp_cls=comp_cls,
+                    handler=handler,
+                    events=events,
+                    send_sequence=send_sequence,
+                    checking_args=True,
+                )
+            if validation is not None:
+                if not validation.ok:
+                    message = f"The args for event {event_name!r} on component {comp_cls.__name__!r} did not validate."
+                    # Validation listed only the first undeclared keys and the
+                    # first item errors of each list or dict; the message
+                    # counts the rest.
+                    message += unlisted_fields_note(validation.unlisted_fields)
+                    return build_error_result(
+                        build_error(422, "invalid_args", message, validation.fields), send_sequence
+                    )
+                data_value = validation.value
+            elif args:
+                # A handler that declares no data takes no input; extra keys are
+                # a 422 here exactly as they are on a schema (design 3.3).
+                message = f"The args for event {event_name!r} on component {comp_cls.__name__!r} did not validate."
+                extra = dict.fromkeys(
+                    sorted(str(key) for key in args), "Unexpected field: not declared on the schema."
+                )
+                # Every key here is undeclared, so the request decides how many
+                # there are: list the first few and count the rest.
+                extra, unlisted = limit_unexpected_fields(extra, extra.keys())
+                message += unlisted_fields_note(unlisted)
+                return build_error_result(build_error(422, "invalid_args", message, extra), send_sequence)
 
         injectables: dict[str, Any] = {
             "data": data_value,

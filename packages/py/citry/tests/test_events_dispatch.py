@@ -1838,8 +1838,12 @@ class TestArgsCheckCrash:
         [item] = _dispatch(c, call)["results"]
 
         assert item["error"]["code"] == "handler_error"
-        # The handler was resolved, but the call had not built its events instance.
-        assert seen == {"error": "the data class has a bug", "handler": "run", "events": None}
+        # The data check runs after the guards, so the call has already
+        # built its events instance and the hook receives it.
+        assert seen["error"] == "the data class has a bug"
+        assert seen["handler"] == "run"
+        assert seen["events"] is not None
+        assert seen["events"].event.args == {"kind": "boom"}
 
     @pytest.mark.parametrize("use_async_dispatch", [False, True])
     def test_an_event_error_from_a_data_class_answers_with_its_status(self, use_async_dispatch):
@@ -1965,7 +1969,7 @@ class TestPipelineOrder:
         assert ran == [("hook", "ping")]
         assert result["results"][0]["actions"] == [{"action": "data", "value": {"limited": True}}]
 
-    def test_on_event_fires_after_validation_and_can_veto(self):
+    def test_on_event_fires_before_validation_and_can_veto(self):
         fired = []
 
         class Veto(Extension):
@@ -1978,7 +1982,8 @@ class TestPipelineOrder:
         c = _citry(extensions=[Veto])
         counter = _counter(c)
 
-        # Invalid args never reach the hook (validation is earlier).
+        # The hook refuses the call before Citry checks its data, so a
+        # rate limit costs no validation and the caller gets the hook's 403.
         bad = {
             "componentClassId": counter.class_id,
             "handlerName": "rename",
@@ -1986,13 +1991,33 @@ class TestPipelineOrder:
             "stateToken": _token(counter),
         }
         result = _dispatch(c, bad)
-        assert result["results"][0]["error"]["code"] == "invalid_args"
-        assert fired == []
+        assert result["results"][0]["error"]["code"] == "forbidden"
+        assert fired == ["rename"]
 
         good = {"componentClassId": counter.class_id, "handlerName": "square", "args": {"value": 2}}
         result = _dispatch(c, good)
-        assert fired == ["square"]
+        assert fired == ["rename", "square"]
         assert result["results"][0]["error"]["message"] == "Slow down."
+
+    def test_an_on_event_answer_skips_the_data_check(self):
+        # The answer replaces the handler, which is the only reader of the
+        # checked data, so invalid args do not turn the answer into a 422.
+        class Limiter(Extension):
+            name = "limiter"
+
+            def on_event(self, ctx):
+                return {"limited": True}
+
+        c = _citry(extensions=[Limiter])
+        counter = _counter(c)
+        call = {
+            "componentClassId": counter.class_id,
+            "handlerName": "rename",
+            "args": {},
+            "stateToken": _token(counter),
+        }
+        result = _dispatch(c, call)
+        assert result["results"][0]["actions"] == [{"action": "data", "value": {"limited": True}}]
 
     def test_on_event_result_maps_the_encoded_actions(self):
         class Rewriter(Extension):
@@ -4334,3 +4359,252 @@ class TestStateRenewal:
         assert _dispatch(c, self._call(notes, "read", token))["results"][0]["error"]["code"] == "stale_state"
         [item] = _dispatch(c, self._call(notes, "read", new_token))["results"]
         assert item["actions"][-1] == {"action": "data", "value": {"count": 5}}
+
+
+class TestGuardsBeforeDataCheck:
+    """
+    `_context` and the guards run before Citry checks the call's data.
+
+    A caller a guard refuses gets the guard's error even when its data is
+    invalid, and an allowed caller still gets `invalid_args` (design 3.6).
+    """
+
+    def _vault(self, c, runs):
+        class OpenIn:
+            who: str
+            n: int
+
+        class VaultState:
+            opened: int = 0
+
+        class Vault(Component):
+            citry = c
+            State = VaultState
+            template = "<div>v</div>"
+
+            class Events:
+                def _context(self):
+                    runs.append("context")
+                    return {"user": "ada"}
+
+                def _guard(self):
+                    runs.append("guard")
+                    # Guards read the args before the data class checks them.
+                    if self.event.args.get("who") == "intruder":
+                        raise EventError("Not allowed.", status=403)
+
+                def open(self, data: OpenIn, state):
+                    runs.append("handler")
+                    state.opened += data.n
+                    return {"opened": state.opened}
+
+        return Vault
+
+    def _call(self, vault, args):
+        return {"componentClassId": vault.class_id, "handlerName": "open", "args": args, "stateToken": _token(vault)}
+
+    @pytest.mark.parametrize("use_async_dispatch", [False, True])
+    def test_a_refused_caller_with_invalid_data_gets_the_guards_403(self, use_async_dispatch):
+        c = _citry()
+        runs: list[str] = []
+        vault = self._vault(c, runs)
+        envelope = _envelope(self._call(vault, {"who": "intruder", "n": "not a number"}))
+        dispatcher = EventsDispatcher()
+        if use_async_dispatch:
+            result = asyncio.run(dispatcher.dispatch_async(envelope, _ctx(c)))
+        else:
+            result = dispatcher.dispatch(envelope, _ctx(c))
+        [item] = result["results"]
+        assert item["error"]["status"] == 403
+        assert item["error"]["code"] == "forbidden"
+        assert item["error"]["message"] == "Not allowed."
+        # The 403 says nothing about the invalid field.
+        assert "fieldErrors" not in item["error"]
+        assert runs == ["context", "guard"]
+
+    def test_an_allowed_caller_with_invalid_data_still_gets_invalid_args(self):
+        c = _citry()
+        runs: list[str] = []
+        vault = self._vault(c, runs)
+        [item] = _dispatch(c, self._call(vault, {"who": "ada", "n": "not a number"}))["results"]
+        assert item["error"]["status"] == 422
+        assert item["error"]["code"] == "invalid_args"
+        assert set(item["error"]["fieldErrors"]) == {"n"}
+        assert runs == ["context", "guard"]
+
+    def test_an_allowed_caller_with_valid_data_runs_each_step_once(self):
+        c = _citry()
+        runs: list[str] = []
+        vault = self._vault(c, runs)
+        [item] = _dispatch(c, self._call(vault, {"who": "ada", "n": 2}))["results"]
+        assert item["ok"] is True
+        assert runs == ["context", "guard", "handler"]
+
+    def test_each_call_of_a_batch_gets_its_own_answer(self):
+        c = _citry()
+        runs: list[str] = []
+        vault = self._vault(c, runs)
+        result = _dispatch(
+            c,
+            self._call(vault, {"who": "intruder", "n": "x"}),
+            self._call(vault, {"who": "ada", "n": "x"}),
+            self._call(vault, {"who": "ada", "n": 1}),
+        )
+        refused, invalid, accepted = result["results"]
+        assert refused["error"]["code"] == "forbidden"
+        assert invalid["error"]["code"] == "invalid_args"
+        assert accepted["ok"] is True
+        assert runs == ["context", "guard", "context", "guard", "context", "guard", "handler"]
+
+    def test_a_per_handler_guard_also_runs_before_the_data_check(self):
+        c = _citry()
+        runs: list[str] = []
+
+        def refuse(events):
+            runs.append("guard")
+            raise EventError("Not allowed.", status=403)
+
+        class OnlyIn:
+            n: int
+
+        class Locked(Component):
+            citry = c
+            template = "<div>l</div>"
+
+            class Events:
+                @event(guard=refuse)
+                def go(self, data: OnlyIn):
+                    runs.append("handler")
+
+        [item] = _dispatch(c, {"componentClassId": Locked.class_id, "handlerName": "go", "args": {"n": "x"}})[
+            "results"
+        ]
+        assert item["error"]["code"] == "forbidden"
+        assert runs == ["guard"]
+
+    def test_a_handler_without_data_refuses_extra_args_after_the_guard(self):
+        c = _citry()
+        runs: list[str] = []
+
+        class Plain(Component):
+            citry = c
+            template = "<div>p</div>"
+
+            class Events:
+                def _guard(self):
+                    runs.append("guard")
+                    if self.event.args.get("who") == "intruder":
+                        raise EventError("Not allowed.", status=403)
+
+                def go(self):
+                    runs.append("handler")
+
+        call = {"componentClassId": Plain.class_id, "handlerName": "go"}
+        [refused, invalid] = _dispatch(c, {**call, "args": {"who": "intruder"}}, {**call, "args": {"who": "ada"}})[
+            "results"
+        ]
+        assert refused["error"]["code"] == "forbidden"
+        assert invalid["error"]["code"] == "invalid_args"
+        assert runs == ["guard", "guard"]
+
+    def test_a_guard_that_changes_the_args_does_not_change_the_checked_data(self):
+        c = _citry()
+        runs: list[str] = []
+
+        class OnlyIn:
+            n: int
+
+        class Fixer(Component):
+            citry = c
+            template = "<div>f</div>"
+
+            class Events:
+                def _guard(self):
+                    # The guard gets its own copy of the args.
+                    self.event.args["n"] = 5
+
+                def go(self, data: OnlyIn):
+                    runs.append("handler")
+
+        [item] = _dispatch(c, {"componentClassId": Fixer.class_id, "handlerName": "go", "args": {"n": "x"}})["results"]
+        assert item["error"]["code"] == "invalid_args"
+        assert runs == []
+
+    def test_a_guard_that_crashes_on_invalid_args_answers_500(self):
+        c = _citry()
+
+        class OnlyIn:
+            n: int
+
+        class Strict(Component):
+            citry = c
+            template = "<div>s</div>"
+
+            class Events:
+                def _guard(self):
+                    # Indexing assumes valid data, which a guard cannot.
+                    if self.event.args["n"] > 10:
+                        raise EventError("Too many.", status=403)
+
+                def go(self, data: OnlyIn):
+                    return None
+
+        [item] = _dispatch(c, {"componentClassId": Strict.class_id, "handlerName": "go", "args": {}})["results"]
+        assert item["error"]["status"] == 500
+        assert item["error"]["code"] == "handler_error"
+
+
+class TestGuardsSeeStateWrites:
+    """
+    Guards see State after the browser's `_model` writes (design 3.6).
+
+    Only the args check moved after the guards: a State write the server
+    refuses still answers 422 before any guard runs.
+    """
+
+    def _panel(self, c, seen):
+        class PanelState:
+            role: str = "viewer"
+
+        class Panel(Component):
+            citry = c
+            State = PanelState
+            template = "<div>p</div>"
+
+            class Events:
+                def _guard(self):
+                    seen.append(self.state.role)
+                    raise EventError("Not allowed.", status=403)
+
+                def go(self, state):
+                    return None
+
+        return Panel
+
+    def test_the_guard_sees_the_written_value(self):
+        c = _citry()
+        seen: list[str] = []
+        panel = self._panel(c, seen)
+        call = {
+            "componentClassId": panel.class_id,
+            "handlerName": "go",
+            "stateToken": _token(panel),
+            "stateUpdates": {"role": "admin"},
+        }
+        [item] = _dispatch(c, call)["results"]
+        assert item["error"]["code"] == "forbidden"
+        assert seen == ["admin"]
+
+    def test_a_refused_state_write_answers_422_before_the_guard(self):
+        c = _citry()
+        seen: list[str] = []
+        panel = self._panel(c, seen)
+        call = {
+            "componentClassId": panel.class_id,
+            "handlerName": "go",
+            "stateToken": _token(panel),
+            "stateUpdates": {"role": 5},
+        }
+        [item] = _dispatch(c, call)["results"]
+        assert item["error"]["code"] == "invalid_args"
+        assert seen == []
