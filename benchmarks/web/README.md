@@ -273,7 +273,10 @@ same Mac:
   that one run, with Citry 0.6.0 and citry-core 1.8.0 installed from PyPI.
   The runner recorded commit `55740fd66` with no uncommitted changes; that
   local commit has the same benchmark sources as the change that published
-  these numbers.
+  these numbers. In that run the Rusty + HTMX + Alpine app used Django
+  Rusty Templates commit `0725f87`, which rendered `{% empty %}` wrongly
+  for an empty list, so the app rewrote each `{% for %}...{% empty %}` as
+  `{% if %}{% for %}...{% else %}...{% endif %}`.
 
 The `release-1.0.0-citry` run also measured Jinja + HTMX + Alpine again,
 to check that the Mac gave the same times on both days. Its totals moved

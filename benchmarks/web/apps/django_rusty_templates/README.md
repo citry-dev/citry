@@ -12,9 +12,10 @@ to git commit `6d10c20f09dd88fbbf4c75a93847f47655a864f4` from
 [LilyFirefly/django-rusty-templates](https://github.com/LilyFirefly/django-rusty-templates),
 committed on 2026-11-24. That commit's Cargo package declares version 0.1.0 and
 uses the BSD-3-Clause license, retained in `assets/django_rusty_templates.LICENSE`.
-Preparation builds the native extension and therefore requires a Rust toolchain
-and Maturin. The exact source and license provenance is recorded in
-`provenance.json`; the independent `uv.lock` records the same git revision.
+Preparation builds the native extension and therefore requires a Rust
+toolchain (the pinned commit declares Rust 1.99 or newer) and Maturin. The
+exact source and license provenance is recorded in `provenance.json`; the
+independent `uv.lock` records the same git revision.
 
 The app renders the Django app's `board.html` and `page.html` unchanged, so
 both apps give their engines the same template text. A strict parity test renders

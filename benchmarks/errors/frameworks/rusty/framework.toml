@@ -20,9 +20,10 @@ templates need Django's own engine (`manage.py check` reports admin.E403 \
 otherwise) and the board does not use it. The pinned commit's parser does not \
 know several tags and filters the Django app uses. An unknown tag raises \
 NotImplementedError when the template loads, and so does `{% load %}` of a \
-library with any tag that is not a simple tag, which includes Django's `i18n` \
-and `static` libraries. The template differences, each written the way a \
-Rusty user would work around the missing part:
+library with any tag that is neither a simple tag nor a simple block tag, \
+which includes Django's `i18n` and `static` libraries. The template \
+differences, each written the way a Rusty user would work around the \
+missing part:
 - no `{% load i18n static %}`: the page writes the static files' URLs as `{{ \
 STATIC_URL }}board/...`, the variable Django's `static` context processor \
 provides, which gives the same URLs as `{% static %}`. Writing plain \
@@ -35,11 +36,12 @@ it;
 `django.utils.html.json_script`, the function behind the filter, and the \
 template prints the `<script>` tag it returns;
 - no `{% partialdef %}`: the counter's text is its own template, \
-board/saved.html, which the page includes and the save view renders;
+board/saved.html, which the page includes and the save view renders.
 
-The card does not use `{% extends %}` and `{% block %}`, which work at the \
-pinned commit: it writes its own footer link, so the page fills no footer \
-under any name. A card written as a Django `simple_block_tag`, the usual \
+The card does not use `{% extends %}` or `{% block %}`, although both work \
+at the pinned commit. The app was written without them and has not been \
+changed to use them: the card writes its own footer link, so the page fills \
+no footer under any name. A card written as a Django `simple_block_tag`, the usual \
 other way to take markup, fails when the template loads at this commit with \
 Django 6.1.3 (TemplateSyntaxError: 'card' must have a first argument of \
 'content'). The page could also hand the card a template name for \

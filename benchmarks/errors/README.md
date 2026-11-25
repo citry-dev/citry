@@ -473,10 +473,11 @@ Rusty's cells match Django's except four:
   text.
 - **m05 and m35:** n/a. The Rusty card writes its own footer link
   instead of extending a base card with `{% extends %}` and
-  `{% block %}`, which work at the pinned commit, so the page has no
+  `{% block %}`. Both work at the pinned commit, but the app was written
+  without them and has not been changed to use them, so the page has no
   footer to misspell or leave out. The page fills nothing in the card,
-  so m36 and m37 are n/a here, as they are in the Django app, where a
-  block takes no arguments.
+  so m36 and m37 are n/a too. They are n/a in the Django app as well,
+  because a Django block takes no arguments.
 
 Two cases are written differently but end as Django's do. With no
 `{% translate %}` tag, the view translates the heading with Django's
