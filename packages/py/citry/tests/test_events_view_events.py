@@ -13,7 +13,7 @@ import json
 import pytest
 
 from citry import Citry, Component, Extension
-from citry.ext.events import event
+from citry.ext.events import EventError, event
 from citry.ext.events.handlers import event_options
 from citry.ext.events.view_events import (
     VERB_HANDLER_NAMES,
@@ -480,3 +480,38 @@ class TestVerbRoute:
         assert response.status_code == 200
         [result] = response.json()["results"]
         assert result["actions"] == [{"action": "data", "value": {"sent": "n@m.o"}}]
+
+
+class TestVerbRouteGuardOrder:
+    def test_the_guard_answers_before_the_data_check(self):
+        # The verb route runs the same pipeline as the per-event route, so a
+        # refused caller with invalid data gets the guard's 403, not a 422.
+        c = _citry()
+        runs: list[str] = []
+
+        class OpenIn:
+            who: str
+            n: int
+
+        class Vault(Component):
+            citry = c
+
+            class Events(ViewEvents):
+                def _guard(self):
+                    runs.append("guard")
+                    if self.event.args.get("who") == "intruder":
+                        raise EventError("Not allowed.", status=403)
+
+                def post(self, data: OpenIn):
+                    return {"n": data.n}
+
+            template = """
+                <form></form>
+            """
+
+        client = _mounted(c)
+        refused = client.post(_verb_url(Vault), data={"who": "intruder", "n": "x"})
+        invalid = client.post(_verb_url(Vault), data={"who": "ada", "n": "x"})
+        accepted = client.post(_verb_url(Vault), data={"who": "ada", "n": "2"})
+        assert (refused.status_code, invalid.status_code, accepted.status_code) == (403, 422, 200)
+        assert runs == ["guard", "guard", "guard"]

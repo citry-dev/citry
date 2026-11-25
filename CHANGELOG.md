@@ -81,6 +81,19 @@
     ```
 
     See [`Dispatch` browser events](https://citry.dev/events/actions/#notify-browser-code-that-something-happened).
+- Security: a call that a guard refuses now gets the guard's error,
+  such as 403, even when its args are invalid; 1.2.x answered 422
+  `invalid_args` and listed the invalid fields. Events now run
+  `_context` and the guards before they check the args against the
+  handler's `data` class, so both also run, with any side effects, for
+  calls whose args are invalid. A guard that reads `self.event.args` can
+  see a missing key or a value of the wrong type, and a guard that
+  raises on one answers 500, so read each value with `.get()` and check
+  its type. The experimental `on_event` hook now runs before the check
+  too, and when it answers a call, Citry skips the check. As in 1.2.x, a
+  guard sees the browser's writes to `State._model` fields, so leave the
+  fields a guard decides on out of `_model`. See
+  [Authorize every event](https://citry.dev/security/#authorize-every-event).
 
 ### Fixes
 
