@@ -73,12 +73,16 @@ _LINE_NUMBER_AFTER_SPAN = re.compile(
 )
 
 # The check reads `path:Symbol` and `path#anchor`, so a docs heading in
-# quotes after a Markdown path, or a function or class name beside a code
-# file's path written alone, would pass whatever the name says. These two
-# shapes are rejected so every section and function is named in a reference.
-_QUOTED_HEADING = re.compile(r"`[\w./-]+\.md`(?:\s+\(|,\s)\s*[\"\u201c][^\"\u201d\n]*[\"\u201d]")
+# quotes (or in backticks, in parentheses) after a Markdown path, or a
+# function or class name beside a code file's path written alone, would pass
+# whatever the name says. The common wordings of these two shapes are
+# rejected; other wordings are left to review.
+_QUOTED_HEADING = re.compile(
+    r"`[\w./-]+\.md`(?:\s+\(|,\s)\s*[\"\u201c][^\"\u201d\n]*[\"\u201d]|`[\w./-]+\.md`\s+\(`[^`\n]+`\)"
+)
 _CODE_PATH_ALONE = r"`[\w./-]+/[\w.-]+\.(?:py|js|mjs|ts|rs|pest)`"
-_BARE_NAME = r"`[A-Za-z_][\w.]*(?:\(\))?`"
+# A name, not another file: `Class.method` and `name()` count, `vue.js` does not.
+_BARE_NAME = r"`(?![\w.]*\.(?:py|js|mjs|ts|rs|pest|md|ya?ml|json|toml|css|html)`)[A-Za-z_][\w.]*(?:\(\))?`"
 _NAME_BESIDE_PATH = re.compile(
     rf"{_BARE_NAME}(?:\s+in\s+|\s+\(|,\s*){_CODE_PATH_ALONE}|{_CODE_PATH_ALONE}(?:,\s*|\s+\(){_BARE_NAME}"
 )
@@ -441,10 +445,13 @@ def _nested_blocks(statement: ast.stmt) -> Iterator[list[ast.stmt]]:
 # These files are read with a few patterns, and a name counts when any one of
 # them finds it defined anywhere in the file. Each pattern starts at the
 # beginning of a line (after indentation and keywords such as `export` or
-# `pub`), so a name inside a comment or a string does not count, and no
-# reader of comments and strings is needed. The check cannot see that a
-# name was renamed when another definition with the same name is left in
-# the file. Python files do not have that gap: `ast` reads them in full.
+# `pub`), so a name after `//` or in the middle of a line does not count,
+# and no reader of comments and strings is needed. What does count: a line
+# inside a block comment or a multi-line string that starts like a
+# definition, a control keyword such as `if (x) {`, a parameter line, and a
+# plain reassignment. The check also cannot see that a name was renamed when
+# another definition with the same name is left in the file. Python files do
+# not have these gaps: `ast` reads them in full.
 
 _JS_MODIFIERS = (
     r"(?:(?:export|default|declare|abstract|static|async|get|set|public|private|protected|readonly|override)[ \t]+)*"
@@ -456,9 +463,12 @@ _JS_DEFINITIONS = tuple(
         rf"^[ \t]*{_JS_MODIFIERS}"
         rf"(?:function[ \t]*\*?|class|interface|enum|namespace|type|const|let|var)[ \t]+({_NAME})",
         # A method, an object property, or a class field: name(  name<T>(  name:  name =
-        # After the `(`, a line that ends with `;` is a call statement, not a method.
+        # After the `(`, the parameters must run on to the next line, or close with a
+        # `{` (a method) or `: Type;` (a signature) after them, so that a call
+        # such as `own(x) || own(y)) {` or `foo(a, () => {` is not a method.
         rf"^[ \t]*{_JS_MODIFIERS}\*?[ \t]*({_NAME})[ \t]*[?!]?[ \t]*"
-        r"(?:(?:<[^>\n]*>)?\((?![^\n]*;[ \t]*$)|:|=(?![=>]))",
+        r"(?:(?:<[^>\n]*>)?\((?:[ \t]*$|[^()\n]*(?:\([^()\n]*\)[^()\n]*)*"
+        r"\)[ \t]*(?::[^\n{;=]*;|(?::[^\n{;=]*)?\{))|:|=(?![=>]))",
         # A property added to an object: Object.defineProperty(target, "name", ...)
         rf"^[ \t]*Object\.defineProperty\(\s*[\w$.]+\s*,\s*[\"']({_NAME})[\"']",
     )

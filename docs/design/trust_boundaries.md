@@ -497,10 +497,10 @@ as far as the review found.
     `function name`, `const name`, `name(` or `name:` for a method or
     property, `fn name`, `struct Name`, an `impl` line, `rule =`). Each
     part of the name (`a.b.c`, or `Type::method`) only has to be defined
-    somewhere in the file, so a name in a comment or a string does not
-    count. The check does not notice a rename when a definition with the
-    same name is still in the file, or when the old name still starts a
-    line inside a block comment or a multi-line string.
+    somewhere in the file, so the check does not notice a rename when a
+    definition with the same name is still in the file. A name after `//`
+    or in the middle of a line does not count, but a line inside a block
+    comment or a multi-line string that starts like a definition does.
   - A Markdown anchor is the heading's own `{ #id }` when it sets one,
     otherwise GitHub's slug of its text.
 
@@ -511,7 +511,7 @@ as far as the review found.
   `:Symbol` or `#anchor`, which it cannot check. Each failure names the
   line in this doc, the reference, and what to change. The check runs in
   the `validators` phase of `scripts/check.py`, in both the fast and the
-  full profile, and takes about a quarter of a second, because it reads
+  full profile, and takes under half a second, because it reads
   the files without importing or building anything. It proves that each
   name still exists, not that the row still describes it; the security
   pass checks that.
