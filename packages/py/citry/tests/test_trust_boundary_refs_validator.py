@@ -259,6 +259,14 @@ def test_a_doc_whose_references_all_resolve_passes(tmp_path: Path) -> None:
         # reference may not wrap onto the next line.
         ("`` a`b `` then `pkg/mod.py:NOPE`", "`NOPE` is not defined"),
         ("`pkg/mod.py:Checker.check\nand more`", "keep a reference on one line"),
+        # A heading in quotes, or a name beside a path written alone, would
+        # pass unchecked, so each must be written as a reference.
+        ('`docs/guide.md` ("Guide")', "cannot be checked; cite the section as `path#anchor`"),
+        ('`docs/guide.md`, "Guide"', "cannot be checked; cite the section as `path#anchor`"),
+        ("`Checker` in `pkg/mod.py`", "cannot be checked; cite the section as `path#anchor` or the function"),
+        ("`check` (`pkg/mod.py`)", "cannot be checked"),
+        ("`pkg/mod.py`, `check`", "cannot be checked"),
+        ("`pkg/mod.py` (`Checker`)", "cannot be checked"),
         # Line numbers are refused in every form.
         ("`pkg/mod.py:12`", "cites a line number"),
         ("`pkg/mod.py:12-14`", "cites a line number"),

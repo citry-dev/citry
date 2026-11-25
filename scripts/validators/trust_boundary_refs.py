@@ -72,6 +72,17 @@ _LINE_NUMBER_AFTER_SPAN = re.compile(
     r"(?<!`)(`+)[^`\n]*\.[A-Za-z]+(?:[:#][^`\n]*)?\1(?!`)\s*(?::\d+|,?\s*\(?(?:(?:at|on)\s+)?lines?\s+\d+)"
 )
 
+# The check reads `path:Symbol` and `path#anchor`, so a docs heading in
+# quotes after a Markdown path, or a function or class name beside a code
+# file's path written alone, would pass whatever the name says. These two
+# shapes are rejected so every section and function is named in a reference.
+_QUOTED_HEADING = re.compile(r"`[\w./-]+\.md`(?:\s+\(|,\s)\s*[\"\u201c][^\"\u201d\n]*[\"\u201d]")
+_CODE_PATH_ALONE = r"`[\w./-]+/[\w.-]+\.(?:py|js|mjs|ts|rs|pest)`"
+_BARE_NAME = r"`[A-Za-z_][\w.]*(?:\(\))?`"
+_NAME_BESIDE_PATH = re.compile(
+    rf"{_BARE_NAME}(?:\s+in\s+|\s+\(|,\s*){_CODE_PATH_ALONE}|{_CODE_PATH_ALONE}(?:,\s*|\s+\(){_BARE_NAME}"
+)
+
 # One name in a symbol; JavaScript allows `$` in names.
 _NAME = r"[A-Za-z_$][\w$]*"
 _DOTTED_SYMBOL = re.compile(rf"^{_NAME}(?:\.{_NAME})*$")
@@ -112,6 +123,13 @@ def check(root: Path = REPO_ROOT) -> list[str]:
         f"{where(match.start())}: {_quote(match.group(0))} cites a line number; "
         "cite the function, class, or heading instead"
         for match in sorted(line_numbers, key=lambda match: match.start())
+    )
+    problems.extend(
+        f"{where(match.start())}: {_quote(match.group(0))} cannot be checked; "
+        "cite the section as `path#anchor` or the function or class as `path:Symbol`"
+        for match in sorted(
+            [*_QUOTED_HEADING.finditer(prose), *_NAME_BESIDE_PATH.finditer(prose)], key=lambda match: match.start()
+        )
     )
     for span in spans:
         raw = span.group(2)
