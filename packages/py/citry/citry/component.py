@@ -953,17 +953,18 @@ class Component(metaclass=ComponentMeta):
     for one handler.
 
     Attributes:
-        _guard (Callable | None): A method (or function) that runs before
-            each handler and rejects the call by raising
-            [`EventError`][citry.ext.events.EventError]. Default: no guard.
+        _guard (Callable | None): A plain ``def`` method (or function)
+            that runs before each handler and rejects the call by raising
+            [`EventError`][citry.ext.events.EventError]. Citry refuses an
+            ``async def`` one when the class is defined. Default: no guard.
             [Guide](/security/#authorize-every-event).
-        _context (Callable | None): A method (or function) that runs before
-            the guard. Its return value becomes ``self.context`` in the guard
+        _context (Callable | None): A plain ``def`` method (or function)
+            that runs before the guard. Its return value becomes ``self.context`` in the guard
             and the handlers. Default: none.
             [Guide](/security/#authorize-every-event).
         _csrf (Literal["auto", False] | Callable): An extra CSRF token check for this
-            component: a function that receives the request and raises
-            ``EventError`` to reject the call. ``"auto"`` (the default) and
+            component: a plain ``def`` function that receives the request
+            and raises ``EventError`` to reject the call. ``"auto"`` (the default) and
             ``False`` add no extra check. Citry's own checks, and Django's
             CSRF middleware, apply either way.
             [Guide](/security/#other-frameworks).
