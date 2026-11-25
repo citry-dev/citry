@@ -7,8 +7,8 @@ FastAPI app in app/main.py, served by uvicorn. The benchmark measures
 Citry served from FastAPI, the setup Citry's Getting Started guide also
 uses. Its routes render the pages, and `citry.contrib.fastapi.mount()`
 adds Citry's routes under /citry, as the starter and Citry's FastAPI guide
-do. Every Python package comes from PyPI: the Citry 1.0.0 release (citry 1.0.0,
-citry-lsp 1.0.0, and citry-core 2.1.0, the version citry pins), fastapi
+do. Every Python package comes from PyPI: the Citry 1.3.0 release (citry 1.3.0,
+citry-lsp 1.0.1, and citry-core 2.1.2, the version citry pins), fastapi
 0.141.1 with starlette 1.6.0 and pydantic 2.13.4 (the versions the
 starter's lockfile has), uvicorn 0.52.4, and ty 0.0.101, the Python type
 checker Citry runs on template expressions, which citry-lsp installs.

@@ -38,17 +38,16 @@ template prints the `<script>` tag it returns;
 - no `{% partialdef %}`: the counter's text is its own template, \
 board/saved.html, which the page includes and the save view renders.
 
-The card does not use `{% extends %}` or `{% block %}`, although both work \
-at the pinned commit. The app was written without them and has not been \
-changed to use them: the card writes its own footer link, so the page fills \
-no footer under any name. A card written as a Django `simple_block_tag`, the usual \
-other way to take markup, fails when the template loads at this commit with \
-Django 6.1.3 (TemplateSyntaxError: 'card' must have a first argument of \
-'content'). The page could also hand the card a template name for \
-`{% include %}` to render as its footer, but that needs a separate template \
-file for each fill, so the app keeps the footer in the card. The four slot \
-mistakes do not apply: the page has no footer to fill (m05, m35), and the \
-card hands no slot data to a fill (m36, m37).
+The card uses the Django app's two files, board/card.html and \
+board/project_card.html, unchanged: project_card.html extends card.html and \
+fills its `{% block footer %}` with the link, and the page includes \
+project_card.html once per card. Django Rusty Templates renders that block \
+with the same context the include gave the card, so the fill reads `title` \
+and `count` directly. A Django block takes no arguments, so the card hands \
+the fill nothing of its own, and m36 and m37 do not apply, as in the Django \
+app. The cases that misspell the block's name (m05), leave the block out \
+(m35) and misspell the extended template's path (m47) are the Django app's \
+cases.
 
 Apart from whitespace and the order of the tags in its head, the page the \
 browser gets is the same as the Django app's.

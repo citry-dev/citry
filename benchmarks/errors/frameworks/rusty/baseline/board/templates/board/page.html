@@ -24,7 +24,7 @@
 
     {% for card in cards %}
       <div x-data="{ shown: true }" x-show="shown" @hide="shown = false">
-        {% include "board/card.html" with title=card.title count=card.count tone=card.featured|yesno:"accent,plain" %}
+        {% include "board/project_card.html" with title=card.title count=card.count tone=card.featured|yesno:"accent,plain" %}
       </div>
     {% endfor %}
 
