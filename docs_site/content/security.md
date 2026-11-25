@@ -353,6 +353,16 @@ framework's own request object.
 
 [Event routes](/events/routes/) covers the HTTP side of event calls.
 
+!!! note "Reloading a module"
+
+    `importlib.reload()` and tools that reload changed code, such as
+    Jupyter's `%autoreload`, raise `ValueError` when the reloaded module
+    decorates a function it imports, as in
+    `save = event(guard=check)(shared_save)`. The function still has
+    its settings from the first load. Restart the process, or define
+    the handler in the module that decorates it: a reload creates a
+    new function for each handler defined there.
+
 ## Check redirect URLs { #check-redirect-urls }
 
 A handler that redirects to a URL from the request, such as a `next`

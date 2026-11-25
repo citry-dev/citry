@@ -1342,8 +1342,12 @@ copied by `functools.wraps`, or further down its `__wrapped__` chain)
 raises `ValueError` at decoration (`refuse_stacked_event`), since it
 would replace the first one's settings and drop its `guard=`. Applying
 `@event` once and assigning the result to several `Events` classes is
-fine. Apart from `@event`, which stores its settings on the function it
-decorates, Citry writes nothing onto a handler function: the
+fine. Reloading a module (`importlib.reload`, Jupyter's `%autoreload`)
+that applies `@event(...)` to a function imported from another module
+raises the same error, because the reload decorates the same function
+object again; Citry's own hot reload does not run Python modules again,
+so it is not affected. Apart from `@event`, which stores its settings
+on the function it decorates, Citry writes nothing onto a handler function: the
 `ViewEvents` verb shim gives a verb handler its HTTP method from the
 class when the component class is created (`verb_handler_methods`), so
 one function used in several classes accepts, in each, the methods that
