@@ -1440,10 +1440,25 @@ citry = Citry(
 - Its return value is the `context` injectable in handlers (and
   `self.context` for guards and resolvers, which receive the instance).
   No hook configured means the context is `None`.
-- Call order per dispatch, cheapest rejection first: verify token,
-  validate args against the signature (pure, no I/O), run `_context`
-  (may touch the DB), run guards (which read `self.context`), run the
-  handler.
+- Call order per dispatch: verify token, run `_context` (may touch the
+  DB), run guards (which read `self.context`), validate args against the
+  handler's `data` class, run the handler. Guards run before the args
+  check so that a caller they refuse gets their error, not a 422 that
+  describes its args, and so that the server does not check a large
+  payload for a call it then refuses. Guards therefore read the args
+  before they are checked, through `self.event.args`, and must expect a
+  missing key or a value of any type: one guard covers handlers with
+  different `data` classes. The guards get a copy of the args, so
+  a guard cannot change what the `data` class checks. `_context` never
+  receives the checked data either. A State write the server refuses
+  (7.2) still answers 422 before the guards run, because State is
+  rebuilt and written before them.
+- Guards see State after the browser's `stateUpdates` writes to `_model`
+  fields (7.2), the same State the handler gets. A guard must never base
+  its decision on a field the browser can write; the docs tell authors
+  to keep the fields a guard relies on out of `_model`. Citry does not
+  give guards a copy of State from before the writes: one State object
+  per call keeps the guard and the handler looking at the same values.
 - Settings are frozen at construction (the substrate's immutability
   rule), and config classes are rebuilt when component classes are
   defined, reading `extensions_defaults` at that moment. So there is no
@@ -1491,9 +1506,10 @@ request-derived context, which is `_context`.
   handler. The request's other calls still run.
 - **Observability**: the extension owns `emit()` hooks in the established
   pattern:
-  - `on_event` fires before the handler (after token verification
-  and arg validation, before `_context` and guards; `result="first"`, so
-  a policy extension can veto or answer, and it is where rate limiting plugs in),
+  - `on_event` fires before the handler (after token verification,
+  before `_context`, guards, and arg validation; `result="first"`, so
+  a policy extension can veto or answer, and it is where rate limiting plugs in;
+  Citry uses an answer in the handler's place and then skips the arg validation),
   - `on_event_result` fires after the handler (`result="map"` over the
   encoded actions list),
   - `on_event_error` fires on an uncaught
@@ -4714,8 +4730,8 @@ transports would both need belongs in the dispatcher, never duplicated):
 | Version and capabilities | Reject unknown protocol majors; resolve an absent `capabilities` field to the baseline; hand the resolved set to action encoding so `morph` downgrades to `replace` and no action kind outside the set is ever emitted. | The baseline constant is the protocol package's `CAPABILITIES_BASELINE_V1`; rejections mirror per call so `results[i]` always answers `calls[i]`. |
 | Component and event resolution | The per-event URL is authoritative; explicit `componentClassId` and `handlerName` fields must match it. A failed lookup produces the wire error codes `unknown_component` / `unknown_event` (protocol constants from the 3.7 table, status 404), never a lookup of any user-defined name: there is no magic fallback component or handler to define. Custom not-found behavior hangs off the `on_event_error` hook or host middleware on the real URLs. | `Citry.get_component_by_class_id` resolves the class; wire names come from the handler metadata captured at class creation (plan WP7). |
 | Token verification and updates | Verify the signed `stateToken` (malformed 403, expired, rotated-out, or unknown-version 409; the split is payload well-formedness, per the error-codes rule in 4.3), rebuild State, apply `_model`-gated `stateUpdates` with per-field 422s. | `verify_state_token` / `apply_state_updates` (plan WP8). |
+| Per-call context and guards | `on_event` emit (veto), then the `_context` hook, then guards most-specific-wins (engine default, component `_guard`, `@event(guard=...)`). | Pipeline order is normative (3.6, 3.7): a guard must see `_context`'s result, and guards run before args validation so a refused caller gets the guard's error. |
 | Args validation | Validate the wire args payload against the handler's `data` schema with the 3.3 coercions; failures are per-field 422s, never host 500s. | The data-schema machinery (plan WP9) returns structured results that the error mapping consumes. |
-| Per-call context and guards | `on_event` emit (veto), then the `_context` hook, then guards most-specific-wins (engine default, component `_guard`, `@event(guard=...)`). | Pipeline order is normative (3.6, 3.7): a guard must see `_context`'s result. |
 | Handler invocation | By-name injection of `data` / `state` / `context` / `request` / `event`; the same values populate the ambient attributes on the per-call events instance. | Async dispatch awaits `async def` handlers; sync handlers offload to a worker thread via the routing helper `call_maybe_sync` (plan WP2). |
 | Action encoding | Return-value coercion, result resolvers, faithful ordering, and the render-to-fragment serialize. | The actions module (plan WP11); a `Render` re-enters the normal fragment serialize, so its HTML carries a fresh manifest. |
 | State re-sign | Changed State means a fresh token and fresh public values in the response: riding the render action's manifest when there is one, else as an explicit `state` action placed before the handler's actions (4.3). | Mint via plan WP8; the request's `sendSequence` echoes per result. |
@@ -5066,8 +5082,9 @@ Rules, each closing a named prior-art hole:
 On each call the order is: verify token (cheapest rejection first), check
 the class id against the route, rebuild `cls.State(**s)`, apply `stateUpdates`
 to `_model` fields (7.2), refuse the call with 422 when those writes grow
-server-stored State past `_max_bytes`, validate args, run `_context`, run guards, run the
-handler. After the handler, a mutated State is re-signed and returned
+server-stored State past `_max_bytes`, run `_context`, run guards,
+validate args, run the handler (3.6 says why guards come before the args
+check). After the handler, a mutated State is re-signed and returned
 (inside the fragment manifest when a render action exists, as a `state`
 action otherwise, each carrying the public State values beside the
 token), so the client's stored token and its `$state` values always

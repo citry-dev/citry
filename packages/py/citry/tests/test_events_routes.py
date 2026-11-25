@@ -3401,3 +3401,80 @@ class TestCsrfFieldNames:
 
                     def go(self):
                         return None
+
+
+class TestGuardsBeforeDataCheckOverHttp:
+    """
+    Every route runs the guards before it checks the call's data.
+
+    A refused caller with invalid data gets the guard's 403, and an allowed
+    caller with invalid data still gets 422 (design 3.6).
+    """
+
+    def _vault(self, c, runs):
+        class OpenIn:
+            who: str
+            n: int
+
+        class Vault(Component):
+            citry = c
+            template = "<div>v</div>"
+
+            class Events:
+                def _context(self):
+                    runs.append("context")
+
+                def _guard(self):
+                    runs.append("guard")
+                    if self.event.args.get("who") == "intruder":
+                        raise EventError("Not allowed.", status=403)
+
+                def open(self, data: OpenIn):
+                    return {"n": data.n}
+
+                @event(methods=("GET",))
+                def peek(self, data: OpenIn):
+                    return {"n": data.n}
+
+        return Vault
+
+    @staticmethod
+    def _status(client, vault, route, args):
+        """Send one call on `route` and return the status that call got."""
+        if route == "per-event":
+            return _post_call(client, vault, "open", {"args": args}).status_code
+        if route == "batch":
+            # The batch route answers 200 and gives each call its own status.
+            call = {"componentClassId": vault.class_id, "handlerName": "open", "args": args}
+            envelope = {"protocol": "citry-events/1", "requestId": "r1", "calls": [call]}
+            [item] = _post_envelope(client, "/citry/ext/events/call", envelope).json()["results"]
+            return item["error"]["status"] if "error" in item else 200
+        # A form post and a GET query send every value as text.
+        text_args = {key: str(value) for key, value in args.items()}
+        if route == "no-js form":
+            return client.post(_event_url(vault, "open"), data=text_args).status_code
+        return client.get(_event_url(vault, "peek"), params=text_args).status_code
+
+    @pytest.mark.parametrize("route", ["per-event", "batch", "no-js form", "get"])
+    def test_a_refused_caller_with_invalid_data_gets_403(self, route):
+        c = _citry()
+        runs: list[str] = []
+        vault = self._vault(c, runs)
+        assert self._status(_mounted(c), vault, route, {"who": "intruder", "n": "x"}) == 403
+        assert runs == ["context", "guard"]
+
+    @pytest.mark.parametrize("route", ["per-event", "batch", "no-js form", "get"])
+    def test_an_allowed_caller_with_invalid_data_gets_422(self, route):
+        c = _citry()
+        runs: list[str] = []
+        vault = self._vault(c, runs)
+        assert self._status(_mounted(c), vault, route, {"who": "ada", "n": "x"}) == 422
+        assert runs == ["context", "guard"]
+
+    @pytest.mark.parametrize("route", ["per-event", "batch", "no-js form", "get"])
+    def test_an_allowed_caller_with_valid_data_runs_the_guard_once(self, route):
+        c = _citry()
+        runs: list[str] = []
+        vault = self._vault(c, runs)
+        assert self._status(_mounted(c), vault, route, {"who": "ada", "n": 2}) == 200
+        assert runs == ["context", "guard"]

@@ -200,6 +200,24 @@ Use a guard for a rule every handler shares. Put a check that depends on
 the submitted data in the handler body, where the data has already been
 validated.
 
+A guard runs before Citry checks the call's args against the handler's
+`data` class (`SaveIn` above). A caller the guard refuses gets the
+guard's error, not a 422 error that lists what is wrong with its args.
+Two things to know about what a guard reads:
+
+- `self.state` holds the browser's writes to the fields in
+  [`State._model`](/events/state/#model), which by default is every
+  public field. A guard that decides on such a field trusts a value the
+  caller chose. For example, a guard that lets a call through when
+  `self.state.role == "admin"` lets in anyone who writes `"admin"` to
+  `role`. Leave the fields a guard decides on out of `_model`.
+- [`self.event.args`][citry.ext.events.CallEvent] holds the call's args
+  before Citry has checked them. A key can be missing, have another
+  type, such as text where the handler expects a number, or be longer
+  than the `data` class allows. Read it with `.get()` and check the type
+  before you use it. A guard that raises anything other than
+  `EventError` answers with a 500 error.
+
 Write guards and `_context` as plain `def` functions, not `async def`.
 Citry calls them without awaiting them, on WSGI and ASGI servers alike,
 so it refuses an async one with an error when the component class is
